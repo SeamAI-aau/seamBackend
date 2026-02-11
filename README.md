@@ -1,1 +1,0 @@
-# SEAM AI backend
