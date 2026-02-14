@@ -1,9 +1,10 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { Logger } from 'nestjs-pino';
 
+import { RolesGuard} from './auth/guards/roles.guard';
+import { Reflector} from '@nestjs/core';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
@@ -11,6 +12,7 @@ async function bootstrap() {
 
   app.useLogger(app.get(Logger));
 
+  app.useGlobalGuards(new RolesGuard(app.get(Reflector)));
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -18,8 +20,6 @@ async function bootstrap() {
       transform: true,
     }),
   );
-
-  app.useGlobalFilters(new GlobalExceptionFilter());
 
   await app.listen(process.env.PORT || 3000);
 }
