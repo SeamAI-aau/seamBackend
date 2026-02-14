@@ -1,90 +1,49 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+// auth/auth.service.ts
+import { Injectable, Inject, UnauthorizedException, ConflictException } from '@nestjs/common';
+import type { IAuthRepository } from './types/auth.repository';
+import { AUTH_REPOSITORY } from './auth.tokens';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { hash, compare } from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
-import { AppException } from '../common/errors/app.exception';
-import { ErrorCode } from '../common/errors/error-codes';
-import { AppLoggerService } from '../common/logger/app-logger.service';
+import { Logger } from 'nestjs-pino';
 
 @Injectable()
 export class AuthService {
-constructor(
-    private prisma: PrismaService,
-    private jwtService: JwtService,
-    private logger: AppLoggerService,
-) {}
+  constructor(
+    @Inject(AUTH_REPOSITORY) private readonly userRepo: IAuthRepository,
+    private readonly jwtService: JwtService,
+    private readonly logger: Logger,
+  ) {}
 
-async register(dto: RegisterDto) {
-    const existingUser = await this.prisma.user.findUnique({
-    where: { email: dto.email },
-    });
-
+  async register(dto: RegisterDto) {
+    const existingUser = await this.userRepo.findByEmail(dto.email);
     if (existingUser) {
-    this.logger.warn('Registration failed: email exists', {
-        email: dto.email,
-    });
-
-    throw new AppException(
-        ErrorCode.EMAIL_ALREADY_EXISTS,
-        'An account with this email already exists',
-        409,
-    );
+      this.logger.warn('Registration failed: email exists', { email: dto.email });
+      throw new ConflictException('An account with this email already exists');
     }
 
     const passwordHash = await hash(dto.password, 10);
+    const user = await this.userRepo.create({ ...dto, passwordHash });
 
-    const user = await this.prisma.user.create({
-    data: {
-        email: dto.email,
-        name: dto.name,
-        passwordHash,
-    },
-    });
-
-    this.logger.log('User registered successfully', {
-    userId: user.id,
-    });
-
+    this.logger.log('User registered successfully', { userId: user.id });
     return { message: 'User registered successfully' };
-}
+  }
 
-async login(dto: LoginDto) {
-    const user = await this.prisma.user.findUnique({
-    where: { email: dto.email },
-    });
-
-    if (!user) {
-    throw new AppException(
-        ErrorCode.INVALID_CREDENTIALS,
-        'Email or password is incorrect',
-        401,
-    );
-    }
+  async login(dto: LoginDto) {
+    const user = await this.userRepo.findByEmail(dto.email);
+    if (!user) throw new UnauthorizedException('Email or password is incorrect');
 
     const isPasswordValid = await compare(dto.password, user.passwordHash);
-
-    if (!isPasswordValid) {
-    throw new AppException(
-        ErrorCode.INVALID_CREDENTIALS,
-        'Email or password is incorrect',
-        401,
-    );
-    }
+    if (!isPasswordValid) throw new UnauthorizedException('Email or password is incorrect');
 
     const token = await this.jwtService.signAsync({
-    sub: user.id,
-    email: user.email,
-    role: user.role,
+      sub: user.id,
+      email: user.email,
+      role: user.role,
     });
 
-    this.logger.log('User logged in', {
-    userId: user.id,
-    });
-
-    return {
-    accessToken: token,
-    };
-}
+    this.logger.log('User logged in', { userId: user.id });
+    return { accessToken: token };
+  }
 }
