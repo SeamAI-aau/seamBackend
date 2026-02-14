@@ -13,6 +13,8 @@ import { RequestContextInterceptor } from './common/Interceptors/request-context
     HealthModule,
     LoggerModule.forRoot({
       pinoHttp: {
+        level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+
         transport:
           process.env.NODE_ENV !== 'production'
             ? {
@@ -20,6 +22,14 @@ import { RequestContextInterceptor } from './common/Interceptors/request-context
                 options: { singleLine: true },
               }
             : undefined,
+
+        genReqId: (req) => {
+          return req.headers['x-request-id'] || crypto.randomUUID();
+        },
+
+        customProps: (req) => ({
+          requestId: req.id,
+        }),
       },
     }),
   ],
