@@ -3,8 +3,8 @@ import { ConfigModule } from './config/config.module';
 import { Module } from '@nestjs/common';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
-import { APP_INTERCEPTOR } from '@nestjs/core';
-import { RequestContextInterceptor } from './common/Interceptors/request-context.interceptor';
+import { APP_FILTER } from '@nestjs/core';
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 
 @Module({
   imports: [
@@ -13,6 +13,8 @@ import { RequestContextInterceptor } from './common/Interceptors/request-context
     HealthModule,
     LoggerModule.forRoot({
       pinoHttp: {
+        level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+
         transport:
           process.env.NODE_ENV !== 'production'
             ? {
@@ -20,13 +22,21 @@ import { RequestContextInterceptor } from './common/Interceptors/request-context
                 options: { singleLine: true },
               }
             : undefined,
+
+        genReqId: (req) => {
+          return req.headers['x-request-id'] || crypto.randomUUID();
+        },
+
+        customProps: (req) => ({
+          requestId: req.id,
+        }),
       },
     }),
   ],
   providers: [
     {
-      provide: APP_INTERCEPTOR,
-      useClass: RequestContextInterceptor,
+      provide: APP_FILTER,
+      useClass: GlobalExceptionFilter,
     },
   ],
 })

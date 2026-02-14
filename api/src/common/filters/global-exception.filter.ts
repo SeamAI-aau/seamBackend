@@ -4,53 +4,46 @@ import {
   ArgumentsHost,
   HttpException,
   HttpStatus,
+  Injectable,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
-import { requestContext } from '../context/request-context';
-import { ErrorCode } from '../errors/error-codes';
+import { Logger } from 'nestjs-pino';
 
 @Catch()
+@Injectable()
 export class GlobalExceptionFilter implements ExceptionFilter {
+  constructor(private readonly logger: Logger) {}
+
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
-    const store = requestContext.getStore();
-    const requestId = store?.requestId;
-
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
-    let error = ErrorCode.INTERNAL_SERVER_ERROR;
     let message = 'Internal server error';
-    let details: unknown;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
-      const res = exception.getResponse();
+      message = exception.message;
+    }
 
-      if (typeof res === 'object' && res !== null) {
-        const responseBody = res as {
-          error?: ErrorCode;
-          message?: string;
-          details?: unknown;
-        };
-
-        error = responseBody.error ?? error;
-        message = responseBody.message ?? message;
-        details = responseBody.details;
-      } else {
-        message = res;
-      }
+    if (status >= 500) {
+      this.logger.error(
+        { err: exception },
+        `Unhandled exception: ${message}`,
+      );
+    } else {
+      this.logger.warn(
+        { err: exception },
+        `Client error: ${message}`,
+      );
     }
 
     response.status(status).json({
       statusCode: status,
-      error,
       message,
-      details,
       path: request.url,
       timestamp: new Date().toISOString(),
-      requestId,
     });
   }
 }
