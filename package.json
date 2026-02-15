@@ -2,7 +2,9 @@
   "name": "@org/source",
   "version": "0.0.0",
   "license": "MIT",
-  "scripts": {},
+  "scripts": {
+    "postinstall": "prisma generate --schema api/src/prisma/schema.prisma"
+  },
   "private": true,
   "devDependencies": {
     "@eslint/js": "^9.8.0",
