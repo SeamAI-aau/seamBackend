@@ -90,6 +90,7 @@
     "@nestjs/platform-express": "^11.0.0",
     "@prisma/client": "^6.19.2",
     "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.6",
     "passport-jwt": "^4.0.1",
     "prisma": "^6.19.2",
     "reflect-metadata": "^0.1.13",
@@ -98,6 +99,7 @@
   },
   "devDependencies": {
     "@nestjs/testing": "^11.0.0",
+    "@types/cookie-parser": "^1.4.6",
     "@types/passport-jwt": "^4.0.1"
   }
 }
