@@ -4,8 +4,8 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from './auth/auth.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
-import { APP_INTERCEPTOR } from '@nestjs/core';
-import { RequestContextInterceptor } from './common/Interceptors/request-context.interceptor';
+import { APP_FILTER } from '@nestjs/core';
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { AppController } from './app.controller';
 
 @Module({
@@ -38,8 +38,8 @@ import { AppController } from './app.controller';
   ],
   providers: [
     {
-      provide: APP_INTERCEPTOR,
-      useClass: RequestContextInterceptor,
+      provide: APP_FILTER,
+      useClass: GlobalExceptionFilter,
     },
   ],
   controllers: [AppController],
