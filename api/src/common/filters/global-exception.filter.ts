@@ -28,15 +28,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     }
 
     if (status >= 500) {
-      this.logger.error(
-        { err: exception },
-        `Unhandled exception: ${message}`,
-      );
+      this.logger.error({ err: exception }, `Unhandled exception: ${message}`);
     } else {
-      this.logger.warn(
-        { err: exception },
-        `Client error: ${message}`,
-      );
+      this.logger.warn({ err: exception }, `Client error: ${message}`);
     }
 
     response.status(status).json({
