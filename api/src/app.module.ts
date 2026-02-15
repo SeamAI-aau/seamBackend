@@ -5,6 +5,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
 import { APP_FILTER } from '@nestjs/core';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -41,5 +42,6 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
       useClass: GlobalExceptionFilter,
     },
   ],
+  controllers: [AppController],
 })
 export class AppModule {}
