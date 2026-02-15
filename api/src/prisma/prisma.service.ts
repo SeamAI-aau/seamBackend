@@ -8,8 +8,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     super();
 
   }
-
-  
   async onModuleInit() {
     await this.$connect();
   }

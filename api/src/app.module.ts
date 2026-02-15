@@ -6,6 +6,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { RequestContextInterceptor } from './common/Interceptors/request-context.interceptor';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -41,5 +42,6 @@ import { RequestContextInterceptor } from './common/Interceptors/request-context
       useClass: RequestContextInterceptor,
     },
   ],
+  controllers: [AppController],
 })
 export class AppModule {}
