@@ -6,10 +6,7 @@ import { IJwtService, JwtPayload } from './types/jwt.service.interface';
 export class JwtServiceAdapter implements IJwtService {
   constructor(private readonly jwtService: JwtService) {}
 
-  sign(
-    payload: JwtPayload,
-    options?: JwtSignOptions,
-  ): Promise<string> {
+  sign(payload: JwtPayload, options?: JwtSignOptions): Promise<string> {
     return this.jwtService.signAsync(payload, options);
   }
 

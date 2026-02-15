@@ -10,11 +10,7 @@ export interface IAuthRepository {
   findByEmail(email: string): Promise<User | null>;
   create(data: CreateUserInput): Promise<User>;
 
-  createRefreshToken(data: {
-    userId: string;
-    token: string;
-    expiresAt: Date;
-  }): Promise<void>;
+  createRefreshToken(data: { userId: string; token: string; expiresAt: Date }): Promise<void>;
 
   findRefreshToken(token: string): Promise<{
     userId: string;

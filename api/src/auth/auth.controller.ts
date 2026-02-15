@@ -1,5 +1,14 @@
 // auth/auth.controller.ts
-import { Body, Controller, Post, Get, UseGuards, Res, Req, BadRequestException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Post,
+  Get,
+  UseGuards,
+  Res,
+  Req,
+  BadRequestException,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
@@ -29,13 +38,13 @@ export class AuthController {
     res.cookie('accessToken', accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      maxAge: 15 * 60 * 1000, 
+      maxAge: 15 * 60 * 1000,
     });
 
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      maxAge: 7 * 24 * 60 * 60 * 1000, 
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     return { message: 'Logged in successfully' };
@@ -73,10 +82,7 @@ export class AuthController {
 
   @Post('logout')
   @UseGuards(JwtAuthGuard)
-  async logout(
-    @CurrentUser() user: CurrentUserType,
-    @Res({ passthrough: true }) res: Response,
-  ) {
+  async logout(@CurrentUser() user: CurrentUserType, @Res({ passthrough: true }) res: Response) {
     await this.authService.logout(user.userId);
     res.clearCookie('accessToken');
     res.clearCookie('refreshToken');
