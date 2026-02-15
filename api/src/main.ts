@@ -1,8 +1,8 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { RolesGuard} from './auth/guards/roles.guard';
-import { Reflector} from '@nestjs/core';
+import { RolesGuard } from './auth/guards/roles.guard';
+import { Reflector } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
 
 async function bootstrap() {

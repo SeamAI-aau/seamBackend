@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  Inject,
-  UnauthorizedException,
-  ConflictException,
-} from '@nestjs/common';
+import { Injectable, Inject, UnauthorizedException, ConflictException } from '@nestjs/common';
 import { hash, compare } from 'bcryptjs';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from 'nestjs-pino';
@@ -35,10 +30,7 @@ export class AuthService {
       });
     }
 
-    const saltRounds = parseInt(
-      this.configService.get<string>('BCRYPT_SALT_ROUNDS') ?? '10',
-      10,
-    );
+    const saltRounds = parseInt(this.configService.get<string>('BCRYPT_SALT_ROUNDS') ?? '10', 10);
 
     const passwordHash = await hash(dto.password, saltRounds);
     const user = await this.userRepo.create({ ...dto, passwordHash });
@@ -103,7 +95,12 @@ export class AuthService {
       iat?: number;
       nbf?: number;
     };
-    this.logger.log('Refresh token validated, issuing new tokens', { userId: payload.sub, exp, iat, nbf });
+    this.logger.log('Refresh token validated, issuing new tokens', {
+      userId: payload.sub,
+      exp,
+      iat,
+      nbf,
+    });
 
     return this.issueTokens(tokens.userId, cleanPayload);
   }
@@ -135,13 +132,16 @@ export class AuthService {
   }
 
   private async issueTokens(userId: string, payload: JwtPayload) {
-  const accessExpiresIn = this.configService.get<StringValue>('JWT_ACCESS_TOKEN_EXPIRES_IN') ?? '15m'; const refreshExpiresIn = this.configService.get<StringValue>('JWT_REFRESH_TOKEN_EXPIRES_IN') ?? '7d';
+    const accessExpiresIn =
+      this.configService.get<StringValue>('JWT_ACCESS_TOKEN_EXPIRES_IN') ?? '15m';
+    const refreshExpiresIn =
+      this.configService.get<StringValue>('JWT_REFRESH_TOKEN_EXPIRES_IN') ?? '7d';
 
     const accessExpiresMs = this.parseDuration(accessExpiresIn);
     const refreshExpiresMs = this.parseDuration(refreshExpiresIn);
 
     const accessToken = await this.jwtService.sign(payload, { expiresIn: accessExpiresIn });
-    const refreshToken = await this.jwtService.sign(payload, { expiresIn: refreshExpiresIn});
+    const refreshToken = await this.jwtService.sign(payload, { expiresIn: refreshExpiresIn });
 
     const tokenHash = await hash(refreshToken, 10);
     const expiresAt = new Date(Date.now() + refreshExpiresMs);

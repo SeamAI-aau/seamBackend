@@ -16,38 +16,33 @@ export class PrismaAuthRepository implements IAuthRepository {
     return this.prisma.user.create({ data });
   }
 
-  async createRefreshToken(data: {
-  userId: string;
-  token: string;
-  expiresAt: Date;
-}) {
-  await this.prisma.refreshToken.create({ data });
-}
+  async createRefreshToken(data: { userId: string; token: string; expiresAt: Date }) {
+    await this.prisma.refreshToken.create({ data });
+  }
 
-async findRefreshToken(token: string) {
-  return this.prisma.refreshToken.findFirst({
-    where: { token },
-    select: { userId: true, expiresAt: true, token: true  },
-  });
-}
+  async findRefreshToken(token: string) {
+    return this.prisma.refreshToken.findFirst({
+      where: { token },
+      select: { userId: true, expiresAt: true, token: true },
+    });
+  }
 
-async findRefreshTokensByUserId(userId: string) {
-  return this.prisma.refreshToken.findMany({
-    where: { userId },
-    select: { userId: true, expiresAt: true, token: true },
-  });
-}
+  async findRefreshTokensByUserId(userId: string) {
+    return this.prisma.refreshToken.findMany({
+      where: { userId },
+      select: { userId: true, expiresAt: true, token: true },
+    });
+  }
 
-async deleteRefreshToken(token: string) {
-  await this.prisma.refreshToken.deleteMany({
-    where: { token },
-  });
-}
+  async deleteRefreshToken(token: string) {
+    await this.prisma.refreshToken.deleteMany({
+      where: { token },
+    });
+  }
 
-async deleteAllUserRefreshTokens(userId: string) {
-  await this.prisma.refreshToken.deleteMany({
-    where: { userId },
-  });
-}
-
+  async deleteAllUserRefreshTokens(userId: string) {
+    await this.prisma.refreshToken.deleteMany({
+      where: { userId },
+    });
+  }
 }

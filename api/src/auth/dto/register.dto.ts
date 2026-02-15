@@ -13,5 +13,5 @@ export class RegisterDto {
   password!: string;
 
   @IsOptional()
-  role?: Role; 
+  role?: Role;
 }
