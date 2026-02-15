@@ -1,0 +1,90 @@
+datasource db {
+  provider = "postgresql"
+}
+
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+
+
+//
+// ENUMS
+//
+
+enum Role {
+  SCRUM_MASTER
+  DEVELOPER
+}
+
+
+enum TaskStatus {
+  EXTRACTED
+  SENT_TO_DEVELOPER
+  APPROVED
+  REJECTED
+  SYNCED
+}
+
+//
+// MODELS
+//
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         Role      @default(DEVELOPER)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  projects     Project[]
+  tasks        Task[]    @relation("AssignedTasks")
+}
+
+model Project {
+  id              String    @id @default(uuid())
+  name            String
+  description     String?
+  githubRepoUrl   String?
+  jiraProjectKey  String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  ownerId         String
+  owner           User      @relation(fields: [ownerId], references: [id])
+
+  meetings        Meeting[]
+}
+
+model Meeting {
+  id          String    @id @default(uuid())
+  title       String
+  audioUrl    String?
+  transcript  String?
+  createdAt   DateTime  @default(now())
+
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id])
+
+  tasks       Task[]
+}
+
+model Task {
+  id            String      @id @default(uuid())
+  title         String
+  description   String?
+  status        TaskStatus  @default(EXTRACTED)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  meetingId     String
+  meeting       Meeting     @relation(fields: [meetingId], references: [id])
+
+  assigneeId    String?
+  assignee      User?       @relation("AssignedTasks", fields: [assigneeId], references: [id])
+
+  externalId    String?     
+}
