@@ -12,9 +12,7 @@ export interface IProjectRepository {
 
   updateProject(
     projectId: string,
-    data: Partial<
-      Pick<Project, 'name' | 'description' | 'githubRepoUrl' | 'jiraProjectKey'>
-    >,
+    data: Partial<Pick<Project, 'name' | 'description' | 'githubRepoUrl' | 'jiraProjectKey'>>,
   ): Promise<Project>;
 
   deleteProject(projectId: string): Promise<Project>;

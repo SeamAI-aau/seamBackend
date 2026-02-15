@@ -12,10 +12,7 @@ export class ProjectController {
   constructor(private readonly projectService: ProjectService) {}
 
   @Post()
-  createProject(
-    @CurrentUser() user: CurrentUserType,
-    @Body() body: CreateProjectDto,
-  ) {
+  createProject(@CurrentUser() user: CurrentUserType, @Body() body: CreateProjectDto) {
     return this.projectService.createProject(user, body);
   }
 

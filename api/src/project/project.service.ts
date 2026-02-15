@@ -18,11 +18,7 @@ export class ProjectService {
 
   async createProject(user: CurrentUserType, body: CreateProjectDto) {
     if (user.role !== Role.SCRUM_MASTER) {
-      throw new AppException(
-        ErrorCode.FORBIDDEN,
-        'Only Scrum Masters can create projects',
-        403,
-      );
+      throw new AppException(ErrorCode.FORBIDDEN, 'Only Scrum Masters can create projects', 403);
     }
 
     const project = await this.projectRepo.createProject({
@@ -31,10 +27,7 @@ export class ProjectService {
       ownerId: user.userId,
     });
 
-    this.logger.log(
-      { projectId: project.id, ownerId: user.userId },
-      'Project created',
-    );
+    this.logger.log({ projectId: project.id, ownerId: user.userId }, 'Project created');
 
     return project;
   }
@@ -47,22 +40,14 @@ export class ProjectService {
     const project = await this.projectRepo.findById(projectId);
 
     if (!project) {
-      throw new AppException(
-        ErrorCode.PROJECT_NOT_FOUND,
-        'Project not found',
-        404,
-      );
+      throw new AppException(ErrorCode.PROJECT_NOT_FOUND, 'Project not found', 404);
     }
 
     const isOwner = await this.projectRepo.isOwner(projectId, userId);
     const isMember = await this.projectRepo.isMember(projectId, userId);
 
     if (!isOwner && !isMember) {
-      throw new AppException(
-        ErrorCode.FORBIDDEN,
-        'Access denied',
-        403,
-      );
+      throw new AppException(ErrorCode.FORBIDDEN, 'Access denied', 403);
     }
 
     return project;
@@ -72,11 +57,7 @@ export class ProjectService {
     const isOwner = await this.projectRepo.isOwner(projectId, ownerId);
 
     if (!isOwner) {
-      throw new AppException(
-        ErrorCode.FORBIDDEN,
-        'Only owner can add members',
-        403,
-      );
+      throw new AppException(ErrorCode.FORBIDDEN, 'Only owner can add members', 403);
     }
 
     return this.projectRepo.addMember(projectId, userId);

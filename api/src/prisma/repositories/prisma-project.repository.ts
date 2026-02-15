@@ -1,12 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import type { CreateProjectInput, IProjectRepository } from '../../project/types/project.repository';
+import type {
+  CreateProjectInput,
+  IProjectRepository,
+} from '../../project/types/project.repository';
 import type { Prisma, Project } from '@prisma/client';
 
 @Injectable()
 export class PrismaProjectRepository implements IProjectRepository {
-  constructor(private readonly prisma: PrismaService)
-   {}
+  constructor(private readonly prisma: PrismaService) {}
 
   createProject(data: CreateProjectInput) {
     return this.prisma.project.create({ data });
@@ -21,10 +23,7 @@ export class PrismaProjectRepository implements IProjectRepository {
   findUserProjects(userId: string) {
     return this.prisma.project.findMany({
       where: {
-        OR: [
-          { ownerId: userId },
-          { members: { some: { userId } } },
-        ],
+        OR: [{ ownerId: userId }, { members: { some: { userId } } }],
       },
     });
   }
