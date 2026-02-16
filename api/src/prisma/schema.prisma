@@ -3,12 +3,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
 generator client {
   provider = "prisma-client-js"
 }
-
-
 
 //
 // ENUMS
@@ -18,7 +15,6 @@ enum Role {
   SCRUM_MASTER
   DEVELOPER
 }
-
 
 enum TaskStatus {
   EXTRACTED
@@ -33,63 +29,76 @@ enum TaskStatus {
 //
 
 model User {
-  id           String    @id @default(uuid())
-  email        String    @unique
+  id           String   @id @default(uuid())
+  email        String   @unique
   name         String
   passwordHash String
-  role         Role      @default(DEVELOPER)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  role         Role     @default(DEVELOPER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  projects     Project[]
-  tasks        Task[]    @relation("AssignedTasks")
-  refreshTokens RefreshToken[]
-
+  ownedProjects  Project[]       @relation("OwnedProjects")
+  projectMembers ProjectMember[]
+  tasks          Task[]          @relation("AssignedTasks")
+  refreshTokens  RefreshToken[]
 }
 
 model Project {
-  id              String    @id @default(uuid())
-  name            String
-  description     String?
-  githubRepoUrl   String?
-  jiraProjectKey  String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id             String   @id @default(uuid())
+  name           String
+  description    String?
+  githubRepoUrl  String?
+  jiraProjectKey String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  ownerId         String
-  owner           User      @relation(fields: [ownerId], references: [id])
+  ownerId String
+  owner   User   @relation("OwnedProjects", fields: [ownerId], references: [id])
 
-  meetings        Meeting[]
+  members  ProjectMember[]
+  meetings Meeting[]
+}
+
+model ProjectMember {
+  id        String   @id @default(uuid())
+  projectId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([projectId, userId])
 }
 
 model Meeting {
-  id          String    @id @default(uuid())
-  title       String
-  audioUrl    String?
-  transcript  String?
-  createdAt   DateTime  @default(now())
+  id         String   @id @default(uuid())
+  title      String
+  audioUrl   String?
+  transcript String?
+  createdAt  DateTime @default(now())
 
-  projectId   String
-  project     Project   @relation(fields: [projectId], references: [id])
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id])
 
-  tasks       Task[]
+  tasks Task[]
 }
 
 model Task {
-  id            String      @id @default(uuid())
-  title         String
-  description   String?
-  status        TaskStatus  @default(EXTRACTED)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id          String     @id @default(uuid())
+  title       String
+  description String?
+  status      TaskStatus @default(EXTRACTED)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
-  meetingId     String
-  meeting       Meeting     @relation(fields: [meetingId], references: [id])
+  meetingId String
+  meeting   Meeting @relation(fields: [meetingId], references: [id])
 
-  assigneeId    String?
-  assignee      User?       @relation("AssignedTasks", fields: [assigneeId], references: [id])
+  assigneeId String?
+  assignee   User?   @relation("AssignedTasks", fields: [assigneeId], references: [id])
 
-  externalId    String?     
+  externalId String?
 }
 
 model RefreshToken {
