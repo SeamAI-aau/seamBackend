@@ -34,4 +34,13 @@ export class ProjectController {
   ) {
     return this.projectService.addMember(id, user.userId, body.userId);
   }
+
+  @Get(':id/members')
+  getProjectMembers(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.projectService.getProjectMembers(id, user.userId);
+  }
+
 }
