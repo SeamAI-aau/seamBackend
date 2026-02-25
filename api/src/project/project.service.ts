@@ -1,6 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { PROJECT_REPOSITORY } from './project.tokens';
 import type { IProjectRepository } from './types/project.repository';
+import { USER_REPOSITORY } from '../user/user.token';
+import type { IUserRepository } from '../user/user.repository';
 import { AppException } from '../common/errors/app.exception';
 import { ErrorCode } from '../common/errors/error-codes';
 import { Role } from '@prisma/client';
@@ -13,6 +15,8 @@ export class ProjectService {
   constructor(
     @Inject(PROJECT_REPOSITORY)
     private readonly projectRepo: IProjectRepository,
+    @Inject(USER_REPOSITORY)
+    private readonly userRepo: IUserRepository,
     private readonly logger: Logger,
   ) {}
 
@@ -85,7 +89,7 @@ export class ProjectService {
     );
   }
 
-  return this.projectRepo.getProjectMembers(projectId);
+  return this.userRepo.findProjectMembers(projectId);
 }
 
 }
