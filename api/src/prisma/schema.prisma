@@ -16,6 +16,12 @@ enum Role {
   DEVELOPER
 }
 
+enum MeetingStatus {
+  UPLOADED
+  PROCESSING
+  TASKS_EXTRACTED
+  FAILED
+}
 enum TaskStatus {
   EXTRACTED
   SENT_TO_DEVELOPER
@@ -72,16 +78,30 @@ model ProjectMember {
 }
 
 model Meeting {
-  id         String   @id @default(uuid())
-  title      String
-  audioUrl   String?
-  transcript String?
-  createdAt  DateTime @default(now())
+  id          String        @id @default(uuid())
+  title       String
+  audioUrl    String
+  status      MeetingStatus @default(UPLOADED)
+  createdAt   DateTime      @default(now())
 
-  projectId String
-  project   Project @relation(fields: [projectId], references: [id])
+  projectId   String
+  project     Project       @relation(fields: [projectId], references: [id])
 
-  tasks Task[]
+  transcripts Transcript[]
+  tasks       Task[]
+}
+
+model Transcript {
+  id          String   @id @default(uuid())
+  meetingId   String
+  version     Int
+  content     String
+  diarization Json
+  createdAt   DateTime @default(now())
+
+  meeting     Meeting  @relation(fields: [meetingId], references: [id])
+
+  @@unique([meetingId, version])
 }
 
 model Task {
