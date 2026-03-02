@@ -1,35 +1,28 @@
 import { Injectable } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import IORedis from 'ioredis';
+import { Logger } from 'nestjs-pino';
 
 @Injectable()
-export class MeetingQueue {
-  private queue: Queue;
-
-  constructor() {
-    const connection = new IORedis({
-      host: 'localhost',
-      port: 6379,
-    });
-
-    this.queue = new Queue('meeting-transcription', {
-      connection,
-      defaultJobOptions: {
-        attempts: 5,
-        backoff: {
-          type: 'exponential',
-          delay: 3000,
-        },
-        removeOnComplete: true,
-        removeOnFail: false,
-      },
-    });
-  }
+export class MeetingProducer {
+  constructor(
+    @InjectQueue('meeting-transcription')
+    private readonly queue: Queue,
+    private readonly logger: Logger,
+  ) {}
 
   async enqueue(meetingId: string, audioUrl: string) {
-    await this.queue.add('transcribe', {
-      meetingId,
-      audioUrl,
-    });
+    await this.queue.add(
+      'transcribe',
+      { meetingId, audioUrl },
+      {
+        jobId: meetingId, // prevents duplicate jobs
+      },
+    );
+
+    this.logger.info(
+      { meetingId },
+      'Meeting transcription job enqueued',
+    );
   }
 }

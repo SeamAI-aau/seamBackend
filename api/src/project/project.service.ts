@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { PROJECT_REPOSITORY } from './project.tokens';
+import { PROJECT_REPOSITORY } from './types/project.tokens';
 import type { IProjectRepository } from './types/project.repository';
 import { USER_REPOSITORY } from '../user/user.token';
 import type { IUserRepository } from '../user/user.repository';

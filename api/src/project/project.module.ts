@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ProjectService } from './project.service';
 import { ProjectController } from './project.controller';
-import { PROJECT_REPOSITORY } from './project.tokens';
+import { PROJECT_REPOSITORY } from './types/project.tokens';
 import { PrismaProjectRepository } from '../prisma/repositories/prisma-project.repository';
 
 @Module({

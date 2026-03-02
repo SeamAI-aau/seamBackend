@@ -1,4 +1,4 @@
-import { Meeting, MeetingStatus, Transcript } from '@prisma/client';
+import { Meeting, MeetingStatus } from '@prisma/client';
 
 export interface IMeetingRepository {
   create(data: {
@@ -13,9 +13,5 @@ export interface IMeetingRepository {
 
   updateStatus(id: string, status: MeetingStatus): Promise<Meeting>;
 
-  addTranscript(meetingId: string, version: number, content: string, diarization: any): Promise<Transcript>;
-
   delete(id: string): Promise<void>;
-
-  existsProcessingInProject(projectId: string): Promise<boolean>;
 }

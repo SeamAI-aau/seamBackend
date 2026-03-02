@@ -1,3 +1,10 @@
+import { Controller, Post, UseGuards, UseInterceptors, UploadedFile, Param } from '@nestjs/common';
+import { MeetingService } from './meeting.service';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { CurrentUserType } from '../auth/types/current-user.type';
+
+
 @Controller('projects/:projectId/meetings')
 @UseGuards(JwtAuthGuard)
 export class MeetingController {
@@ -7,18 +14,9 @@ export class MeetingController {
   @UseInterceptors(FileInterceptor('file'))
   upload(
     @Param('projectId') projectId: string,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserType,
     @UploadedFile() file: Express.Multer.File,
   ) {
     return this.meetingService.uploadMeeting(projectId, user.userId, file);
   }
-
-  @Post('/process/:id')
-process(
-  @Param('id') id: string,
-  @CurrentUser() user: any,
-) {
-  return this.meetingService.processMeeting(id, user.userId);
-}
-
 }

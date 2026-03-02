@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { IMeetingRepository } from '../../meeting/meeting.repository';
+import { IMeetingRepository } from '../../meeting/types/meeting.repository';
 import { Meeting, MeetingStatus, Transcript } from '@prisma/client';
 
 @Injectable()

@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { v2 as cloudinary } from 'cloudinary';
 import { ConfigService } from '@nestjs/config';
+import { AppException } from "../common/errors/app.exception";
+import { ErrorCode } from "../common/errors/error-codes";
 
 @Injectable()
 export class CloudinaryService {
@@ -13,10 +15,17 @@ export class CloudinaryService {
   }
 
   async uploadAudio(file: Express.Multer.File): Promise<string> {
-    const result = await cloudinary.uploader.upload(file.path, {
-      resource_type: 'video', // required for audio
-    });
+    const result = await cloudinary.uploader.upload_stream(
+      { resource_type: 'video' },
+      (error, result) => {
+        if (error || !result) {
+          throw new AppException(ErrorCode.CLOUDINARY_UPLOAD_FAILED, 'Failed to upload audio to Cloudinary', 500);
+        }
+        return result;
+      },
+    );
 
     return result.secure_url;
   }
+
 }
