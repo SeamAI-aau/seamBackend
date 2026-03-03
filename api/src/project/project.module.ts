@@ -13,5 +13,6 @@ import { PrismaProjectRepository } from '../prisma/repositories/prisma-project.r
       useClass: PrismaProjectRepository,
     },
   ],
+  exports: [PROJECT_REPOSITORY],
 })
 export class ProjectModule {}

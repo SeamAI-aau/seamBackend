@@ -1,9 +1,10 @@
 import { Controller, Post, UseGuards, UseInterceptors, UploadedFile, Param } from '@nestjs/common';
-import { MeetingService } from './meeting.service';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { CurrentUserType } from '../auth/types/current-user.type';
 
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { CurrentUserType } from '../auth/types/current-user.type';
+import { MeetingService } from './meeting.service';
 
 @Controller('projects/:projectId/meetings')
 @UseGuards(JwtAuthGuard)

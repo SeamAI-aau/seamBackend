@@ -4,6 +4,8 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from './auth/auth.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
+import { ProjectModule } from './project/project.module';
+import { MeetingModule } from './meeting/meeting.module';
 import { APP_FILTER } from '@nestjs/core';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { AppController } from './app.controller';
@@ -14,6 +16,8 @@ import { AppController } from './app.controller';
     PrismaModule,
     HealthModule,
     AuthModule,
+    ProjectModule,
+    MeetingModule,
     LoggerModule.forRoot({
       pinoHttp: {
         level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
