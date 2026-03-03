@@ -9,4 +9,3 @@ export interface UploadedFile {
   path?: string;
   stream?: NodeJS.ReadableStream;
 }
-

@@ -20,13 +20,13 @@ export class PrismaUserRepository implements IUserRepository {
   }
 
   async findProjectMembers(projectId: string) {
-  return this.prisma.user.findMany({
-    where: {
-      OR: [
-        { ownedProjects: { some: { id: projectId } } },
-        { projectMembers: { some: { projectId } } },
-      ],
-    },
-  });
-}
+    return this.prisma.user.findMany({
+      where: {
+        OR: [
+          { ownedProjects: { some: { id: projectId } } },
+          { projectMembers: { some: { projectId } } },
+        ],
+      },
+    });
+  }
 }

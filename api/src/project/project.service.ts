@@ -68,28 +68,19 @@ export class ProjectService {
   }
 
   async getProjectMembers(projectId: string, userId: string) {
-  const project = await this.projectRepo.findById(projectId);
+    const project = await this.projectRepo.findById(projectId);
 
-  if (!project) {
-    throw new AppException(
-      ErrorCode.PROJECT_NOT_FOUND,
-      'Project not found',
-      404,
-    );
+    if (!project) {
+      throw new AppException(ErrorCode.PROJECT_NOT_FOUND, 'Project not found', 404);
+    }
+
+    const isOwner = await this.projectRepo.isOwner(projectId, userId);
+    const isMember = await this.projectRepo.isMember(projectId, userId);
+
+    if (!isOwner && !isMember) {
+      throw new AppException(ErrorCode.FORBIDDEN, 'Access denied', 403);
+    }
+
+    return this.userRepo.findProjectMembers(projectId);
   }
-
-  const isOwner = await this.projectRepo.isOwner(projectId, userId);
-  const isMember = await this.projectRepo.isMember(projectId, userId);
-
-  if (!isOwner && !isMember) {
-    throw new AppException(
-      ErrorCode.FORBIDDEN,
-      'Access denied',
-      403,
-    );
-  }
-
-  return this.userRepo.findProjectMembers(projectId);
-}
-
 }

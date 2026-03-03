@@ -6,15 +6,9 @@ import { WorkerResultPayload } from './dto/workersResultPayload';
 
 @Injectable()
 export class MeetingProcessingService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly logger: Logger,
-  ) {}
+  constructor(private readonly prisma: PrismaService, private readonly logger: Logger) {}
 
-  async handleWorkerResult(
-    meetingId: string,
-    payload: WorkerResultPayload,
-  ): Promise<void> {
+  async handleWorkerResult(meetingId: string, payload: WorkerResultPayload): Promise<void> {
     const meeting = await this.prisma.meeting.findUnique({
       where: { id: meetingId },
     });

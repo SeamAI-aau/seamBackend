@@ -9,10 +9,7 @@ import { Logger } from 'nestjs-pino';
 
 @Injectable()
 export class CloudinaryService {
-  constructor(
-    private readonly config: ConfigService,
-    private readonly logger: Logger,
-  ) {
+  constructor(private readonly config: ConfigService, private readonly logger: Logger) {
     cloudinary.config({
       cloud_name: this.config.get<string>('CLOUDINARY_CLOUD_NAME'),
       api_key: this.config.get<string>('CLOUDINARY_API_KEY'),
@@ -79,5 +76,4 @@ export class CloudinaryService {
       );
     });
   }
-
 }

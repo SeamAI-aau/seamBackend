@@ -36,11 +36,7 @@ export class ProjectController {
   }
 
   @Get(':id/members')
-  getProjectMembers(
-    @Param('id') id: string,
-    @CurrentUser() user: any,
-  ) {
+  getProjectMembers(@Param('id') id: string, @CurrentUser() user: any) {
     return this.projectService.getProjectMembers(id, user.userId);
   }
-
 }

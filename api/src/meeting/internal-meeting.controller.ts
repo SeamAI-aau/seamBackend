@@ -19,10 +19,7 @@ interface WorkerResultPayload {
 
 @Controller('internal/meetings')
 export class InternalMeetingsController {
-  constructor(
-    private readonly config: ConfigService,
-    private readonly logger: Logger,
-  ) {}
+  constructor(private readonly config: ConfigService, private readonly logger: Logger) {}
 
   @Post(':id/result')
   @HttpCode(200)

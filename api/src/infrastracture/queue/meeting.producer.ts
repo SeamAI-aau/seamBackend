@@ -20,9 +20,6 @@ export class MeetingProducer {
       },
     );
 
-    this.logger.log(
-      { meetingId },
-      'Meeting transcription job enqueued',
-    );
+    this.logger.log({ meetingId }, 'Meeting transcription job enqueued');
   }
 }

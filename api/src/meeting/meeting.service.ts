@@ -56,5 +56,4 @@ export class MeetingService {
 
     return { id: meeting.id };
   }
-
 }
