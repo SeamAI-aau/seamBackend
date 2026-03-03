@@ -100,25 +100,29 @@ model Transcript {
   createdAt   DateTime @default(now())
 
   meeting     Meeting  @relation(fields: [meetingId], references: [id])
+  tasks       Task[]
+
 
   @@unique([meetingId, version])
 }
 
 model Task {
-  id          String     @id @default(uuid())
-  title       String
-  description String?
-  status      TaskStatus @default(EXTRACTED)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id              String      @id @default(uuid())
+  title           String
+  description     String?
+  status          TaskStatus  @default(EXTRACTED)
+  confidenceScore Float?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
-  meetingId String
-  meeting   Meeting @relation(fields: [meetingId], references: [id])
+  meetingId       String
+  meeting         Meeting     @relation(fields: [meetingId], references: [id])
 
-  assigneeId String?
-  assignee   User?   @relation("AssignedTasks", fields: [assigneeId], references: [id])
+  transcriptId    String
+  transcript      Transcript  @relation(fields: [transcriptId], references: [id])
 
-  externalId String?
+  assigneeId      String?
+  assignee        User?       @relation("AssignedTasks", fields: [assigneeId], references: [id])
 }
 
 model RefreshToken {
