@@ -22,31 +22,22 @@ export class MeetingService {
     private readonly logger: Logger,
   ) {}
 
-  async uploadMeeting(projectId: string, userId: string, file: Express.Multer.File) {
-    const project = await this.projectRepo.findById(projectId);
+  async uploadMeeting(
+    projectId: string,
+    userId: string,
+    file: Express.Multer.File,
+  ): Promise<{ id: string }> {
+    await this.ensureProjectOwner(projectId, userId);
 
-    if (!project) {
-      throw new AppException(ErrorCode.PROJECT_NOT_FOUND, 'Project not found', 404);
-    }
-
-    if (project.ownerId !== userId) {
-      throw new AppException(ErrorCode.FORBIDDEN, 'Only owner can upload meeting', 403);
-    }
-
-    const { secure_url, url } = await this.cloudinaryService.uploadAudio(file);
-    const audioUrl = secure_url ?? url;
-
-    if (!audioUrl) {
-      throw new AppException(
-        ErrorCode.CLOUDINARY_UPLOAD_FAILED,
-        'Cloudinary did not return an audio URL',
-        500,
-      );
-    }
+    const { url: audioUrl, publicId: audioPublicId } =
+      await this.cloudinaryService.uploadMeetingAudio(file, {
+        folderPrefix: projectId,
+      });
 
     const meeting = await this.meetingRepo.create({
       title: `Meeting - ${new Date().toISOString()}`,
       audioUrl,
+      audioPublicId,
       projectId,
     });
 
@@ -57,4 +48,46 @@ export class MeetingService {
     return { id: meeting.id };
   }
 
+  async listByProject(projectId: string, userId: string) {
+    await this.ensureProjectAccess(projectId, userId);
+    return this.meetingRepo.findByProject(projectId);
+  }
+
+  async getByIdWithDetails(projectId: string, meetingId: string, userId: string) {
+    await this.ensureProjectAccess(projectId, userId);
+
+    const meeting = await this.meetingRepo.findByIdWithTranscriptsAndTasks(meetingId);
+
+    if (!meeting) {
+      throw new AppException(ErrorCode.MEETING_NOT_FOUND, 'Meeting not found', 404);
+    }
+
+    if (meeting.projectId !== projectId) {
+      throw new AppException(ErrorCode.MEETING_NOT_FOUND, 'Meeting not found', 404);
+    }
+
+    return meeting;
+  }
+
+  private async ensureProjectOwner(projectId: string, userId: string): Promise<void> {
+    const project = await this.projectRepo.findById(projectId);
+    if (!project) {
+      throw new AppException(ErrorCode.PROJECT_NOT_FOUND, 'Project not found', 404);
+    }
+    if (project.ownerId !== userId) {
+      throw new AppException(ErrorCode.FORBIDDEN, 'Only owner can upload meeting', 403);
+    }
+  }
+
+  private async ensureProjectAccess(projectId: string, userId: string): Promise<void> {
+    const project = await this.projectRepo.findById(projectId);
+    if (!project) {
+      throw new AppException(ErrorCode.PROJECT_NOT_FOUND, 'Project not found', 404);
+    }
+    const isOwner = await this.projectRepo.isOwner(projectId, userId);
+    const isMember = await this.projectRepo.isMember(projectId, userId);
+    if (!isOwner && !isMember) {
+      throw new AppException(ErrorCode.FORBIDDEN, 'Access denied', 403);
+    }
+  }
 }

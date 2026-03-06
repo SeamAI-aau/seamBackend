@@ -78,11 +78,12 @@ model ProjectMember {
 }
 
 model Meeting {
-  id          String        @id @default(uuid())
-  title       String
-  audioUrl    String
-  status      MeetingStatus @default(UPLOADED)
-  createdAt   DateTime      @default(now())
+  id             String        @id @default(uuid())
+  title          String
+  audioUrl       String
+  audioPublicId  String?       // Cloudinary public ID; used to delete audio after transcription
+  status         MeetingStatus @default(UPLOADED)
+  createdAt      DateTime      @default(now())
 
   projectId   String
   project     Project       @relation(fields: [projectId], references: [id])
