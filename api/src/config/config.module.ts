@@ -24,6 +24,8 @@ import * as Joi from 'joi';
 
         REDIS_HOST: Joi.string().default('localhost'),
         REDIS_PORT: Joi.number().default(6379),
+
+        WORKER_SECRET: Joi.string().min(1).optional(),
       }),
     }),
   ],
