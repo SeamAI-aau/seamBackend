@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MeetingProducer } from './meeting.producer';
+import { MEETING_TRANSCRIPTION_QUEUE_NAME } from '../../meeting/constants/meeting.constants';
 
 @Module({
   imports: [
@@ -17,7 +18,7 @@ import { MeetingProducer } from './meeting.producer';
     }),
 
     BullModule.registerQueue({
-      name: 'meeting-transcription',
+      name: MEETING_TRANSCRIPTION_QUEUE_NAME,
       defaultJobOptions: {
         attempts: 5,
         backoff: {
