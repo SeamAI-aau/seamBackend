@@ -1,0 +1,1 @@
+export const JIRA_REPOSITORY = 'JIRA_REPOSITORY';

@@ -22,4 +22,6 @@ export interface IProjectRepository {
   isOwner(projectId: string, userId: string): Promise<boolean>;
 
   isMember(projectId: string, userId: string): Promise<boolean>;
+
+  findProjectIdsWithGithubRepo(): Promise<string[]>;
 }

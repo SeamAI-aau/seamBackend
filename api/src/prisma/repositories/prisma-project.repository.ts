@@ -61,4 +61,12 @@ export class PrismaProjectRepository implements IProjectRepository {
     });
     return !!membership;
   }
+
+  async findProjectIdsWithGithubRepo(): Promise<string[]> {
+    const projects = await this.prisma.project.findMany({
+      where: { githubRepoUrl: { not: null } },
+      select: { id: true },
+    });
+    return projects.map((p) => p.id);
+  }
 }

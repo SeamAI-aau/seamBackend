@@ -5,12 +5,14 @@ import { TaskStateMachine } from './task-state-machine';
 import { AppException } from '../common/errors/app.exception';
 import { ErrorCode } from '../common/errors/error-codes';
 import { TaskStatus } from '@prisma/client';
+import { JiraSyncQueue } from '../integrations/jira/queue/jira-sync.queue';
 
 @Injectable()
 export class TaskService {
   constructor(
     @Inject(TASK_REPOSITORY)
     private readonly taskRepo: ITaskRepository,
+    private readonly jiraSyncQueue: JiraSyncQueue,
   ) {}
 
   async approveTask(taskId: string, userId: string) {
@@ -32,8 +34,13 @@ export class TaskService {
       );
     }
 
-    return this.taskRepo.updateStatus(taskId, TaskStatus.APPROVED);
+    const approvedTask = await this.taskRepo.updateStatus(taskId, TaskStatus.APPROVED);
+    if (!approvedTask.jiraIssueKey) {
+      await this.jiraSyncQueue.enqueue(task.id);
+    }
+    return approvedTask;
   }
+
 
   async declineTask(taskId: string, userId: string) {
     const task = await this.taskRepo.findById(taskId);

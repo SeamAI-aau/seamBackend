@@ -24,6 +24,18 @@ import * as Joi from 'joi';
 
         REDIS_HOST: Joi.string().default('localhost'),
         REDIS_PORT: Joi.number().default(6379),
+
+        TOKEN_ENCRYPTION_SECRET: Joi.string().min(16).required(),
+
+        JIRA_CLIENT_ID: Joi.string().optional(),
+        JIRA_CLIENT_SECRET: Joi.string().optional(),
+        JIRA_REDIRECT_URI: Joi.string().uri().optional(),
+        JIRA_OAUTH_SUCCESS_REDIRECT_URL: Joi.string().uri().optional(),
+
+        GITHUB_CLIENT_ID: Joi.string().optional(),
+        GITHUB_CLIENT_SECRET: Joi.string().optional(),
+        GITHUB_REDIRECT_URI: Joi.string().uri().optional(),
+        GITHUB_OAUTH_SUCCESS_REDIRECT_URL: Joi.string().uri().optional(),
       }),
     }),
   ],
