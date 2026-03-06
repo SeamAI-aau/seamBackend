@@ -1,15 +1,25 @@
-import { Meeting, MeetingStatus } from '@prisma/client';
+import type { Meeting, MeetingStatus, Transcript, Task } from '@prisma/client';
+
+export interface MeetingWithTranscriptsAndTasks extends Meeting {
+  transcripts: Transcript[];
+  tasks: Task[];
+}
 
 export interface IMeetingRepository {
   create(data: {
     title: string;
     audioUrl: string;
+    audioPublicId?: string | null;
     projectId: string;
   }): Promise<Meeting>;
 
   findByProject(projectId: string): Promise<Meeting[]>;
 
   findById(id: string): Promise<Meeting | null>;
+
+  findByIdWithTranscriptsAndTasks(
+    id: string,
+  ): Promise<MeetingWithTranscriptsAndTasks | null>;
 
   updateStatus(id: string, status: MeetingStatus): Promise<Meeting>;
 
