@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import type {
   IMeetingRepository,
+  MeetingWithTaskCount,
   MeetingWithTranscriptsAndTasks,
 } from '../../meeting/types/meeting.repository';
 import type { Meeting, MeetingStatus } from '@prisma/client';
@@ -24,6 +25,17 @@ export class PrismaMeetingRepository implements IMeetingRepository {
       where: { projectId },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async findByProjectWithTaskCount(
+    projectId: string,
+  ): Promise<MeetingWithTaskCount[]> {
+    const rows = await this.prisma.meeting.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' },
+      include: { _count: { select: { tasks: true } } },
+    });
+    return rows as MeetingWithTaskCount[];
   }
 
   async findById(id: string): Promise<Meeting | null> {

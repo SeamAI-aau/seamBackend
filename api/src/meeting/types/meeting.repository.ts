@@ -5,6 +5,10 @@ export interface MeetingWithTranscriptsAndTasks extends Meeting {
   tasks: Task[];
 }
 
+export interface MeetingWithTaskCount extends Meeting {
+  _count: { tasks: number };
+}
+
 export interface IMeetingRepository {
   create(data: {
     title: string;
@@ -14,6 +18,8 @@ export interface IMeetingRepository {
   }): Promise<Meeting>;
 
   findByProject(projectId: string): Promise<Meeting[]>;
+
+  findByProjectWithTaskCount(projectId: string): Promise<MeetingWithTaskCount[]>;
 
   findById(id: string): Promise<Meeting | null>;
 

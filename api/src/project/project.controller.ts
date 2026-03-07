@@ -56,6 +56,14 @@ export class ProjectController {
     return this.projectService.getProjectBlockers(id, user.userId, query);
   }
 
+  @Get(':id/config')
+  getConfig(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    return this.projectService.getProjectConfig(id, user.userId);
+  }
+
   @Get(':id')
   getProject(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
     return this.projectService.getProject(id, user.userId);

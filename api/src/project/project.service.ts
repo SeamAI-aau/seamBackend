@@ -14,6 +14,24 @@ import type { Prisma } from '@prisma/client';
 import type { DashboardFilterDto } from './dto/dashboard-filter.dto';
 import type { BlockersFilterDto } from './dto/blockers-filter.dto';
 
+function parseGithubRepoUrl(
+  url: string | null,
+): { repoUrl: string | null; repoName: string | null; organization: string | null } {
+  if (!url?.trim()) return { repoUrl: null, repoName: null, organization: null };
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname !== 'github.com') {
+      return { repoUrl: url, repoName: null, organization: null };
+    }
+    const parts = parsed.pathname.replace(/^\/+|\/+$/g, '').split('/');
+    const org = parts[0] ?? null;
+    const repo = parts[1] ?? null;
+    return { repoUrl: url, repoName: repo, organization: org };
+  } catch {
+    return { repoUrl: url, repoName: null, organization: null };
+  }
+}
+
 @Injectable()
 export class ProjectService {
   constructor(
@@ -87,6 +105,46 @@ export class ProjectService {
     }
 
     return this.userRepo.findProjectMembers(projectId);
+  }
+
+  /**
+   * Project config for Scrum Masters and developers: integrations (GitHub, Jira) and members with project role.
+   */
+  async getProjectConfig(projectId: string, userId: string) {
+    const project = await this.projectRepo.findById(projectId);
+
+    if (!project) {
+      throw new AppException(ErrorCode.PROJECT_NOT_FOUND, 'Project not found', 404);
+    }
+
+    const isOwner = await this.projectRepo.isOwner(projectId, userId);
+    const isMember = await this.projectRepo.isMember(projectId, userId);
+
+    if (!isOwner && !isMember) {
+      throw new AppException(ErrorCode.FORBIDDEN, 'Access denied', 403);
+    }
+
+    const members = await this.userRepo.findProjectMembers(projectId);
+    const membersWithRole = members.map((user) => ({
+      userId: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      projectRole: user.id === project.ownerId ? ('owner' as const) : ('member' as const),
+    }));
+
+    const integrations = {
+      github: parseGithubRepoUrl(project.githubRepoUrl ?? null),
+      jira: {
+        projectKey: project.jiraProjectKey ?? null,
+      },
+    };
+
+    return {
+      project: { id: project.id, name: project.name },
+      integrations,
+      members: membersWithRole,
+    };
   }
 
   async getProjectDashboard(

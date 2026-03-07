@@ -1,6 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { ITaskRepository, TaskFilters, TaskWithMeetingAndProject, TaskWithMeetingProject } from '../../tasks/types/task.repository'
+import {
+  ITaskRepository,
+  TaskFilters,
+  TaskWithMeetingAndProject,
+  TaskWithMeetingAndAssignee,
+  TaskWithMeetingProject,
+} from '../../tasks/types/task.repository';
 import { TaskStatus, Prisma } from '@prisma/client';
 
 @Injectable()
@@ -91,5 +97,37 @@ export class PrismaTaskRepository implements ITaskRepository {
       where,
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async findManyWithMeetingAndAssignee(
+    filters: TaskFilters,
+  ): Promise<TaskWithMeetingAndAssignee[]> {
+    const where: Prisma.TaskWhereInput = {};
+
+    if (filters.meetingId) {
+      where.meetingId = filters.meetingId;
+    }
+
+    if (filters.projectId) {
+      where.meeting = { projectId: filters.projectId };
+    }
+
+    if (filters.assigneeId) {
+      where.assigneeId = filters.assigneeId;
+    }
+
+    if (filters.status) {
+      where.status = filters.status;
+    }
+
+    const rows = await this.prisma.task.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        meeting: { select: { id: true, title: true } },
+        assignee: { select: { id: true, email: true, name: true } },
+      },
+    });
+    return rows as TaskWithMeetingAndAssignee[];
   }
 }

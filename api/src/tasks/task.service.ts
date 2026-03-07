@@ -123,14 +123,17 @@ export class TaskService {
   }
 
   async getTasksByProject(filters: TaskFilters) {
-    return this.taskRepo.findMany(filters);
+    return this.taskRepo.findManyWithMeetingAndAssignee(filters);
   }
 
   async getTasksByMeeting(filters: TaskFilters) {
-    return this.taskRepo.findMany(filters);
+    return this.taskRepo.findManyWithMeetingAndAssignee(filters);
   }
 
   async getTasksForAssignee(userId: string, status?: TaskStatus) {
-    return this.taskRepo.findMany({ assigneeId: userId, status });
+    return this.taskRepo.findManyWithMeetingAndAssignee({
+      assigneeId: userId,
+      status,
+    });
   }
 }

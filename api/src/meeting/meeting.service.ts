@@ -50,7 +50,7 @@ export class MeetingService {
 
   async listByProject(projectId: string, userId: string) {
     await this.ensureProjectAccess(projectId, userId);
-    return this.meetingRepo.findByProject(projectId);
+    return this.meetingRepo.findByProjectWithTaskCount(projectId);
   }
 
   async getByIdWithDetails(projectId: string, meetingId: string, userId: string) {

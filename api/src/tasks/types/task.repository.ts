@@ -16,10 +16,17 @@ export interface TaskWithMeetingProject extends Task {
     project: Project;
   };
 }
+
+/** Task with meeting (id, title) and assignee (id, email, name) for list views. */
+export interface TaskWithMeetingAndAssignee extends Task {
+  meeting: { id: string; title: string };
+  assignee: { id: string; email: string; name: string | null } | null;
+}
+
 export interface ITaskRepository {
   findById(id: string): Promise<Task | null>;
 
-  findByIdWithProject(taskId: string): Promise<TaskWithMeetingProject | null> ;
+  findByIdWithProject(taskId: string): Promise<TaskWithMeetingProject | null>;
 
   findByIdWithMeetingAndProject(
     id: string,
@@ -36,4 +43,8 @@ export interface ITaskRepository {
   ): Promise<Task>;
 
   findMany(filters: TaskFilters): Promise<Task[]>;
+
+  findManyWithMeetingAndAssignee(
+    filters: TaskFilters,
+  ): Promise<TaskWithMeetingAndAssignee[]>;
 }
