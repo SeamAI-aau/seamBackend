@@ -1,10 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import type type {
-  ITaskRepository, TaskWithMeetingProject,
-  TaskFilters,
-  TaskWithMeetingAndProject,
-} from '../../tasks/types/task.repository';
+import { ITaskRepository, TaskFilters, TaskWithMeetingAndProject, TaskWithMeetingProject } from '../../tasks/types/task.repository'
 import { TaskStatus, Prisma } from '@prisma/client';
 
 @Injectable()
@@ -66,33 +62,11 @@ export class PrismaTaskRepository implements ITaskRepository {
     status: TaskStatus,
   ) {
     return this.prisma.task.update({
-      where: { id },
-      data: { status },
+      where: { id, },
+      data: { status, assigneeId },
     });
   }
 
-  async markAsCreatedInJira(taskId: string, jiraIssueKey: string) {
-    return this.prisma.task.update({
-      where: { id: taskId },
-      data: {
-        status,
-      },
-    });
-  }
-
-  async updateAssigneeAndStatus(
-    id: string,
-    assigneeId: string,
-    status: TaskStatus,
-  ) {
-    return this.prisma.task.update({
-      where: { id },
-      data: {
-        assigneeId,
-        status,
-      },
-    });
-  }
 
   async findMany(filters: TaskFilters) {
     const where: Prisma.TaskWhereInput = {};

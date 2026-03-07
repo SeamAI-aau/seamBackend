@@ -7,7 +7,6 @@ import { HealthModule } from './health/health.module';
 import { ProjectModule } from './project/project.module';
 import { MeetingModule } from './meeting/meeting.module';
 import { TaskModule } from './tasks/task.module';
-import { TaskModule } from './tasks/task.module';
 import { JiraModule } from './integrations/jira/jira.module';
 import { GithubModule } from './integrations/github/github.module';
 import { APP_FILTER } from '@nestjs/core';

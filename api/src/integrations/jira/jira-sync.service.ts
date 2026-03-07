@@ -2,8 +2,8 @@ import { Injectable, Inject } from '@nestjs/common';
 import axios, { type AxiosResponse } from 'axios';
 import { TaskStatus } from '@prisma/client';
 import { JiraService } from './jira.service';
-import { TASK_REPOSITORY } from '../../tasks/task-tokens';
-import type { ITaskRepository } from '../../tasks/task.repository';
+import { TASK_REPOSITORY } from '../../tasks/types/task.tokens';
+import type { ITaskRepository } from '../../tasks/types/task.repository';
 import type { JiraCreateIssueResponse } from './types/jira-api.types';
 
 const JIRA_API_ISSUE_PATH = '/rest/api/3/issue';
