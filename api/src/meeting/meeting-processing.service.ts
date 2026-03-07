@@ -97,6 +97,12 @@ export class MeetingProcessingService {
     payload: WorkerResultPayload,
   ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
+      const meeting = await tx.meeting.findUnique({
+        where: { id: meetingId },
+        select: { projectId: true },
+      });
+      if (!meeting) return;
+
       await tx.meeting.update({
         where: { id: meetingId },
         data: { status: MeetingStatus.PROCESSING },
@@ -108,7 +114,7 @@ export class MeetingProcessingService {
       });
       const nextVersion = latest ? latest.version + 1 : 1;
 
-      await tx.transcript.create({
+      const transcript = await tx.transcript.create({
         data: {
           meetingId,
           version: nextVersion,
@@ -121,10 +127,23 @@ export class MeetingProcessingService {
         await tx.task.createMany({
           data: payload.tasks!.map((task) => ({
             meetingId,
+            transcriptId: transcript.id,
             title: task.title,
             description: task.description ?? null,
             status: TaskStatus.EXTRACTED,
             assigneeId: task.assigneeId ?? null,
+          })),
+        });
+      }
+
+      const blockers = payload.blockers ?? [];
+      if (blockers.length > 0) {
+        await tx.transcriptBlocker.createMany({
+          data: blockers.map((b) => ({
+            meetingId,
+            projectId: meeting.projectId,
+            category: b.category ?? null,
+            message: b.message,
           })),
         });
       }

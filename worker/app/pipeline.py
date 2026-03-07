@@ -24,6 +24,7 @@ def run_meeting_pipeline(audio_url: str) -> dict[str, Any]:
         - transcript: str (full text)
         - diarization: optional JSON (e.g. speakers, segments)
         - tasks: list of { title, description?, assigneeId? }
+        - blockers: optional list of { category?: str, message: str } (transcript blockers for dashboard)
         - error: optional str (when status is "failed")
 
     PLACEHOLDER: Replace this implementation with:
@@ -31,7 +32,7 @@ def run_meeting_pipeline(audio_url: str) -> dict[str, Any]:
     - Run Whisper (or similar) for transcription
     - Run diarization if needed
     - Run NLP/LLM for task and blocker extraction
-    - Map outputs to the return shape above
+    - Map outputs to the return shape above (include "blockers" for NLP-extracted blockers).
     """
     # TODO(ML): Implement real STT + extraction. For now return minimal success payload.
     logger.info("Running pipeline for audio_url=%s (placeholder)", audio_url[:80])
@@ -41,4 +42,5 @@ def run_meeting_pipeline(audio_url: str) -> dict[str, Any]:
         "transcript": "",
         "diarization": {},
         "tasks": [],
+        "blockers": [],  # NLP: list of {"category": "risk"|"dependency"|..., "message": "..."}
     }

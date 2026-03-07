@@ -6,7 +6,7 @@ Python worker that consumes **meeting-transcription** jobs from Redis (BullMQ), 
 
 1. NestJS enqueues a job with `{ meetingId, audioUrl }`.
 2. This worker picks the job, calls `app.pipeline.run_meeting_pipeline(audio_url)`.
-3. Pipeline returns a dict matching **WorkerResultPayload** (status, transcript, diarization, tasks, or error).
+3. Pipeline returns a dict matching **WorkerResultPayload** (status, transcript, diarization, tasks, optional blockers, or error).
 4. Worker POSTs that payload to `POST {API_URL}/internal/meetings/{meetingId}/result` with header `x-worker-secret: {WORKER_SECRET}`.
 5. On pipeline exception, the worker sends `{ status: "failed", error: "..." }` so the API can set the meeting to FAILED, then re-raises for BullMQ retries.
 
@@ -27,7 +27,7 @@ Python worker that consumes **meeting-transcription** jobs from Redis (BullMQ), 
 - Downloading or streaming the audio from `audio_url`
 - Running STT (e.g. Whisper) for transcription
 - Running diarization if required
-- Running NLP/LLM for task (and optionally blocker) extraction
+- Running NLP/LLM for task and blocker extraction
 - Returning a dict in this shape:
 
 ```python
@@ -38,9 +38,14 @@ Python worker that consumes **meeting-transcription** jobs from Redis (BullMQ), 
     "tasks": [                # list of extracted tasks
         {"title": "...", "description": "...", "assigneeId": None}
     ],
+    "blockers": [             # optional: blockers extracted from transcript (NLP)
+        {"category": "risk", "message": "Deployment blocked by infra ticket"}
+    ],
     "error": "..."            # when status is "failed"
 }
 ```
+
+- **blockers** (optional): List of `{ "category": str?, "message": str }`. Persisted as **TranscriptBlocker** and shown on the project dashboard next to GitHub PR blockers. Use `category` for display/filtering (e.g. `"risk"`, `"dependency"`, `"resource"`); `message` is required.
 
 The API expects this payload on `POST /internal/meetings/:id/result`.
 

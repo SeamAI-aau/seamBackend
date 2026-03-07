@@ -1,10 +1,23 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ProjectService } from './project.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
 import type { CurrentUserType } from '../auth/types/current-user.type';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { AddMemberDto } from './dto/add-member.dto';
+import { DashboardFilterDto } from './dto/dashboard-filter.dto';
+import { BlockersFilterDto } from './dto/blockers-filter.dto';
+import { Role } from '@prisma/client';
 
 @Controller('projects')
 @UseGuards(JwtAuthGuard)
@@ -22,11 +35,25 @@ export class ProjectController {
   }
 
   @Get(':id/dashboard')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SCRUM_MASTER)
   getDashboard(
     @Param('id') id: string,
     @CurrentUser() user: CurrentUserType,
+    @Query() query: DashboardFilterDto,
   ) {
-    return this.projectService.getProjectDashboard(id, user.userId);
+    return this.projectService.getProjectDashboard(id, user.userId, query);
+  }
+
+  @Get(':id/blockers')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SCRUM_MASTER)
+  getBlockers(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserType,
+    @Query() query: BlockersFilterDto,
+  ) {
+    return this.projectService.getProjectBlockers(id, user.userId, query);
   }
 
   @Get(':id')
@@ -44,7 +71,10 @@ export class ProjectController {
   }
 
   @Get(':id/members')
-  getProjectMembers(@Param('id') id: string, @CurrentUser() user: any) {
+  getProjectMembers(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserType,
+  ) {
     return this.projectService.getProjectMembers(id, user.userId);
   }
 }

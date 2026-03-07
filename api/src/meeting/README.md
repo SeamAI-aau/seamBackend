@@ -10,9 +10,9 @@ Handles meeting upload, transcription job enqueue, and worker result persistence
 2. **Worker** – External (e.g. Python Celery) consumes the job, runs Whisper + NLP, then calls:
    - `POST /internal/meetings/:id/result`  
    Header: `x-worker-secret: <WORKER_SECRET>`  
-   Body: `WorkerResultPayload` (see `dto/worker-result.dto.ts`).
+   Body: `WorkerResultPayload` (see `dto/worker-result.dto.ts`). Optional `blockers` array is persisted as **TranscriptBlocker** and exposed on the project dashboard next to GitHub blockers.
 
-3. **Persistence** – `MeetingProcessingService` either saves transcript + tasks (status → `TASKS_EXTRACTED`) or sets meeting status to `FAILED` on error/invalid payload.
+3. **Persistence** – `MeetingProcessingService` saves transcript + tasks (+ optional transcript blockers), then sets status → `TASKS_EXTRACTED`, or sets meeting status to `FAILED` on error/invalid payload.
 
 ## Public API (JWT required)
 
