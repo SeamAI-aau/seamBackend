@@ -48,9 +48,19 @@ export class MeetingService {
     return { id: meeting.id };
   }
 
-  async listByProject(projectId: string, userId: string) {
+  async listByProject(
+    projectId: string,
+    userId: string,
+    page: number = 1,
+    limit: number = 20,
+  ) {
     await this.ensureProjectAccess(projectId, userId);
-    return this.meetingRepo.findByProjectWithTaskCount(projectId);
+    const skip = (page - 1) * limit;
+    const [items, total] = await Promise.all([
+      this.meetingRepo.findByProjectWithTaskCount(projectId, { skip, take: limit }),
+      this.meetingRepo.countByProject(projectId),
+    ]);
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) || 1 };
   }
 
   async getByIdWithDetails(projectId: string, meetingId: string, userId: string) {

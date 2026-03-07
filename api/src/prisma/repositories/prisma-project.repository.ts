@@ -20,8 +20,22 @@ export class PrismaProjectRepository implements IProjectRepository {
     });
   }
 
-  findUserProjects(userId: string) {
+  findUserProjects(
+    userId: string,
+    options?: { skip?: number; take?: number },
+  ) {
     return this.prisma.project.findMany({
+      where: {
+        OR: [{ ownerId: userId }, { members: { some: { userId } } }],
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: options?.skip,
+      take: options?.take,
+    });
+  }
+
+  async countUserProjects(userId: string) {
+    return this.prisma.project.count({
       where: {
         OR: [{ ownerId: userId }, { members: { some: { userId } } }],
       },

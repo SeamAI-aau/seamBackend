@@ -59,8 +59,17 @@ export class ProjectService {
     return project;
   }
 
-  async getUserProjects(userId: string) {
-    return this.projectRepo.findUserProjects(userId);
+  async getUserProjects(
+    userId: string,
+    page: number = 1,
+    limit: number = 20,
+  ) {
+    const skip = (page - 1) * limit;
+    const [items, total] = await Promise.all([
+      this.projectRepo.findUserProjects(userId, { skip, take: limit }),
+      this.projectRepo.countUserProjects(userId),
+    ]);
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) || 1 };
   }
 
   async getProject(projectId: string, userId: string) {
@@ -90,7 +99,12 @@ export class ProjectService {
     return this.projectRepo.addMember(projectId, userId);
   }
 
-  async getProjectMembers(projectId: string, userId: string) {
+  async getProjectMembers(
+    projectId: string,
+    userId: string,
+    page: number = 1,
+    limit: number = 20,
+  ) {
     const project = await this.projectRepo.findById(projectId);
 
     if (!project) {
@@ -104,7 +118,18 @@ export class ProjectService {
       throw new AppException(ErrorCode.FORBIDDEN, 'Access denied', 403);
     }
 
-    return this.userRepo.findProjectMembers(projectId);
+    const skip = (page - 1) * limit;
+    const [users, total] = await Promise.all([
+      this.userRepo.findProjectMembers(projectId, { skip, take: limit }),
+      this.userRepo.countProjectMembers(projectId),
+    ]);
+    const items = users.map((u) => ({
+      id: u.id,
+      email: u.email,
+      name: u.name,
+      role: u.role,
+    }));
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) || 1 };
   }
 
   /**
@@ -188,47 +213,74 @@ export class ProjectService {
     const recentTasksLimit = filters.recentTasksLimit ?? 10;
     const recentMeetingsLimit = filters.recentMeetingsLimit ?? 10;
     const blockersLimit = filters.blockersLimit ?? 50;
+    const recentTasksPage = filters.recentTasksPage ?? 1;
+    const recentMeetingsPage = filters.recentMeetingsPage ?? 1;
+    const blockersPage = filters.blockersPage ?? 1;
+    const recentTasksSkip = (recentTasksPage - 1) * recentTasksLimit;
+    const recentMeetingsSkip = (recentMeetingsPage - 1) * recentMeetingsLimit;
+    const blockersSkip = (blockersPage - 1) * blockersLimit;
 
     const [
       taskCountsByStatus,
-      recentTasks,
-      recentMeetings,
-      githubBlockers,
-      transcriptBlockers,
+      recentTasksData,
+      recentMeetingsData,
+      githubBlockersData,
+      transcriptBlockersData,
     ] = await Promise.all([
       this.prisma.task.groupBy({
         by: ['status'],
         _count: { id: true },
         where: taskWhere,
       }),
-      this.prisma.task.findMany({
-        where: taskWhere,
-        take: recentTasksLimit,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          meeting: { select: { id: true, title: true } },
-          assignee: { select: { id: true, email: true } },
-        },
-      }),
-      this.prisma.meeting.findMany({
-        where: meetingWhere,
-        take: recentMeetingsLimit,
-        orderBy: { createdAt: 'desc' },
-        select: { id: true, title: true, status: true, createdAt: true },
-      }),
-      this.prisma.blocker.findMany({
-        where: { projectId },
-        include: { pullRequest: true },
-        orderBy: { createdAt: 'desc' },
-        take: blockersLimit,
-      }),
-      this.prisma.transcriptBlocker.findMany({
-        where: { projectId },
-        include: { meeting: { select: { id: true, title: true } } },
-        orderBy: { createdAt: 'desc' },
-        take: blockersLimit,
-      }),
+      Promise.all([
+        this.prisma.task.findMany({
+          where: taskWhere,
+          skip: recentTasksSkip,
+          take: recentTasksLimit,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            meeting: { select: { id: true, title: true } },
+            assignee: { select: { id: true, email: true, name: true } },
+          },
+        }),
+        this.prisma.task.count({ where: taskWhere }),
+      ]),
+      Promise.all([
+        this.prisma.meeting.findMany({
+          where: meetingWhere,
+          skip: recentMeetingsSkip,
+          take: recentMeetingsLimit,
+          orderBy: { createdAt: 'desc' },
+          select: { id: true, title: true, status: true, createdAt: true },
+        }),
+        this.prisma.meeting.count({ where: meetingWhere }),
+      ]),
+      Promise.all([
+        this.prisma.blocker.findMany({
+          where: { projectId },
+          include: { pullRequest: true },
+          orderBy: { createdAt: 'desc' },
+          skip: blockersSkip,
+          take: blockersLimit,
+        }),
+        this.prisma.blocker.count({ where: { projectId } }),
+      ]),
+      Promise.all([
+        this.prisma.transcriptBlocker.findMany({
+          where: { projectId },
+          include: { meeting: { select: { id: true, title: true } } },
+          orderBy: { createdAt: 'desc' },
+          skip: blockersSkip,
+          take: blockersLimit,
+        }),
+        this.prisma.transcriptBlocker.count({ where: { projectId } }),
+      ]),
     ]);
+
+    const [recentTasks, recentTasksTotal] = recentTasksData;
+    const [recentMeetings, recentMeetingsTotal] = recentMeetingsData;
+    const [githubBlockers, githubBlockersTotal] = githubBlockersData;
+    const [transcriptBlockers, transcriptBlockersTotal] = transcriptBlockersData;
 
     const taskCounts: Record<string, number> = Object.fromEntries(
       taskCountsByStatus.map((row: { status: string; _count: { id: number } }) => [
@@ -244,7 +296,7 @@ export class ProjectService {
     const tasksRejected = taskCounts['REJECTED'] ?? 0;
     const tasksPending =
       (taskCounts['EXTRACTED'] ?? 0) + (taskCounts['SENT_TO_DEVELOPER'] ?? 0);
-    const openBlockersCount = githubBlockers.length + transcriptBlockers.length;
+    const openBlockersCount = githubBlockersTotal + transcriptBlockersTotal;
 
     return {
       project: { id: project.id, name: project.name },
@@ -256,11 +308,35 @@ export class ProjectService {
         tasksPending,
         openBlockersCount,
       },
-      recentTasks,
-      recentMeetings,
+      recentTasks: {
+        items: recentTasks,
+        total: recentTasksTotal,
+        page: recentTasksPage,
+        limit: recentTasksLimit,
+        totalPages: Math.ceil(recentTasksTotal / recentTasksLimit) || 1,
+      },
+      recentMeetings: {
+        items: recentMeetings,
+        total: recentMeetingsTotal,
+        page: recentMeetingsPage,
+        limit: recentMeetingsLimit,
+        totalPages: Math.ceil(recentMeetingsTotal / recentMeetingsLimit) || 1,
+      },
       blockers: {
-        github: githubBlockers,
-        transcript: transcriptBlockers,
+        github: {
+          items: githubBlockers,
+          total: githubBlockersTotal,
+          page: blockersPage,
+          limit: blockersLimit,
+          totalPages: Math.ceil(githubBlockersTotal / blockersLimit) || 1,
+        },
+        transcript: {
+          items: transcriptBlockers,
+          total: transcriptBlockersTotal,
+          page: blockersPage,
+          limit: blockersLimit,
+          totalPages: Math.ceil(transcriptBlockersTotal / blockersLimit) || 1,
+        },
       },
     };
   }
@@ -281,7 +357,9 @@ export class ProjectService {
       throw new AppException(ErrorCode.FORBIDDEN, 'Access denied', 403);
     }
 
-    const limit = filters.limit ?? 100;
+    const page = filters.page ?? 1;
+    const limit = filters.limit ?? 50;
+    const skip = (page - 1) * limit;
     const githubWhere: Record<string, unknown> = { projectId };
     const transcriptWhere: Record<string, unknown> = { projectId };
     if (filters.fromDate) {
@@ -294,24 +372,44 @@ export class ProjectService {
     const wantGithub = filters.source !== 'transcript';
     const wantTranscript = filters.source !== 'github';
 
-    const [github, transcript] = await Promise.all([
+    const [githubResult, transcriptResult] = await Promise.all([
       wantGithub
-        ? this.prisma.blocker.findMany({
-            where: githubWhere,
-            include: { pullRequest: true },
-            orderBy: { createdAt: 'desc' },
-            take: limit,
-          })
-        : [],
+        ? Promise.all([
+            this.prisma.blocker.findMany({
+              where: githubWhere,
+              include: { pullRequest: true },
+              orderBy: { createdAt: 'desc' },
+              skip,
+              take: limit,
+            }),
+            this.prisma.blocker.count({ where: githubWhere }),
+          ]).then(([items, total]) => ({
+            items,
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit) || 1,
+          }))
+        : { items: [], total: 0, page, limit, totalPages: 1 },
       wantTranscript
-        ? this.prisma.transcriptBlocker.findMany({
-            where: transcriptWhere,
-            include: { meeting: { select: { id: true, title: true } } },
-            orderBy: { createdAt: 'desc' },
-            take: limit,
-          })
-        : [],
+        ? Promise.all([
+            this.prisma.transcriptBlocker.findMany({
+              where: transcriptWhere,
+              include: { meeting: { select: { id: true, title: true } } },
+              orderBy: { createdAt: 'desc' },
+              skip,
+              take: limit,
+            }),
+            this.prisma.transcriptBlocker.count({ where: transcriptWhere }),
+          ]).then(([items, total]) => ({
+            items,
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit) || 1,
+          }))
+        : { items: [], total: 0, page, limit, totalPages: 1 },
     ]);
-    return { github, transcript };
+    return { github: githubResult, transcript: transcriptResult };
   }
 }

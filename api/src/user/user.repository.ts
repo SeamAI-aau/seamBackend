@@ -3,7 +3,14 @@ import { User } from '@prisma/client';
 export interface IUserRepository {
   findById(userId: string): Promise<User | null>;
 
-  findDevelopers(): Promise<User[]>;
+  findDevelopers(options?: { skip?: number; take?: number }): Promise<User[]>;
 
-  findProjectMembers(projectId: string): Promise<User[]>;
+  countDevelopers(): Promise<number>;
+
+  findProjectMembers(
+    projectId: string,
+    options?: { skip?: number; take?: number },
+  ): Promise<User[]>;
+
+  countProjectMembers(projectId: string): Promise<number>;
 }

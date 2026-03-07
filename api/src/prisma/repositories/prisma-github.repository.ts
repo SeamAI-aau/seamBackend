@@ -71,11 +71,20 @@ export class PrismaGithubRepository implements IGithubRepository {
     );
   }
 
-  async findPullRequestsByProjectId(projectId: string) {
+  async findPullRequestsByProjectId(
+    projectId: string,
+    options?: { skip?: number; take?: number },
+  ) {
     return this.prisma.pullRequest.findMany({
       where: { projectId },
       orderBy: { prUpdatedAt: 'desc' },
+      skip: options?.skip,
+      take: options?.take,
     });
+  }
+
+  async countPullRequestsByProjectId(projectId: string) {
+    return this.prisma.pullRequest.count({ where: { projectId } });
   }
 
   async replaceBlockersForPullRequest(
@@ -96,11 +105,20 @@ export class PrismaGithubRepository implements IGithubRepository {
     }
   }
 
-  async findBlockersByProjectId(projectId: string) {
+  async findBlockersByProjectId(
+    projectId: string,
+    options?: { skip?: number; take?: number },
+  ) {
     return this.prisma.blocker.findMany({
       where: { projectId },
       include: { pullRequest: true },
       orderBy: { createdAt: 'desc' },
+      skip: options?.skip,
+      take: options?.take,
     });
+  }
+
+  async countBlockersByProjectId(projectId: string) {
+    return this.prisma.blocker.count({ where: { projectId } });
   }
 }

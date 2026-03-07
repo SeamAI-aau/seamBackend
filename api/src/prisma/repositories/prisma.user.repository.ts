@@ -13,14 +13,36 @@ export class PrismaUserRepository implements IUserRepository {
     });
   }
 
-  async findDevelopers() {
+  async findDevelopers(options?: { skip?: number; take?: number }) {
     return this.prisma.user.findMany({
       where: { role: Role.DEVELOPER },
+      skip: options?.skip,
+      take: options?.take,
     });
   }
 
-  async findProjectMembers(projectId: string) {
+  async countDevelopers() {
+    return this.prisma.user.count({ where: { role: Role.DEVELOPER } });
+  }
+
+  async findProjectMembers(
+    projectId: string,
+    options?: { skip?: number; take?: number },
+  ) {
     return this.prisma.user.findMany({
+      where: {
+        OR: [
+          { ownedProjects: { some: { id: projectId } } },
+          { projectMembers: { some: { projectId } } },
+        ],
+      },
+      skip: options?.skip,
+      take: options?.take,
+    });
+  }
+
+  async countProjectMembers(projectId: string) {
+    return this.prisma.user.count({
       where: {
         OR: [
           { ownedProjects: { some: { id: projectId } } },

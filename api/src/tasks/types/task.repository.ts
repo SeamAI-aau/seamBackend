@@ -46,5 +46,8 @@ export interface ITaskRepository {
 
   findManyWithMeetingAndAssignee(
     filters: TaskFilters,
+    options?: { skip?: number; take?: number },
   ): Promise<TaskWithMeetingAndAssignee[]>;
+
+  count(filters: TaskFilters): Promise<number>;
 }

@@ -22,8 +22,14 @@ export class BlockersFilterDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  page?: number = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
   @Max(200)
-  limit?: number;
+  limit?: number = 50;
 
   @IsOptional()
   @IsDateString()

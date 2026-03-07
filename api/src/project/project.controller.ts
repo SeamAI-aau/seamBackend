@@ -17,6 +17,7 @@ import { CreateProjectDto } from './dto/create-project.dto';
 import { AddMemberDto } from './dto/add-member.dto';
 import { DashboardFilterDto } from './dto/dashboard-filter.dto';
 import { BlockersFilterDto } from './dto/blockers-filter.dto';
+import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { Role } from '@prisma/client';
 
 @Controller('projects')
@@ -30,8 +31,15 @@ export class ProjectController {
   }
 
   @Get()
-  getProjects(@CurrentUser() user: CurrentUserType) {
-    return this.projectService.getUserProjects(user.userId);
+  getProjects(
+    @CurrentUser() user: CurrentUserType,
+    @Query() query: PaginationQueryDto,
+  ) {
+    return this.projectService.getUserProjects(
+      user.userId,
+      query.page ?? 1,
+      query.limit ?? 20,
+    );
   }
 
   @Get(':id/dashboard')
@@ -82,7 +90,13 @@ export class ProjectController {
   getProjectMembers(
     @Param('id') id: string,
     @CurrentUser() user: CurrentUserType,
+    @Query() query: PaginationQueryDto,
   ) {
-    return this.projectService.getProjectMembers(id, user.userId);
+    return this.projectService.getProjectMembers(
+      id,
+      user.userId,
+      query.page ?? 1,
+      query.limit ?? 20,
+    );
   }
 }

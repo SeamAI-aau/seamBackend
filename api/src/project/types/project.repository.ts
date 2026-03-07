@@ -8,7 +8,12 @@ export interface IProjectRepository {
 
   findById(projectId: string): Promise<Project | null>;
 
-  findUserProjects(userId: string): Promise<Project[]>;
+  findUserProjects(
+    userId: string,
+    options?: { skip?: number; take?: number },
+  ): Promise<Project[]>;
+
+  countUserProjects(userId: string): Promise<number>;
 
   updateProject(
     projectId: string,

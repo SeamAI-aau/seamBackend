@@ -1,4 +1,5 @@
-import { IsEnum, IsOptional, IsUUID } from 'class-validator';
+import { IsEnum, IsOptional, IsUUID, IsInt, Min, Max } from 'class-validator';
+import { Type } from 'class-transformer';
 import { TaskStatus } from '@prisma/client';
 
 export class TaskFilterQueryDto {
@@ -9,5 +10,18 @@ export class TaskFilterQueryDto {
   @IsOptional()
   @IsUUID()
   assigneeId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number = 20;
 }
 

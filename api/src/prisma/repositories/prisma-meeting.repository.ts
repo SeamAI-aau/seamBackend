@@ -29,13 +29,20 @@ export class PrismaMeetingRepository implements IMeetingRepository {
 
   async findByProjectWithTaskCount(
     projectId: string,
+    options?: { skip?: number; take?: number },
   ): Promise<MeetingWithTaskCount[]> {
     const rows = await this.prisma.meeting.findMany({
       where: { projectId },
       orderBy: { createdAt: 'desc' },
+      skip: options?.skip,
+      take: options?.take,
       include: { _count: { select: { tasks: true } } },
     });
     return rows as MeetingWithTaskCount[];
+  }
+
+  async countByProject(projectId: string): Promise<number> {
+    return this.prisma.meeting.count({ where: { projectId } });
   }
 
   async findById(id: string): Promise<Meeting | null> {

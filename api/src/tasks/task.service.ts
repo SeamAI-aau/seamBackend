@@ -122,18 +122,44 @@ export class TaskService {
     return task;
   }
 
-  async getTasksByProject(filters: TaskFilters) {
-    return this.taskRepo.findManyWithMeetingAndAssignee(filters);
+  async getTasksByProject(
+    filters: TaskFilters,
+    page: number = 1,
+    limit: number = 20,
+  ) {
+    const skip = (page - 1) * limit;
+    const [items, total] = await Promise.all([
+      this.taskRepo.findManyWithMeetingAndAssignee(filters, { skip, take: limit }),
+      this.taskRepo.count(filters),
+    ]);
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) || 1 };
   }
 
-  async getTasksByMeeting(filters: TaskFilters) {
-    return this.taskRepo.findManyWithMeetingAndAssignee(filters);
+  async getTasksByMeeting(
+    filters: TaskFilters,
+    page: number = 1,
+    limit: number = 20,
+  ) {
+    const skip = (page - 1) * limit;
+    const [items, total] = await Promise.all([
+      this.taskRepo.findManyWithMeetingAndAssignee(filters, { skip, take: limit }),
+      this.taskRepo.count(filters),
+    ]);
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) || 1 };
   }
 
-  async getTasksForAssignee(userId: string, status?: TaskStatus) {
-    return this.taskRepo.findManyWithMeetingAndAssignee({
-      assigneeId: userId,
-      status,
-    });
+  async getTasksForAssignee(
+    userId: string,
+    status?: TaskStatus,
+    page: number = 1,
+    limit: number = 20,
+  ) {
+    const filters = { assigneeId: userId, status };
+    const skip = (page - 1) * limit;
+    const [items, total] = await Promise.all([
+      this.taskRepo.findManyWithMeetingAndAssignee(filters, { skip, take: limit }),
+      this.taskRepo.count(filters),
+    ]);
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) || 1 };
   }
 }

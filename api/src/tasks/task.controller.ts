@@ -47,11 +47,15 @@ export class TaskController {
     @Param('projectId') projectId: string,
     @Query() query: TaskFilterQueryDto,
   ) {
-    return this.taskService.getTasksByProject({
-      projectId,
-      status: query.status as TaskStatus | undefined,
-      assigneeId: query.assigneeId,
-    });
+    return this.taskService.getTasksByProject(
+      {
+        projectId,
+        status: query.status as TaskStatus | undefined,
+        assigneeId: query.assigneeId,
+      },
+      query.page ?? 1,
+      query.limit ?? 20,
+    );
   }
 
   @Get('by-meeting/:meetingId')
@@ -59,11 +63,15 @@ export class TaskController {
     @Param('meetingId') meetingId: string,
     @Query() query: TaskFilterQueryDto,
   ) {
-    return this.taskService.getTasksByMeeting({
-      meetingId,
-      status: query.status as TaskStatus | undefined,
-      assigneeId: query.assigneeId,
-    });
+    return this.taskService.getTasksByMeeting(
+      {
+        meetingId,
+        status: query.status as TaskStatus | undefined,
+        assigneeId: query.assigneeId,
+      },
+      query.page ?? 1,
+      query.limit ?? 20,
+    );
   }
 
   @Get('my')
@@ -74,6 +82,8 @@ export class TaskController {
     return this.taskService.getTasksForAssignee(
       user.userId,
       query.status as TaskStatus | undefined,
+      query.page ?? 1,
+      query.limit ?? 20,
     );
   }
 

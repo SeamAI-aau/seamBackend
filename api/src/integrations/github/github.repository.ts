@@ -35,7 +35,12 @@ export interface IGithubRepository {
 
   upsertPullRequests(projectId: string, prs: PullRequestUpsertData[]): Promise<void>;
 
-  findPullRequestsByProjectId(projectId: string): Promise<PullRequest[]>;
+  findPullRequestsByProjectId(
+    projectId: string,
+    options?: { skip?: number; take?: number },
+  ): Promise<PullRequest[]>;
+
+  countPullRequestsByProjectId(projectId: string): Promise<number>;
 
   replaceBlockersForPullRequest(
     pullRequestId: string,
@@ -43,5 +48,10 @@ export interface IGithubRepository {
     blockers: Omit<BlockerCreateData, 'projectId'>[],
   ): Promise<void>;
 
-  findBlockersByProjectId(projectId: string): Promise<(Blocker & { pullRequest: PullRequest })[]>;
+  findBlockersByProjectId(
+    projectId: string,
+    options?: { skip?: number; take?: number },
+  ): Promise<(Blocker & { pullRequest: PullRequest })[]>;
+
+  countBlockersByProjectId(projectId: string): Promise<number>;
 }

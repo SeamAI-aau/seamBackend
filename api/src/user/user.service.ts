@@ -15,13 +15,22 @@ export class UserService {
     private readonly userRepo: IUserRepository,
   ) {}
 
-  async getDevelopers(currentUser: CurrentUserType): Promise<UserResponseDto[]> {
+  async getDevelopers(
+    currentUser: CurrentUserType,
+    page: number = 1,
+    limit: number = 20,
+  ) {
     if (currentUser.role !== Role.SCRUM_MASTER) {
       throw new AppException(ErrorCode.FORBIDDEN, 'Only Scrum Masters can view developers', 403);
     }
 
-    const developers = await this.userRepo.findDevelopers();
-    return developers.map(this.toResponseDto);
+    const skip = (page - 1) * limit;
+    const [users, total] = await Promise.all([
+      this.userRepo.findDevelopers({ skip, take: limit }),
+      this.userRepo.countDevelopers(),
+    ]);
+    const items = users.map(this.toResponseDto);
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) || 1 };
   }
 
   async getMe(userId: string): Promise<UserResponseDto> {
@@ -42,10 +51,18 @@ export class UserService {
       role: user.role,
     };
   }
-  async getProjectMembers(projectId: string) {
-    const users = await this.userRepo.findProjectMembers(projectId);
-
-    return users.map(this.mapSafeUser);
+  async getProjectMembers(
+    projectId: string,
+    page: number = 1,
+    limit: number = 20,
+  ) {
+    const skip = (page - 1) * limit;
+    const [users, total] = await Promise.all([
+      this.userRepo.findProjectMembers(projectId, { skip, take: limit }),
+      this.userRepo.countProjectMembers(projectId),
+    ]);
+    const items = users.map(this.mapSafeUser);
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) || 1 };
   }
 
   private mapSafeUser(user: User) {

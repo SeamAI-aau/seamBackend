@@ -101,33 +101,32 @@ export class PrismaTaskRepository implements ITaskRepository {
 
   async findManyWithMeetingAndAssignee(
     filters: TaskFilters,
+    options?: { skip?: number; take?: number },
   ): Promise<TaskWithMeetingAndAssignee[]> {
-    const where: Prisma.TaskWhereInput = {};
-
-    if (filters.meetingId) {
-      where.meetingId = filters.meetingId;
-    }
-
-    if (filters.projectId) {
-      where.meeting = { projectId: filters.projectId };
-    }
-
-    if (filters.assigneeId) {
-      where.assigneeId = filters.assigneeId;
-    }
-
-    if (filters.status) {
-      where.status = filters.status;
-    }
-
+    const where = this.buildWhere(filters);
     const rows = await this.prisma.task.findMany({
       where,
       orderBy: { createdAt: 'desc' },
+      skip: options?.skip,
+      take: options?.take,
       include: {
         meeting: { select: { id: true, title: true } },
         assignee: { select: { id: true, email: true, name: true } },
       },
     });
     return rows as TaskWithMeetingAndAssignee[];
+  }
+
+  async count(filters: TaskFilters): Promise<number> {
+    return this.prisma.task.count({ where: this.buildWhere(filters) });
+  }
+
+  private buildWhere(filters: TaskFilters): Prisma.TaskWhereInput {
+    const where: Prisma.TaskWhereInput = {};
+    if (filters.meetingId) where.meetingId = filters.meetingId;
+    if (filters.projectId) where.meeting = { projectId: filters.projectId };
+    if (filters.assigneeId) where.assigneeId = filters.assigneeId;
+    if (filters.status) where.status = filters.status;
+    return where;
   }
 }

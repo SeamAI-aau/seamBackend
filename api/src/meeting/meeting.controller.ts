@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Param,
+  Query,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -13,6 +14,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserType } from '../auth/types/current-user.type';
 import { MeetingService } from './meeting.service';
+import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 
 @Controller('projects/:projectId/meetings')
 @UseGuards(JwtAuthGuard)
@@ -33,8 +35,14 @@ export class MeetingController {
   listByProject(
     @Param('projectId') projectId: string,
     @CurrentUser() user: CurrentUserType,
+    @Query() query: PaginationQueryDto,
   ) {
-    return this.meetingService.listByProject(projectId, user.userId);
+    return this.meetingService.listByProject(
+      projectId,
+      user.userId,
+      query.page ?? 1,
+      query.limit ?? 20,
+    );
   }
 
   @Get(':meetingId')

@@ -9,6 +9,7 @@ import {
   Res,
   Inject,
 } from '@nestjs/common';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import type{ Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
@@ -87,18 +88,28 @@ export class GithubController {
   async getPullRequests(
     @Param('projectId') projectId: string,
     @CurrentUser() user: CurrentUserType,
+    @Query() query: PaginationQueryDto,
   ) {
     await this.ensureProjectAccess(projectId, user.userId, false);
-    return this.githubSyncService.getPullRequests(projectId);
+    return this.githubSyncService.getPullRequests(
+      projectId,
+      query.page ?? 1,
+      query.limit ?? 20,
+    );
   }
 
   @Get('blockers/:projectId')
   async getBlockers(
     @Param('projectId') projectId: string,
     @CurrentUser() user: CurrentUserType,
+    @Query() query: PaginationQueryDto,
   ) {
     await this.ensureProjectAccess(projectId, user.userId, false);
-    return this.githubSyncService.getBlockers(projectId);
+    return this.githubSyncService.getBlockers(
+      projectId,
+      query.page ?? 1,
+      query.limit ?? 50,
+    );
   }
 
   private async ensureProjectAccess(

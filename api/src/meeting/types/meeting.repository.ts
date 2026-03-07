@@ -19,7 +19,12 @@ export interface IMeetingRepository {
 
   findByProject(projectId: string): Promise<Meeting[]>;
 
-  findByProjectWithTaskCount(projectId: string): Promise<MeetingWithTaskCount[]>;
+  findByProjectWithTaskCount(
+    projectId: string,
+    options?: { skip?: number; take?: number },
+  ): Promise<MeetingWithTaskCount[]>;
+
+  countByProject(projectId: string): Promise<number>;
 
   findById(id: string): Promise<Meeting | null>;
 

@@ -47,4 +47,22 @@ export class DashboardFilterDto {
   @Min(1)
   @Max(200)
   blockersLimit?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  recentTasksPage?: number = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  recentMeetingsPage?: number = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  blockersPage?: number = 1;
 }

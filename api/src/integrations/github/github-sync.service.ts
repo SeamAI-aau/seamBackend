@@ -60,12 +60,30 @@ export class GithubSyncService {
     return { synced: prs.length };
   }
 
-  async getPullRequests(projectId: string) {
-    return this.githubRepo.findPullRequestsByProjectId(projectId);
+  async getPullRequests(
+    projectId: string,
+    page: number = 1,
+    limit: number = 20,
+  ) {
+    const skip = (page - 1) * limit;
+    const [items, total] = await Promise.all([
+      this.githubRepo.findPullRequestsByProjectId(projectId, { skip, take: limit }),
+      this.githubRepo.countPullRequestsByProjectId(projectId),
+    ]);
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) || 1 };
   }
 
-  async getBlockers(projectId: string) {
-    return this.githubRepo.findBlockersByProjectId(projectId);
+  async getBlockers(
+    projectId: string,
+    page: number = 1,
+    limit: number = 50,
+  ) {
+    const skip = (page - 1) * limit;
+    const [items, total] = await Promise.all([
+      this.githubRepo.findBlockersByProjectId(projectId, { skip, take: limit }),
+      this.githubRepo.countBlockersByProjectId(projectId),
+    ]);
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) || 1 };
   }
 }
 
