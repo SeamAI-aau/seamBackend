@@ -21,6 +21,14 @@ export class ProjectController {
     return this.projectService.getUserProjects(user.userId);
   }
 
+  @Get(':id/dashboard')
+  getDashboard(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    return this.projectService.getProjectDashboard(id, user.userId);
+  }
+
   @Get(':id')
   getProject(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
     return this.projectService.getProject(id, user.userId);
