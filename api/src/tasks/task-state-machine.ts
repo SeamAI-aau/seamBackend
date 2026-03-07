@@ -1,12 +1,8 @@
-export type TaskTransition = {
-  from: string;
-  to: string;
-};
+import type { TaskStatus } from '@prisma/client';
 
-import { TaskStatus } from '@prisma/client';
-
+/** Enforces allowed task status transitions (e.g. EXTRACTED → SENT_TO_DEVELOPER only). */
 export class TaskStateMachine {
-  private static transitions: Record<TaskStatus, TaskStatus[]> = {
+  private static readonly transitions: Record<TaskStatus, TaskStatus[]> = {
     EXTRACTED: ['SENT_TO_DEVELOPER'],
     SENT_TO_DEVELOPER: ['APPROVED', 'REJECTED'],
     APPROVED: ['SYNCED'],

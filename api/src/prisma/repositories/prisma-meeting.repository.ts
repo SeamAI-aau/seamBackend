@@ -1,13 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { IMeetingRepository } from '../../meeting/types/meeting.repository';
-import { Meeting, MeetingStatus, Transcript } from '@prisma/client';
+import type {
+  IMeetingRepository,
+  MeetingWithTranscriptsAndTasks,
+} from '../../meeting/types/meeting.repository';
+import type { Meeting, MeetingStatus } from '@prisma/client';
 
 @Injectable()
 export class PrismaMeetingRepository implements IMeetingRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(data: { title: string; audioUrl: string; projectId: string }): Promise<Meeting> {
+  async create(data: {
+    title: string;
+    audioUrl: string;
+    audioPublicId?: string | null;
+    projectId: string;
+  }): Promise<Meeting> {
     return this.prisma.meeting.create({ data });
   }
 
@@ -22,6 +30,18 @@ export class PrismaMeetingRepository implements IMeetingRepository {
     return this.prisma.meeting.findUnique({ where: { id } });
   }
 
+  async findByIdWithTranscriptsAndTasks(
+    id: string,
+  ): Promise<MeetingWithTranscriptsAndTasks | null> {
+    return this.prisma.meeting.findUnique({
+      where: { id },
+      include: {
+        transcripts: { orderBy: { version: 'asc' } },
+        tasks: { orderBy: { createdAt: 'asc' } },
+      },
+    }) as Promise<MeetingWithTranscriptsAndTasks | null>;
+  }
+
   async updateStatus(id: string, status: MeetingStatus): Promise<Meeting> {
     return this.prisma.meeting.update({
       where: { id },
@@ -29,25 +49,7 @@ export class PrismaMeetingRepository implements IMeetingRepository {
     });
   }
 
-  async addTranscript(
-    meetingId: string,
-    version: number,
-    content: string,
-    diarization: any,
-  ): Promise<Transcript> {
-    return this.prisma.transcript.create({
-      data: { meetingId, version, content, diarization },
-    });
-  }
-
   async delete(id: string): Promise<void> {
     await this.prisma.meeting.delete({ where: { id } });
-  }
-
-  async existsProcessingInProject(projectId: string): Promise<boolean> {
-    const count = await this.prisma.meeting.count({
-      where: { projectId, status: MeetingStatus.PROCESSING },
-    });
-    return count > 0;
   }
 }

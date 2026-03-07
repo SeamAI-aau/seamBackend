@@ -9,6 +9,7 @@ import { Role } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import type { CurrentUserType } from '../auth/types/current-user.type';
 import type { CreateProjectDto } from './dto/create-project.dto';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class ProjectService {
@@ -17,6 +18,7 @@ export class ProjectService {
     private readonly projectRepo: IProjectRepository,
     @Inject(USER_REPOSITORY)
     private readonly userRepo: IUserRepository,
+    private readonly prisma: PrismaService,
     private readonly logger: Logger,
   ) {}
 
@@ -82,5 +84,54 @@ export class ProjectService {
     }
 
     return this.userRepo.findProjectMembers(projectId);
+  }
+
+  async getProjectDashboard(projectId: string, userId: string) {
+    const project = await this.projectRepo.findById(projectId);
+
+    if (!project) {
+      throw new AppException(ErrorCode.PROJECT_NOT_FOUND, 'Project not found', 404);
+    }
+
+    const isOwner = await this.projectRepo.isOwner(projectId, userId);
+    const isMember = await this.projectRepo.isMember(projectId, userId);
+
+    if (!isOwner && !isMember) {
+      throw new AppException(ErrorCode.FORBIDDEN, 'Access denied', 403);
+    }
+
+    const [taskCountsByStatus, recentTasks, recentMeetings] = await Promise.all([
+      this.prisma.task.groupBy({
+        by: ['status'],
+        _count: { id: true },
+        where: { meeting: { projectId } },
+      }),
+      this.prisma.task.findMany({
+        where: { meeting: { projectId } },
+        take: 10,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          meeting: { select: { id: true, title: true } },
+          assignee: { select: { id: true, email: true } },
+        },
+      }),
+      this.prisma.meeting.findMany({
+        where: { projectId },
+        take: 10,
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, title: true, status: true, createdAt: true },
+      }),
+    ]);
+
+    const taskCounts = Object.fromEntries(
+      taskCountsByStatus.map((row) => [row.status, row._count.id]),
+    );
+
+    return {
+      project: { id: project.id, name: project.name },
+      taskCountsByStatus: taskCounts,
+      recentTasks,
+      recentMeetings,
+    };
   }
 }

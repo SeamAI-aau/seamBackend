@@ -1,4 +1,12 @@
-import { Controller, Post, UseGuards, UseInterceptors, UploadedFile, Param } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Param,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -19,5 +27,22 @@ export class MeetingController {
     @UploadedFile() file: Express.Multer.File,
   ) {
     return this.meetingService.uploadMeeting(projectId, user.userId, file);
+  }
+
+  @Get()
+  listByProject(
+    @Param('projectId') projectId: string,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    return this.meetingService.listByProject(projectId, user.userId);
+  }
+
+  @Get(':meetingId')
+  getByIdWithDetails(
+    @Param('projectId') projectId: string,
+    @Param('meetingId') meetingId: string,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    return this.meetingService.getByIdWithDetails(projectId, meetingId, user.userId);
   }
 }
