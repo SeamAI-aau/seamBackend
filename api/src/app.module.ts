@@ -10,6 +10,8 @@ import { MeetingModule } from './meeting/meeting.module';
 import { TaskModule } from './tasks/task.module';
 import { JiraModule } from './integrations/jira/jira.module';
 import { GithubModule } from './integrations/github/github.module';
+import { ActivityLogModule } from './activity-log/activity-log.module';
+import { DeveloperActivityModule } from './developer-activity/developer-activity.module';
 import { APP_FILTER } from '@nestjs/core';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { AppController } from './app.controller';
@@ -26,6 +28,8 @@ import { AppController } from './app.controller';
     TaskModule,
     JiraModule,
     GithubModule,
+    ActivityLogModule,
+    DeveloperActivityModule,
     LoggerModule.forRoot({
       pinoHttp: {
         level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',

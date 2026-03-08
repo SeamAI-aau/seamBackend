@@ -5,9 +5,10 @@ import { InternalProjectBlockersController } from './internal-project-blockers.c
 import { PROJECT_REPOSITORY } from './types/project.tokens';
 import { PrismaProjectRepository } from '../prisma/repositories/prisma-project.repository';
 import { UserModule } from '../user/user.module';
+import { ActivityLogModule } from '../activity-log/activity-log.module';
 
 @Module({
-  imports: [UserModule],
+  imports: [UserModule, ActivityLogModule],
   controllers: [ProjectController, InternalProjectBlockersController],
   providers: [
     ProjectService,

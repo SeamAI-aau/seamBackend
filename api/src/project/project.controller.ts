@@ -55,6 +55,15 @@ export class ProjectController {
     return this.projectService.getProjectDashboard(id, user.userId, query);
   }
 
+  @Get(':id/dashboard/developer')
+  getDeveloperDashboard(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserType,
+    @Query() query: DashboardFilterDto,
+  ) {
+    return this.projectService.getDeveloperDashboard(id, user.userId, query);
+  }
+
   @Get(':id/blockers')
   @UseGuards(RolesGuard)
   @Roles(Role.SCRUM_MASTER)

@@ -53,6 +53,8 @@ model User {
   refreshTokens      RefreshToken[]
   jiraAccount     JiraAccount?
   githubAccount   GithubAccount?
+  activityLogs       ActivityLog[]
+  developerActivities DeveloperActivity[]
 }
 
 model Project {
@@ -72,6 +74,8 @@ model Project {
   pullRequests       PullRequest[]
   blockers           Blocker[]
   transcriptBlockers TranscriptBlocker[]
+  activityLogs         ActivityLog[]
+  developerActivities  DeveloperActivity[]
 }
 
 model ProjectMember {
@@ -95,6 +99,8 @@ model Meeting {
   audioUrl       String
   audioPublicId  String?       // Cloudinary public ID; used to delete audio after transcription
   status         MeetingStatus @default(UPLOADED)
+  durationSeconds Int?         // From worker or upload metadata
+  participants   Json?         // Optional: [{ userId?, email?, name? }]
   createdAt      DateTime      @default(now())
 
   projectId   String
@@ -231,6 +237,48 @@ model Blocker {
   pullRequest PullRequest @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
 
   @@unique([pullRequestId, type])
+}
+
+/// Activity log for project/user actions (task assignments, approvals, meeting uploads, etc.).
+model ActivityLog {
+  id         String   @id @default(uuid())
+  projectId  String?
+  userId     String?
+  action     String   // e.g. "task.assigned", "task.approved", "meeting.uploaded"
+  entityType String?  // e.g. "Task", "Meeting"
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+/// Developer activity from GitHub and Jira. Selective storage: PRs (opened/merged), daily commit counts, Jira status transitions only.
+model DeveloperActivity {
+  id         String   @id @default(uuid())
+  projectId  String
+  userId     String?
+  source     String   // GITHUB | JIRA
+  type       String   // commit | pr_opened | pr_merged | pr_reviewed | jira_issue_created | jira_issue_updated | jira_comment
+  externalId String?
+  title      String?
+  metadata   Json?
+  occurredAt DateTime
+  createdAt  DateTime @default(now())
+
+  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([source, externalId])
+  @@index([projectId])
+  @@index([userId])
+  @@index([occurredAt])
+  @@index([projectId, occurredAt])
 }
 
 /// Blockers from meeting transcripts (NLP) or system (CI failure, task inactivity). Shown next to GitHub blockers.

@@ -21,8 +21,16 @@ export interface WorkerBlockerPayload {
 }
 
 /**
+ * Optional meeting metadata from the worker (audio analysis).
+ */
+export interface WorkerMeetingMetadata {
+  durationSeconds?: number;
+  participants?: Array<{ userId?: string; email?: string; name?: string }>;
+}
+
+/**
  * Payload sent by the Python worker to POST /internal/meetings/:id/result.
- * On success: transcript, diarization, tasks, optional blockers.
+ * On success: transcript, diarization, tasks, optional blockers, optional meeting metadata.
  * On failure: status 'failed' and error message.
  */
 export interface WorkerResultPayload {
@@ -32,5 +40,7 @@ export interface WorkerResultPayload {
   tasks?: WorkerTaskPayload[];
   /** Blockers extracted from transcript by NLP; persisted and exposed next to GitHub blockers. */
   blockers?: WorkerBlockerPayload[];
+  /** Optional meeting metadata (duration, participants from diarization/audio). */
+  meeting?: WorkerMeetingMetadata;
   error?: string;
 }

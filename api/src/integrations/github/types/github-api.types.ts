@@ -33,3 +33,14 @@ export interface RepoIdentifier {
   owner: string;
   repo: string;
 }
+
+/** Commit from GitHub API */
+export interface GitHubCommit {
+  sha: string;
+  commit: {
+    message: string;
+    author: { name: string; email: string; date: string };
+    committer: { date: string };
+  };
+  author?: GitHubUser | null;
+}

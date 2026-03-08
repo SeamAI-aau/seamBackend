@@ -3,12 +3,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Logger } from 'nestjs-pino';
 import { MeetingStatus, TaskStatus } from '@prisma/client';
 import { CloudinaryService } from '../infrastracture/cloudinary/cloudinary.service';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 import type { WorkerResultPayload } from './dto/worker-result.dto';
 import { WORKER_RESULT_STATUS_SUCCESS } from './constants/meeting.constants';
 
 /**
  * Handles persistence of worker results: transcript + extracted tasks,
  * or marks meeting as FAILED when the worker reports an error.
+ * Tasks with assigneeId from NLP worker are auto-assigned (status SENT_TO_DEVELOPER)
+ * so developers can approve/decline immediately.
  * After successful transcription, deletes the meeting recording from Cloudinary
  * for security and storage (the Meeting record is kept).
  */
@@ -17,6 +20,7 @@ export class MeetingProcessingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cloudinaryService: CloudinaryService,
+    private readonly activityLog: ActivityLogService,
     private readonly logger: Logger,
   ) {}
 
@@ -66,8 +70,27 @@ export class MeetingProcessingService {
       return;
     }
 
-    await this.persistTranscriptAndTasks(meetingId, payload);
+    const projectId = await this.persistTranscriptAndTasks(meetingId, payload);
     this.logger.log({ meetingId }, 'Transcript and tasks saved');
+
+    const autoAssignedTasks = await this.prisma.task.findMany({
+      where: { meetingId, assigneeId: { not: null } },
+      select: { id: true, title: true, assigneeId: true },
+    });
+    for (const t of autoAssignedTasks) {
+      if (t.assigneeId) {
+        this.activityLog
+          .log({
+            projectId,
+            userId: null,
+            action: 'task.assigned',
+            entityType: 'Task',
+            entityId: t.id,
+            metadata: { title: t.title, assigneeId: t.assigneeId, source: 'nlp_worker' },
+          })
+          .catch(() => {});
+      }
+    }
 
     await this.deleteRecordingFromCloudinary(meetingId, meeting.audioPublicId);
   }
@@ -95,13 +118,15 @@ export class MeetingProcessingService {
   private async persistTranscriptAndTasks(
     meetingId: string,
     payload: WorkerResultPayload,
-  ): Promise<void> {
+  ): Promise<string> {
+    let projectId = '';
     await this.prisma.$transaction(async (tx) => {
       const meeting = await tx.meeting.findUnique({
         where: { id: meetingId },
         select: { projectId: true },
       });
       if (!meeting) return;
+      projectId = meeting.projectId;
 
       await tx.meeting.update({
         where: { id: meetingId },
@@ -130,7 +155,7 @@ export class MeetingProcessingService {
             transcriptId: transcript.id,
             title: task.title,
             description: task.description ?? null,
-            status: TaskStatus.EXTRACTED,
+            status: task.assigneeId ? TaskStatus.SENT_TO_DEVELOPER : TaskStatus.EXTRACTED,
             assigneeId: task.assigneeId ?? null,
           })),
         });
@@ -148,10 +173,21 @@ export class MeetingProcessingService {
         });
       }
 
+      const meetingUpdate: { status: MeetingStatus; durationSeconds?: number; participants?: object } = {
+        status: MeetingStatus.TASKS_EXTRACTED,
+      };
+      if (payload.meeting?.durationSeconds != null && payload.meeting.durationSeconds > 0) {
+        meetingUpdate.durationSeconds = payload.meeting.durationSeconds;
+      }
+      if (Array.isArray(payload.meeting?.participants) && payload.meeting.participants.length > 0) {
+        meetingUpdate.participants = payload.meeting.participants as object;
+      }
+
       await tx.meeting.update({
         where: { id: meetingId },
-        data: { status: MeetingStatus.TASKS_EXTRACTED },
+        data: meetingUpdate,
       });
     });
+    return projectId;
   }
 }

@@ -9,6 +9,7 @@ import type { CurrentUserType } from '../auth/types/current-user.type';
 import { PROJECT_REPOSITORY } from '../project/types/project.tokens';
 import type { IProjectRepository } from '../project/types/project.repository';
 import { JiraSyncQueue } from '../integrations/jira/queue/jira-sync.queue';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 
 @Injectable()
 export class TaskService {
@@ -18,10 +19,11 @@ export class TaskService {
     @Inject(PROJECT_REPOSITORY)
     private readonly projectRepo: IProjectRepository,
     private readonly jiraSyncQueue: JiraSyncQueue,
+    private readonly activityLog: ActivityLogService,
   ) {}
 
   async approveTask(taskId: string, userId: string) {
-    const task = await this.taskRepo.findById(taskId);
+    const task = await this.taskRepo.findByIdWithMeetingAndProject(taskId);
 
     if (!task) {
       throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
@@ -43,12 +45,20 @@ export class TaskService {
     if (!approvedTask.jiraIssueKey) {
       await this.jiraSyncQueue.enqueue(task.id);
     }
+    this.activityLog.log({
+      projectId: task.meeting.projectId,
+      userId,
+      action: 'task.approved',
+      entityType: 'Task',
+      entityId: taskId,
+      metadata: { title: task.title },
+    }).catch(() => {});
     return approvedTask;
   }
 
 
   async declineTask(taskId: string, userId: string) {
-    const task = await this.taskRepo.findById(taskId);
+    const task = await this.taskRepo.findByIdWithMeetingAndProject(taskId);
 
     if (!task) {
       throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
@@ -66,7 +76,16 @@ export class TaskService {
       );
     }
 
-    return this.taskRepo.updateStatus(taskId, TaskStatus.REJECTED);
+    const result = await this.taskRepo.updateStatus(taskId, TaskStatus.REJECTED);
+    this.activityLog.log({
+      projectId: task.meeting.projectId,
+      userId,
+      action: 'task.declined',
+      entityType: 'Task',
+      entityId: taskId,
+      metadata: { title: task.title },
+    }).catch(() => {});
+    return result;
   }
 
   async sendToDeveloper(
@@ -82,7 +101,7 @@ export class TaskService {
       );
     }
 
-    const task = await this.taskRepo.findById(taskId);
+    const task = await this.taskRepo.findByIdWithMeetingAndProject(taskId);
 
     if (!task) {
       throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
@@ -96,11 +115,20 @@ export class TaskService {
       );
     }
 
-    return this.taskRepo.updateAssigneeAndStatus(
+    const result = await this.taskRepo.updateAssigneeAndStatus(
       taskId,
       assigneeId,
       TaskStatus.SENT_TO_DEVELOPER,
     );
+    this.activityLog.log({
+      projectId: task.meeting.projectId,
+      userId: currentUser.userId,
+      action: 'task.assigned',
+      entityType: 'Task',
+      entityId: taskId,
+      metadata: { title: task.title, assigneeId },
+    }).catch(() => {});
+    return result;
   }
 
   async unassignTask(
@@ -115,7 +143,7 @@ export class TaskService {
       );
     }
 
-    const task = await this.taskRepo.findById(taskId);
+    const task = await this.taskRepo.findByIdWithMeetingAndProject(taskId);
 
     if (!task) {
       throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
@@ -129,7 +157,16 @@ export class TaskService {
       );
     }
 
-    return this.taskRepo.clearAssigneeAndStatus(taskId, TaskStatus.EXTRACTED);
+    const result = await this.taskRepo.clearAssigneeAndStatus(taskId, TaskStatus.EXTRACTED);
+    this.activityLog.log({
+      projectId: task.meeting.projectId,
+      userId: currentUser.userId,
+      action: 'task.unassigned',
+      entityType: 'Task',
+      entityId: taskId,
+      metadata: { title: task.title },
+    }).catch(() => {});
+    return result;
   }
 
   async getById(taskId: string, userId: string) {
@@ -190,5 +227,26 @@ export class TaskService {
       this.taskRepo.count(filters),
     ]);
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) || 1 };
+  }
+
+  /**
+   * Returns tasks grouped by active (EXTRACTED, SENT_TO_DEVELOPER) vs completed (APPROVED, REJECTED, SYNCED).
+   */
+  async getMyTasksGrouped(userId: string) {
+    const all = await this.taskRepo.findManyWithMeetingAndAssignee(
+      { assigneeId: userId },
+      { take: 200 },
+    );
+    const activeStatuses: TaskStatus[] = [TaskStatus.EXTRACTED, TaskStatus.SENT_TO_DEVELOPER];
+    const completedStatuses: TaskStatus[] = [TaskStatus.APPROVED, TaskStatus.REJECTED, TaskStatus.SYNCED];
+
+    const active = all
+      .filter((t) => activeStatuses.includes(t.status))
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    const completed = all
+      .filter((t) => completedStatuses.includes(t.status))
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+
+    return { active, completed };
   }
 }

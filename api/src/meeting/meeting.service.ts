@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 import { Logger } from 'nestjs-pino';
 
 import { AppException } from '../common/errors/app.exception';
@@ -20,6 +21,7 @@ export class MeetingService {
     private readonly cloudinaryService: CloudinaryService,
     private readonly meetingProducer: MeetingProducer,
     private readonly logger: Logger,
+    private readonly activityLog: ActivityLogService,
   ) {}
 
   async uploadMeeting(
@@ -43,6 +45,15 @@ export class MeetingService {
     });
 
     await this.meetingProducer.enqueue(meeting.id, meeting.audioUrl);
+
+    this.activityLog.log({
+      projectId,
+      userId,
+      action: 'meeting.uploaded',
+      entityType: 'Meeting',
+      entityId: meeting.id,
+      metadata: { title: meeting.title },
+    }).catch(() => {});
 
     this.logger.log({ meetingId: meeting.id }, 'Meeting uploaded and enqueued');
 

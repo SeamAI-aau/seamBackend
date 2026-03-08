@@ -4,9 +4,11 @@ import { TaskService } from './task.service';
 import { TASK_REPOSITORY } from './types/task.tokens';
 import { PrismaTaskRepository } from '../prisma/repositories/prisma-tasks-repository';
 import { JiraModule } from '../integrations/jira/jira.module';
+import { ActivityLogModule } from '../activity-log/activity-log.module';
+import { ProjectModule } from '../project/project.module';
 
 @Module({
-  imports: [forwardRef(() => JiraModule)],
+  imports: [forwardRef(() => JiraModule), ActivityLogModule, ProjectModule],
   controllers: [TaskController],
   providers: [
     TaskService,

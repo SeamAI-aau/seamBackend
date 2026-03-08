@@ -8,9 +8,10 @@ import { PrismaMeetingRepository } from '../prisma/repositories/prisma-meeting.r
 import { ProjectModule } from '../project/project.module';
 import { QueueModule } from '../infrastracture/queue/queue.module';
 import { CloudinaryModule } from '../infrastracture/cloudinary/cloudinary.module';
+import { ActivityLogModule } from '../activity-log/activity-log.module';
 
 @Module({
-  imports: [ProjectModule, QueueModule, CloudinaryModule],
+  imports: [ProjectModule, QueueModule, CloudinaryModule, ActivityLogModule],
   controllers: [MeetingController, InternalMeetingController],
   providers: [
     MeetingService,

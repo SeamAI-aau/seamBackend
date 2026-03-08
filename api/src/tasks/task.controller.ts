@@ -96,6 +96,11 @@ export class TaskController {
     );
   }
 
+  @Get('my/grouped')
+  getMyTasksGrouped(@CurrentUser() user: CurrentUserType) {
+    return this.taskService.getMyTasksGrouped(user.userId);
+  }
+
   @Get(':id')
   getById(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
     return this.taskService.getById(id, user.userId);

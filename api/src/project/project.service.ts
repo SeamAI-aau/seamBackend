@@ -7,6 +7,7 @@ import { AppException } from '../common/errors/app.exception';
 import { ErrorCode } from '../common/errors/error-codes';
 import { Role } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 import type { CurrentUserType } from '../auth/types/current-user.type';
 import type { CreateProjectDto } from './dto/create-project.dto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -41,6 +42,7 @@ export class ProjectService {
     private readonly userRepo: IUserRepository,
     private readonly prisma: PrismaService,
     private readonly logger: Logger,
+    private readonly activityLog: ActivityLogService,
   ) {}
 
   async createProject(user: CurrentUserType, body: CreateProjectDto) {
@@ -127,6 +129,14 @@ export class ProjectService {
       normalizedEmail,
       userByEmail?.id,
     );
+    this.activityLog.log({
+      projectId,
+      userId: ownerId,
+      action: pending ? 'invitation.sent' : 'member.added',
+      entityType: 'ProjectMember',
+      entityId: member.id,
+      metadata: { email: normalizedEmail, pending },
+    }).catch(() => {});
     return {
       id: member.id,
       email: member.email,
@@ -167,7 +177,16 @@ export class ProjectService {
       );
     }
 
-    return this.projectRepo.acceptInvite(projectId, normalizedEmail, userId);
+    const result = await this.projectRepo.acceptInvite(projectId, normalizedEmail, userId);
+    this.activityLog.log({
+      projectId,
+      userId,
+      action: 'invitation.accepted',
+      entityType: 'ProjectMember',
+      entityId: result.id,
+      metadata: { email: normalizedEmail },
+    }).catch(() => {});
+    return result;
   }
 
   async removeMember(projectId: string, memberId: string, requesterId: string) {
@@ -181,7 +200,16 @@ export class ProjectService {
       throw new AppException(ErrorCode.NOT_FOUND, 'Member or invite not found', 404);
     }
 
-    return this.projectRepo.deleteMember(memberId);
+    const result = await this.projectRepo.deleteMember(memberId);
+    this.activityLog.log({
+      projectId,
+      userId: requesterId,
+      action: member.status === 'PENDING' ? 'invitation.cancelled' : 'member.removed',
+      entityType: 'ProjectMember',
+      entityId: memberId,
+      metadata: { email: member.email },
+    }).catch(() => {});
+    return result;
   }
 
   async getProjectMembers(
@@ -365,7 +393,14 @@ export class ProjectService {
           skip: recentMeetingsSkip,
           take: recentMeetingsLimit,
           orderBy: { createdAt: 'desc' },
-          select: { id: true, title: true, status: true, createdAt: true },
+          select: {
+          id: true,
+          title: true,
+          status: true,
+          createdAt: true,
+          durationSeconds: true,
+          participants: true,
+        },
         }),
         this.prisma.meeting.count({ where: meetingWhere }),
       ]),
@@ -408,9 +443,12 @@ export class ProjectService {
     );
     const tasksApproved = taskCounts['APPROVED'] ?? 0;
     const tasksRejected = taskCounts['REJECTED'] ?? 0;
+    const tasksCompleted = tasksApproved + tasksRejected + (taskCounts['SYNCED'] ?? 0);
     const tasksPending =
       (taskCounts['EXTRACTED'] ?? 0) + (taskCounts['SENT_TO_DEVELOPER'] ?? 0);
     const openBlockersCount = githubBlockersTotal + transcriptBlockersTotal;
+    const sprintProgressPercent =
+      totalTasks > 0 ? Math.round((tasksCompleted / totalTasks) * 100) : 0;
 
     return {
       project: { id: project.id, name: project.name },
@@ -420,6 +458,8 @@ export class ProjectService {
         tasksApproved,
         tasksRejected,
         tasksPending,
+        tasksCompleted,
+        sprintProgressPercent,
         openBlockersCount,
       },
       recentTasks: {
@@ -451,6 +491,155 @@ export class ProjectService {
           limit: blockersLimit,
           totalPages: Math.ceil(transcriptBlockersTotal / blockersLimit) || 1,
         },
+      },
+    };
+  }
+
+  /**
+   * Developer dashboard: my tasks, recent meetings, blockers, sprint progress.
+   * Accessible to project members (owner or member).
+   */
+  async getDeveloperDashboard(
+    projectId: string,
+    userId: string,
+    filters: DashboardFilterDto = {},
+  ) {
+    const project = await this.projectRepo.findById(projectId);
+    if (!project) {
+      throw new AppException(ErrorCode.PROJECT_NOT_FOUND, 'Project not found', 404);
+    }
+    const isOwner = await this.projectRepo.isOwner(projectId, userId);
+    const isMember = await this.projectRepo.isMember(projectId, userId);
+    if (!isOwner && !isMember) {
+      throw new AppException(ErrorCode.FORBIDDEN, 'Access denied', 403);
+    }
+
+    const taskWhere: Prisma.TaskWhereInput = {
+      meeting: { projectId },
+      assigneeId: userId,
+    };
+    if (filters.fromDate || filters.toDate) {
+      taskWhere.createdAt = {};
+      if (filters.fromDate) taskWhere.createdAt.gte = new Date(filters.fromDate);
+      if (filters.toDate) taskWhere.createdAt.lte = new Date(filters.toDate);
+    }
+
+    const meetingWhere: Prisma.MeetingWhereInput = { projectId };
+    if (filters.fromDate || filters.toDate) {
+      meetingWhere.createdAt = {};
+      if (filters.fromDate) meetingWhere.createdAt.gte = new Date(filters.fromDate);
+      if (filters.toDate) meetingWhere.createdAt.lte = new Date(filters.toDate);
+    }
+
+    const myTasksLimit = filters.recentTasksLimit ?? 10;
+    const recentMeetingsLimit = filters.recentMeetingsLimit ?? 10;
+    const blockersLimit = Math.min(filters.blockersLimit ?? 20, 50);
+
+    const [
+      taskCountsByStatus,
+      myTasks,
+      myTasksTotal,
+      recentMeetings,
+      recentMeetingsTotal,
+      githubBlockers,
+      transcriptBlockers,
+    ] = await Promise.all([
+      this.prisma.task.groupBy({
+        by: ['status'],
+        _count: { id: true },
+        where: { meeting: { projectId } },
+      }),
+      this.prisma.task.findMany({
+        where: taskWhere,
+        take: myTasksLimit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          meeting: { select: { id: true, title: true } },
+          assignee: { select: { id: true, email: true, name: true } },
+        },
+      }),
+      this.prisma.task.count({ where: taskWhere }),
+      this.prisma.meeting.findMany({
+        where: meetingWhere,
+        take: recentMeetingsLimit,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          createdAt: true,
+          durationSeconds: true,
+          participants: true,
+        },
+      }),
+      this.prisma.meeting.count({ where: meetingWhere }),
+      this.prisma.blocker.findMany({
+        where: { projectId },
+        include: { pullRequest: true },
+        orderBy: { createdAt: 'desc' },
+        take: blockersLimit,
+      }),
+      this.prisma.transcriptBlocker.findMany({
+        where: { projectId },
+        include: { meeting: { select: { id: true, title: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: blockersLimit,
+      }),
+    ]);
+
+    const taskCounts: Record<string, number> = Object.fromEntries(
+      taskCountsByStatus.map((r: { status: string; _count: { id: number } }) => [
+        r.status,
+        r._count.id,
+      ]),
+    );
+    const totalTasks = taskCountsByStatus.reduce(
+      (s: number, r: { _count: { id: number } }) => s + r._count.id,
+      0,
+    );
+    const tasksCompleted =
+      (taskCounts['APPROVED'] ?? 0) +
+      (taskCounts['REJECTED'] ?? 0) +
+      (taskCounts['SYNCED'] ?? 0);
+    const sprintProgressPercent =
+      totalTasks > 0 ? Math.round((tasksCompleted / totalTasks) * 100) : 0;
+
+    const mergedBlockers = [
+      ...githubBlockers.map((b) => ({
+        id: b.id,
+        source: 'github' as const,
+        createdAt: b.createdAt,
+        message: b.message,
+        type: b.type,
+        pullRequest: b.pullRequest,
+      })),
+      ...transcriptBlockers.map((b) => ({
+        id: b.id,
+        source: 'transcript' as const,
+        createdAt: b.createdAt,
+        message: b.message,
+        category: b.category,
+        meeting: b.meeting,
+      })),
+    ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    return {
+      project: { id: project.id, name: project.name },
+      kpis: {
+        myTasksCount: myTasksTotal,
+        sprintProgressPercent,
+      },
+      myTasks: {
+        items: myTasks,
+        total: myTasksTotal,
+      },
+      recentMeetings: {
+        items: recentMeetings,
+        total: recentMeetingsTotal,
+      },
+      blockers: {
+        items: mergedBlockers,
+        total: mergedBlockers.length,
       },
     };
   }

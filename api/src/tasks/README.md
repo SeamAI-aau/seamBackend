@@ -4,8 +4,8 @@ Manages the task lifecycle for stand-up action items: extraction → assignment 
 
 ## Lifecycle
 
-- **EXTRACTED** – From meeting transcription; not yet assigned.
-- **SENT_TO_DEVELOPER** – Scrum Master assigned a developer.
+- **EXTRACTED** – From meeting transcription; not yet assigned (or assignee unknown).
+- **SENT_TO_DEVELOPER** – Assigned to a developer (by NLP worker with `assigneeId` or by Scrum Master).
 - **APPROVED** / **REJECTED** – Developer accepts or declines.
 - **SYNCED** – Approved task created in Jira (handled by Jira integration).
 
