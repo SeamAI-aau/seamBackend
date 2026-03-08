@@ -1,8 +1,9 @@
 import {
   Body,
   Controller,
-  Get,
+  Delete,
   Param,
+  Get,
   Post,
   Query,
   UseGuards,
@@ -15,6 +16,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import type { CurrentUserType } from '../auth/types/current-user.type';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { AddMemberDto } from './dto/add-member.dto';
+import { AcceptInviteDto } from './dto/accept-invite.dto';
 import { DashboardFilterDto } from './dto/dashboard-filter.dto';
 import { BlockersFilterDto } from './dto/blockers-filter.dto';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
@@ -78,12 +80,30 @@ export class ProjectController {
   }
 
   @Post(':id/members')
-  addMember(
+  addMemberByEmail(
     @Param('id') id: string,
     @CurrentUser() user: CurrentUserType,
     @Body() body: AddMemberDto,
   ) {
-    return this.projectService.addMember(id, user.userId, body.userId);
+    return this.projectService.addMemberByEmail(id, user.userId, body.email);
+  }
+
+  @Post(':id/invitations/accept')
+  acceptInvite(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserType,
+    @Body() body: AcceptInviteDto,
+  ) {
+    return this.projectService.acceptInvite(id, user.userId, body.email);
+  }
+
+  @Delete(':id/members/:memberId')
+  removeMember(
+    @Param('id') id: string,
+    @Param('memberId') memberId: string,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    return this.projectService.removeMember(id, memberId, user.userId);
   }
 
   @Get(':id/members')

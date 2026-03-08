@@ -1,7 +1,6 @@
 import {
   Controller,
   Get,
-  Param,
   Patch,
   Query,
   UseGuards,
@@ -42,19 +41,6 @@ export class UserController {
   ) {
     return this.userService.getDevelopers(
       user,
-      query.page ?? 1,
-      query.limit ?? 20,
-    );
-  }
-
-  @Get('projects/:projectId/members')
-  getProjectMembers(
-    @Param('projectId') projectId: string,
-    @CurrentUser() user: CurrentUserType,
-    @Query() query: PaginationQueryDto,
-  ) {
-    return this.userService.getProjectMembers(
-      projectId,
       query.page ?? 1,
       query.limit ?? 20,
     );

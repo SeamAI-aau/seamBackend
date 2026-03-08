@@ -13,6 +13,12 @@ export class PrismaUserRepository implements IUserRepository {
     });
   }
 
+  async findByEmail(email: string) {
+    return this.prisma.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+    });
+  }
+
   async findDevelopers(options?: { skip?: number; take?: number }) {
     return this.prisma.user.findMany({
       where: { role: Role.DEVELOPER },

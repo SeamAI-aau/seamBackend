@@ -89,14 +89,99 @@ export class ProjectService {
     return project;
   }
 
-  async addMember(projectId: string, ownerId: string, userId: string) {
+  async addMemberByEmail(projectId: string, ownerId: string, email: string) {
     const isOwner = await this.projectRepo.isOwner(projectId, ownerId);
-
     if (!isOwner) {
       throw new AppException(ErrorCode.FORBIDDEN, 'Only owner can add members', 403);
     }
 
-    return this.projectRepo.addMember(projectId, userId);
+    const project = await this.projectRepo.findById(projectId);
+    if (!project) {
+      throw new AppException(ErrorCode.PROJECT_NOT_FOUND, 'Project not found', 404);
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const existing = await this.projectRepo.findPendingInvite(projectId, normalizedEmail);
+    if (existing) {
+      throw new AppException(
+        ErrorCode.CONFLICT,
+        'An invitation for this email is already pending',
+        409,
+      );
+    }
+
+    const userByEmail = await this.userRepo.findByEmail(normalizedEmail);
+    if (userByEmail) {
+      const isAlreadyMember = await this.projectRepo.isMember(projectId, userByEmail.id);
+      if (isAlreadyMember) {
+        throw new AppException(
+          ErrorCode.CONFLICT,
+          'User is already a member of this project',
+          409,
+        );
+      }
+    }
+
+    const { member, pending } = await this.projectRepo.addMemberByEmail(
+      projectId,
+      normalizedEmail,
+      userByEmail?.id,
+    );
+    return {
+      id: member.id,
+      email: member.email,
+      status: member.status,
+      userId: member.userId ?? null,
+      pending,
+    };
+  }
+
+  async acceptInvite(projectId: string, userId: string, inviteEmail: string) {
+    const project = await this.projectRepo.findById(projectId);
+    if (!project) {
+      throw new AppException(ErrorCode.PROJECT_NOT_FOUND, 'Project not found', 404);
+    }
+
+    const normalizedEmail = inviteEmail.trim().toLowerCase();
+    const pending = await this.projectRepo.findPendingInvite(projectId, normalizedEmail);
+    if (!pending) {
+      throw new AppException(ErrorCode.NOT_FOUND, 'No pending invitation found for this email', 404);
+    }
+
+    const user = await this.userRepo.findById(userId);
+    if (!user || (user.email?.trim().toLowerCase() ?? '') !== normalizedEmail) {
+      throw new AppException(
+        ErrorCode.FORBIDDEN,
+        'You can only accept an invitation sent to your own email',
+        403,
+      );
+    }
+
+    const existingMember = await this.projectRepo.isMember(projectId, userId);
+    if (existingMember) {
+      await this.projectRepo.deleteMember(pending.id);
+      throw new AppException(
+        ErrorCode.CONFLICT,
+        'You are already a member of this project',
+        409,
+      );
+    }
+
+    return this.projectRepo.acceptInvite(projectId, normalizedEmail, userId);
+  }
+
+  async removeMember(projectId: string, memberId: string, requesterId: string) {
+    const isOwner = await this.projectRepo.isOwner(projectId, requesterId);
+    if (!isOwner) {
+      throw new AppException(ErrorCode.FORBIDDEN, 'Only owner can remove members or cancel invites', 403);
+    }
+
+    const member = await this.projectRepo.findMemberById(memberId);
+    if (!member || member.projectId !== projectId) {
+      throw new AppException(ErrorCode.NOT_FOUND, 'Member or invite not found', 404);
+    }
+
+    return this.projectRepo.deleteMember(memberId);
   }
 
   async getProjectMembers(
@@ -119,15 +204,24 @@ export class ProjectService {
     }
 
     const skip = (page - 1) * limit;
-    const [users, total] = await Promise.all([
-      this.userRepo.findProjectMembers(projectId, { skip, take: limit }),
-      this.userRepo.countProjectMembers(projectId),
+    const [rows, total] = await Promise.all([
+      this.projectRepo.findMembersByProject(projectId, { skip, take: limit }),
+      this.projectRepo.countMembersByProject(projectId),
     ]);
-    const items = users.map((u) => ({
-      id: u.id,
-      email: u.email,
-      name: u.name,
-      role: u.role,
+    const items = rows.map((row) => ({
+      id: row.id,
+      email: row.email,
+      status: row.status,
+      userId: row.userId ?? null,
+      user:
+        row.user ?
+          {
+            id: row.user.id,
+            email: row.user.email,
+            name: row.user.name,
+            role: row.user.role,
+          }
+        : null,
     }));
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) || 1 };
   }
@@ -149,15 +243,34 @@ export class ProjectService {
       throw new AppException(ErrorCode.FORBIDDEN, 'Access denied', 403);
     }
 
-    const members = await this.userRepo.findProjectMembers(projectId);
-    const membersWithRole = members.map((user) => ({
-      userId: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      githubUsername: user.githubUsername ?? null,
-      projectRole: user.id === project.ownerId ? ('owner' as const) : ('member' as const),
-    }));
+    const owner = await this.userRepo.findById(project.ownerId);
+    const memberRows = await this.projectRepo.findMembersByProject(projectId);
+    const membersWithRole = [
+      ...(owner
+        ? [
+            {
+              userId: owner.id,
+              name: owner.name,
+              email: owner.email,
+              role: owner.role,
+              githubUsername: owner.githubUsername ?? null,
+              projectRole: 'owner' as const,
+              status: 'ACTIVE' as const,
+            },
+          ]
+        : []),
+      ...memberRows
+        .filter((row) => row.userId !== project.ownerId)
+        .map((row) => ({
+          userId: row.userId ?? null,
+          name: row.user?.name ?? null,
+          email: row.email,
+          role: row.user?.role ?? null,
+          githubUsername: row.user?.githubUsername ?? null,
+          projectRole: 'member' as const,
+          status: row.status,
+        })),
+    ];
 
     const integrations = {
       github: parseGithubRepoUrl(project.githubRepoUrl ?? null),
@@ -342,7 +455,7 @@ export class ProjectService {
     };
   }
 
-  /** Returns GitHub and transcript blockers for the project (e.g. for dashboard widgets). Scrum Master only. */
+  /** Returns unified list of GitHub and transcript blockers for the project. Scrum Master only. */
   async getProjectBlockers(
     projectId: string,
     userId: string,
@@ -361,8 +474,8 @@ export class ProjectService {
     const page = filters.page ?? 1;
     const limit = filters.limit ?? 50;
     const skip = (page - 1) * limit;
-    const githubWhere: Record<string, unknown> = { projectId };
-    const transcriptWhere: Record<string, unknown> = { projectId };
+    const githubWhere: Prisma.BlockerWhereInput = { projectId };
+    const transcriptWhere: Prisma.TranscriptBlockerWhereInput = { projectId };
     if (filters.fromDate) {
       const from = new Date(filters.fromDate);
       githubWhere.createdAt = { gte: from };
@@ -373,44 +486,51 @@ export class ProjectService {
     const wantGithub = filters.source !== 'transcript';
     const wantTranscript = filters.source !== 'github';
 
-    const [githubResult, transcriptResult] = await Promise.all([
+    const [githubBlockers, transcriptBlockers] = await Promise.all([
       wantGithub
-        ? Promise.all([
-            this.prisma.blocker.findMany({
-              where: githubWhere,
-              include: { pullRequest: true },
-              orderBy: { createdAt: 'desc' },
-              skip,
-              take: limit,
-            }),
-            this.prisma.blocker.count({ where: githubWhere }),
-          ]).then(([items, total]) => ({
-            items,
-            total,
-            page,
-            limit,
-            totalPages: Math.ceil(total / limit) || 1,
-          }))
-        : { items: [], total: 0, page, limit, totalPages: 1 },
+        ? this.prisma.blocker.findMany({
+            where: githubWhere,
+            include: { pullRequest: true },
+            orderBy: { createdAt: 'desc' },
+          })
+        : [],
       wantTranscript
-        ? Promise.all([
-            this.prisma.transcriptBlocker.findMany({
-              where: transcriptWhere,
-              include: { meeting: { select: { id: true, title: true } } },
-              orderBy: { createdAt: 'desc' },
-              skip,
-              take: limit,
-            }),
-            this.prisma.transcriptBlocker.count({ where: transcriptWhere }),
-          ]).then(([items, total]) => ({
-            items,
-            total,
-            page,
-            limit,
-            totalPages: Math.ceil(total / limit) || 1,
-          }))
-        : { items: [], total: 0, page, limit, totalPages: 1 },
+        ? this.prisma.transcriptBlocker.findMany({
+            where: transcriptWhere,
+            include: { meeting: { select: { id: true, title: true } } },
+            orderBy: { createdAt: 'desc' },
+          })
+        : [],
     ]);
-    return { github: githubResult, transcript: transcriptResult };
+
+    const merged = [
+      ...githubBlockers.map((b) => ({
+        id: b.id,
+        source: 'github' as const,
+        createdAt: b.createdAt,
+        message: b.message,
+        type: b.type,
+        pullRequest: b.pullRequest,
+      })),
+      ...transcriptBlockers.map((b) => ({
+        id: b.id,
+        source: 'transcript' as const,
+        createdAt: b.createdAt,
+        message: b.message,
+        category: b.category,
+        meeting: b.meeting,
+      })),
+    ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    const total = merged.length;
+    const items = merged.slice(skip, skip + limit);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1,
+    };
   }
 }

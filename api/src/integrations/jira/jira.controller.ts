@@ -1,10 +1,13 @@
 import {
   Controller,
   Get,
+  Param,
   Post,
+  Body,
   Query,
   UseGuards,
   Res,
+  Inject,
 } from '@nestjs/common';
 import type{ Response } from 'express';
 import { ConfigService } from '@nestjs/config';
@@ -12,6 +15,11 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { CurrentUserType } from '../../auth/types/current-user.type';
 import { JiraService } from './jira.service';
+import { LinkJiraProjectDto } from './dto/link-jira-project.dto';
+import { PROJECT_REPOSITORY } from '../../project/types/project.tokens';
+import type { IProjectRepository } from '../../project/types/project.repository';
+import { AppException } from '../../common/errors/app.exception';
+import { ErrorCode } from '../../common/errors/error-codes';
 
 @Controller('integrations/jira')
 @UseGuards(JwtAuthGuard)
@@ -19,6 +27,8 @@ export class JiraController {
   constructor(
     private readonly jiraService: JiraService,
     private readonly config: ConfigService,
+    @Inject(PROJECT_REPOSITORY)
+    private readonly projectRepo: IProjectRepository,
   ) {}
 
   /**
@@ -62,6 +72,29 @@ export class JiraController {
   @Post('disconnect')
   async disconnect(@CurrentUser() user: CurrentUserType): Promise<{ success: true }> {
     await this.jiraService.disconnect(user.userId);
+    return { success: true };
+  }
+
+  /**
+   * Link a Jira project (by key) to a Seam project. Owner only.
+   */
+  @Post('link/:projectId')
+  async linkProject(
+    @Param('projectId') projectId: string,
+    @CurrentUser() user: CurrentUserType,
+    @Body() body: LinkJiraProjectDto,
+  ): Promise<{ success: true }> {
+    const project = await this.projectRepo.findById(projectId);
+    if (!project) {
+      throw new AppException(ErrorCode.PROJECT_NOT_FOUND, 'Project not found', 404);
+    }
+    const isOwner = await this.projectRepo.isOwner(projectId, user.userId);
+    if (!isOwner) {
+      throw new AppException(ErrorCode.FORBIDDEN, 'Only project owner can link Jira project', 403);
+    }
+    await this.projectRepo.updateProject(projectId, {
+      jiraProjectKey: body.projectKey.trim(),
+    });
     return { success: true };
   }
 }

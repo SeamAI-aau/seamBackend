@@ -3,8 +3,10 @@ import { PrismaService } from '../prisma.service';
 import type {
   CreateProjectInput,
   IProjectRepository,
+  ProjectMemberWithUser,
 } from '../../project/types/project.repository';
 import type { Prisma, Project } from '@prisma/client';
+import { ProjectMemberStatus } from '@prisma/client';
 
 @Injectable()
 export class PrismaProjectRepository implements IProjectRepository {
@@ -26,7 +28,10 @@ export class PrismaProjectRepository implements IProjectRepository {
   ) {
     return this.prisma.project.findMany({
       where: {
-        OR: [{ ownerId: userId }, { members: { some: { userId } } }],
+        OR: [
+          { ownerId: userId },
+          { members: { some: { userId, status: ProjectMemberStatus.ACTIVE } } },
+        ],
       },
       orderBy: { createdAt: 'desc' },
       skip: options?.skip,
@@ -37,7 +42,10 @@ export class PrismaProjectRepository implements IProjectRepository {
   async countUserProjects(userId: string) {
     return this.prisma.project.count({
       where: {
-        OR: [{ ownerId: userId }, { members: { some: { userId } } }],
+        OR: [
+          { ownerId: userId },
+          { members: { some: { userId, status: ProjectMemberStatus.ACTIVE } } },
+        ],
       },
     });
   }
@@ -53,12 +61,112 @@ export class PrismaProjectRepository implements IProjectRepository {
     return this.prisma.project.delete({ where: { id: projectId } });
   }
 
-  async addMember(projectId: string, userId: string) {
-    const data: Prisma.ProjectMemberCreateInput = {
-      project: { connect: { id: projectId } },
-      user: { connect: { id: userId } },
-    };
-    return this.prisma.projectMember.create({ data });
+  async addMemberByEmail(
+    projectId: string,
+    email: string,
+    userId?: string,
+  ): Promise<{ member: import('@prisma/client').ProjectMember; pending: boolean }> {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (userId) {
+      const member = await this.prisma.projectMember.create({
+        data: {
+          projectId,
+          email: normalizedEmail,
+          status: ProjectMemberStatus.ACTIVE,
+          userId,
+        },
+      });
+      return { member, pending: false };
+    }
+    const member = await this.prisma.projectMember.create({
+      data: {
+        projectId,
+        email: normalizedEmail,
+        status: ProjectMemberStatus.PENDING,
+        userId: null,
+      },
+    });
+    return { member, pending: true };
+  }
+
+  async findMembersByProject(
+    projectId: string,
+    options?: { skip?: number; take?: number },
+  ): Promise<ProjectMemberWithUser[]> {
+    const rows = await this.prisma.projectMember.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' },
+      skip: options?.skip,
+      take: options?.take,
+      include: {
+        user: {
+          select: { id: true, email: true, name: true, role: true, githubUsername: true },
+        },
+      },
+    });
+    return rows as ProjectMemberWithUser[];
+  }
+
+  async countMembersByProject(projectId: string): Promise<number> {
+    return this.prisma.projectMember.count({
+      where: { projectId },
+    });
+  }
+
+  async findPendingInvite(
+    projectId: string,
+    email: string,
+  ): Promise<import('@prisma/client').ProjectMember | null> {
+    const normalizedEmail = email.trim().toLowerCase();
+    return this.prisma.projectMember.findFirst({
+      where: {
+        projectId,
+        email: normalizedEmail,
+        status: ProjectMemberStatus.PENDING,
+      },
+    });
+  }
+
+  async findMemberById(
+    memberId: string,
+  ): Promise<ProjectMemberWithUser | null> {
+    const row = await this.prisma.projectMember.findUnique({
+      where: { id: memberId },
+      include: {
+        user: {
+          select: { id: true, email: true, name: true, role: true, githubUsername: true },
+        },
+      },
+    });
+    return row as ProjectMemberWithUser | null;
+  }
+
+  async acceptInvite(
+    projectId: string,
+    email: string,
+    userId: string,
+  ): Promise<import('@prisma/client').ProjectMember> {
+    const normalizedEmail = email.trim().toLowerCase();
+    await this.prisma.projectMember.updateMany({
+      where: {
+        projectId,
+        email: normalizedEmail,
+        status: ProjectMemberStatus.PENDING,
+      },
+      data: { userId, status: ProjectMemberStatus.ACTIVE },
+    });
+    const member = await this.prisma.projectMember.findFirstOrThrow({
+      where: { projectId, email: normalizedEmail, userId },
+    });
+    return member;
+  }
+
+  async deleteMember(
+    memberId: string,
+  ): Promise<import('@prisma/client').ProjectMember> {
+    return this.prisma.projectMember.delete({
+      where: { id: memberId },
+    });
   }
 
   async isOwner(projectId: string, userId: string) {
@@ -70,8 +178,12 @@ export class PrismaProjectRepository implements IProjectRepository {
   }
 
   async isMember(projectId: string, userId: string) {
-    const membership = await this.prisma.projectMember.findUnique({
-      where: { projectId_userId: { projectId, userId } },
+    const membership = await this.prisma.projectMember.findFirst({
+      where: {
+        projectId,
+        userId,
+        status: ProjectMemberStatus.ACTIVE,
+      },
     });
     return !!membership;
   }

@@ -44,7 +44,7 @@ export class UserService {
         where: {
           OR: [
             { ownerId: userId },
-            { members: { some: { userId } } },
+            { members: { some: { userId, status: 'ACTIVE' } } },
           ],
         },
         select: { id: true, name: true },
@@ -104,28 +104,6 @@ export class UserService {
       githubUsername: user.githubUsername ?? null,
       voiceSampleUrl: user.voiceSampleUrl ?? null,
       projects: projects ?? [],
-    };
-  }
-  async getProjectMembers(
-    projectId: string,
-    page = 1,
-    limit = 20,
-  ) {
-    const skip = (page - 1) * limit;
-    const [users, total] = await Promise.all([
-      this.userRepo.findProjectMembers(projectId, { skip, take: limit }),
-      this.userRepo.countProjectMembers(projectId),
-    ]);
-    const items = users.map(this.mapSafeUser);
-    return { items, total, page, limit, totalPages: Math.ceil(total / limit) || 1 };
-  }
-
-  private mapSafeUser(user: User) {
-    return {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
     };
   }
 }

@@ -11,11 +11,13 @@ import { PrismaJiraRepository } from '../../prisma/repositories/prisma-jira.repo
 import { PrismaModule } from '../../prisma/prisma.module';
 import { TaskModule } from '../../tasks/task.module';
 import { QueueModule } from '../../infrastracture/queue/queue.module';
+import { ProjectModule } from '../../project/project.module';
 
 @Module({
   imports: [
     ConfigModule,
     PrismaModule,
+    ProjectModule,
     QueueModule,
     BullModule.registerQueue({
       name: 'jira-sync',

@@ -98,20 +98,6 @@ export class GithubController {
     );
   }
 
-  @Get('blockers/:projectId')
-  async getBlockers(
-    @Param('projectId') projectId: string,
-    @CurrentUser() user: CurrentUserType,
-    @Query() query: PaginationQueryDto,
-  ) {
-    await this.ensureProjectAccess(projectId, user.userId, false);
-    return this.githubSyncService.getBlockers(
-      projectId,
-      query.page ?? 1,
-      query.limit ?? 50,
-    );
-  }
-
   private async ensureProjectAccess(
     projectId: string,
     userId: string,
