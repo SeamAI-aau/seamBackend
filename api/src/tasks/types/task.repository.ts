@@ -42,6 +42,11 @@ export interface ITaskRepository {
     status: TaskStatus,
   ): Promise<Task>;
 
+  clearAssigneeAndStatus(
+    id: string,
+    status: TaskStatus,
+  ): Promise<Task>;
+
   findMany(filters: TaskFilters): Promise<Task[]>;
 
   findManyWithMeetingAndAssignee(

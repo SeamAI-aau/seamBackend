@@ -11,6 +11,7 @@ import type { CloudinaryUploadResult } from './types/cloudinary.types';
 import type { MeetingAudioUploadOptions } from './types/cloudinary.types';
 import {
   CLOUDINARY_MEETING_AUDIO_FOLDER,
+  CLOUDINARY_VOICE_SAMPLE_FOLDER,
   CLOUDINARY_AUDIO_RESOURCE_TYPE,
 } from './constants/cloudinary.constants';
 
@@ -33,6 +34,25 @@ export class CloudinaryService {
     options: MeetingAudioUploadOptions = {},
   ): Promise<CloudinaryUploadResult> {
     const folder = this.buildMeetingAudioFolder(options.folderPrefix);
+    const result = await this.uploadStream(
+      file,
+      {
+        resource_type: CLOUDINARY_AUDIO_RESOURCE_TYPE,
+        folder,
+      },
+    );
+    return this.toUploadResult(result);
+  }
+
+  /**
+   * Upload user voice sample for profile setup (transcription/speaker recognition).
+   * Stored under voice-samples/{userId}/.
+   */
+  async uploadVoiceSample(
+    file: Express.Multer.File,
+    userId: string,
+  ): Promise<CloudinaryUploadResult> {
+    const folder = `${CLOUDINARY_VOICE_SAMPLE_FOLDER}/${userId}`;
     const result = await this.uploadStream(
       file,
       {

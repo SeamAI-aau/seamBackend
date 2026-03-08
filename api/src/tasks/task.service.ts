@@ -103,6 +103,35 @@ export class TaskService {
     );
   }
 
+  async unassignTask(
+    taskId: string,
+    currentUser: CurrentUserType,
+  ) {
+    if (currentUser.role !== Role.SCRUM_MASTER) {
+      throw new AppException(
+        ErrorCode.FORBIDDEN,
+        'Only Scrum Masters can unassign tasks',
+        403,
+      );
+    }
+
+    const task = await this.taskRepo.findById(taskId);
+
+    if (!task) {
+      throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
+    }
+
+    if (!TaskStateMachine.canTransition(task.status, TaskStatus.EXTRACTED)) {
+      throw new AppException(
+        ErrorCode.INVALID_STATE,
+        `Cannot transition from ${task.status} to EXTRACTED`,
+        400,
+      );
+    }
+
+    return this.taskRepo.clearAssigneeAndStatus(taskId, TaskStatus.EXTRACTED);
+  }
+
   async getById(taskId: string, userId: string) {
     const task = await this.taskRepo.findByIdWithMeetingAndProject(taskId);
 
@@ -124,8 +153,8 @@ export class TaskService {
 
   async getTasksByProject(
     filters: TaskFilters,
-    page: number = 1,
-    limit: number = 20,
+    page = 1,
+    limit = 20,
   ) {
     const skip = (page - 1) * limit;
     const [items, total] = await Promise.all([
@@ -137,8 +166,8 @@ export class TaskService {
 
   async getTasksByMeeting(
     filters: TaskFilters,
-    page: number = 1,
-    limit: number = 20,
+    page = 1,
+    limit = 20,
   ) {
     const skip = (page - 1) * limit;
     const [items, total] = await Promise.all([
@@ -151,8 +180,8 @@ export class TaskService {
   async getTasksForAssignee(
     userId: string,
     status?: TaskStatus,
-    page: number = 1,
-    limit: number = 20,
+    page = 1,
+    limit = 20,
   ) {
     const filters = { assigneeId: userId, status };
     const skip = (page - 1) * limit;

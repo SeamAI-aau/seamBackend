@@ -61,8 +61,8 @@ export class ProjectService {
 
   async getUserProjects(
     userId: string,
-    page: number = 1,
-    limit: number = 20,
+    page = 1,
+    limit = 20,
   ) {
     const skip = (page - 1) * limit;
     const [items, total] = await Promise.all([
@@ -102,8 +102,8 @@ export class ProjectService {
   async getProjectMembers(
     projectId: string,
     userId: string,
-    page: number = 1,
-    limit: number = 20,
+    page = 1,
+    limit = 20,
   ) {
     const project = await this.projectRepo.findById(projectId);
 
@@ -155,6 +155,7 @@ export class ProjectService {
       name: user.name,
       email: user.email,
       role: user.role,
+      githubUsername: user.githubUsername ?? null,
       projectRole: user.id === project.ownerId ? ('owner' as const) : ('member' as const),
     }));
 

@@ -1,4 +1,14 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Query,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UserService } from './user.service';
@@ -14,6 +24,15 @@ export class UserController {
   @Get('me')
   getMe(@CurrentUser() user: CurrentUserType): Promise<UserResponseDto> {
     return this.userService.getMe(user.userId);
+  }
+
+  @Patch('me/voice')
+  @UseInterceptors(FileInterceptor('file'))
+  uploadVoiceSample(
+    @CurrentUser() user: CurrentUserType,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.userService.uploadVoiceSample(user.userId, file);
   }
 
   @Get('developers')

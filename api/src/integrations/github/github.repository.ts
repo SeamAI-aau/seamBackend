@@ -4,6 +4,8 @@ import type { PullRequestState } from '@prisma/client';
 export interface GithubAccountUpsertData {
   accessToken: string;
   refreshToken?: string;
+  username?: string;
+  avatarUrl?: string;
 }
 
 export interface PullRequestUpsertData {

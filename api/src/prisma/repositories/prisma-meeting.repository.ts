@@ -16,6 +16,7 @@ export class PrismaMeetingRepository implements IMeetingRepository {
     audioUrl: string;
     audioPublicId?: string | null;
     projectId: string;
+    createdById: string;
   }): Promise<Meeting> {
     return this.prisma.meeting.create({ data });
   }

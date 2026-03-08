@@ -5,4 +5,7 @@ export class UserResponseDto {
   email!: string;
   name!: string | null;
   role!: Role;
+  githubUsername?: string | null;
+  voiceSampleUrl?: string | null;
+  projects?: { id: string; name: string }[];
 }

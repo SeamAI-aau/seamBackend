@@ -62,8 +62,8 @@ export class GithubSyncService {
 
   async getPullRequests(
     projectId: string,
-    page: number = 1,
-    limit: number = 20,
+    page = 1,
+    limit = 20,
   ) {
     const skip = (page - 1) * limit;
     const [items, total] = await Promise.all([
@@ -75,8 +75,8 @@ export class GithubSyncService {
 
   async getBlockers(
     projectId: string,
-    page: number = 1,
-    limit: number = 50,
+    page = 1,
+    limit = 50,
   ) {
     const skip = (page - 1) * limit;
     const [items, total] = await Promise.all([

@@ -68,8 +68,18 @@ export class PrismaTaskRepository implements ITaskRepository {
     status: TaskStatus,
   ) {
     return this.prisma.task.update({
-      where: { id, },
+      where: { id },
       data: { status, assigneeId },
+    });
+  }
+
+  async clearAssigneeAndStatus(
+    id: string,
+    status: TaskStatus,
+  ) {
+    return this.prisma.task.update({
+      where: { id },
+      data: { status, assigneeId: null },
     });
   }
 

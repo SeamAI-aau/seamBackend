@@ -15,6 +15,7 @@ export interface IMeetingRepository {
     audioUrl: string;
     audioPublicId?: string | null;
     projectId: string;
+    createdById: string;
   }): Promise<Meeting>;
 
   findByProject(projectId: string): Promise<Meeting[]>;

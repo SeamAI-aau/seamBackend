@@ -6,7 +6,6 @@ import type {
   PullRequestUpsertData,
   BlockerCreateData,
 } from '../../integrations/github/github.repository';
-import { PullRequestState } from '@prisma/client';
 
 @Injectable()
 export class PrismaGithubRepository implements IGithubRepository {
@@ -24,11 +23,15 @@ export class PrismaGithubRepository implements IGithubRepository {
       update: {
         accessToken: data.accessToken,
         refreshToken: data.refreshToken ?? undefined,
+        username: data.username ?? undefined,
+        avatarUrl: data.avatarUrl ?? undefined,
       },
       create: {
         userId,
         accessToken: data.accessToken,
         refreshToken: data.refreshToken,
+        username: data.username ?? undefined,
+        avatarUrl: data.avatarUrl ?? undefined,
       },
     });
   }

@@ -2,6 +2,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { ConfigModule } from './config/config.module';
 import { Module } from '@nestjs/common';
 import { AuthModule } from './auth/auth.module';
+import { UserModule } from './user/user.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
 import { ProjectModule } from './project/project.module';
@@ -19,6 +20,7 @@ import { AppController } from './app.controller';
     PrismaModule,
     HealthModule,
     AuthModule,
+    UserModule,
     ProjectModule,
     MeetingModule,
     TaskModule,

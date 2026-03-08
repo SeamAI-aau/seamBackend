@@ -43,12 +43,16 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  ownedProjects  Project[]       @relation("OwnedProjects")
-  projectMembers ProjectMember[]
-  tasks          Task[]          @relation("AssignedTasks")
-  refreshTokens  RefreshToken[]
-  jiraAccount    JiraAccount?
-  githubAccount  GithubAccount?
+  ownedProjects   Project[]       @relation("OwnedProjects")
+  projectMembers  ProjectMember[]
+  tasks           Task[]          @relation("AssignedTasks")
+  meetingsCreated Meeting[]
+  githubUsername     String?
+  voiceSampleUrl     String?
+  voiceSamplePublicId String?  // Cloudinary public ID for cleanup when replacing
+  refreshTokens      RefreshToken[]
+  jiraAccount     JiraAccount?
+  githubAccount   GithubAccount?
 }
 
 model Project {
@@ -93,8 +97,12 @@ model Meeting {
   projectId   String
   project     Project       @relation(fields: [projectId], references: [id])
 
-  transcripts       Transcript[]
-  tasks             Task[]
+  /// User who created/uploaded this meeting.
+  createdById String
+  createdBy   User         @relation(fields: [createdById], references: [id])
+
+  transcripts        Transcript[]
+  tasks              Task[]
   transcriptBlockers TranscriptBlocker[]
 }
 
@@ -176,6 +184,10 @@ model GithubAccount {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
+  /// Cached GitHub login and avatar for profile display.
+  username   String?
+  avatarUrl  String?
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -213,17 +225,17 @@ model Blocker {
   @@unique([pullRequestId, type])
 }
 
-/// Blockers extracted from meeting transcripts by NLP (worker). Shown next to GitHub blockers on dashboard.
+/// Blockers from meeting transcripts (NLP) or system (CI failure, task inactivity). Shown next to GitHub blockers.
 model TranscriptBlocker {
   id        String   @id @default(uuid())
-  meetingId String
+  meetingId String?  // null for system-generated (ci_failure, task_inactivity)
   projectId String
-  category  String?  // e.g. "risk", "dependency", "resource" – flexible for NLP output
+  category  String?  // e.g. "risk", "dependency", "ci_failure", "task_inactivity"
   message   String
   createdAt DateTime @default(now())
 
-  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  meeting Meeting? @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
 }

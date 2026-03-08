@@ -4,7 +4,7 @@ import type { TaskStatus } from '@prisma/client';
 export class TaskStateMachine {
   private static readonly transitions: Record<TaskStatus, TaskStatus[]> = {
     EXTRACTED: ['SENT_TO_DEVELOPER'],
-    SENT_TO_DEVELOPER: ['APPROVED', 'REJECTED'],
+    SENT_TO_DEVELOPER: ['APPROVED', 'REJECTED', 'EXTRACTED'],
     APPROVED: ['SYNCED'],
     REJECTED: [],
     SYNCED: [],

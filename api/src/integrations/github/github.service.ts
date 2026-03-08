@@ -4,8 +4,9 @@ import { ConfigService } from '@nestjs/config';
 import { encrypt, decrypt } from '../../common/utils/encryption.util';
 import type { IGithubRepository } from './github.repository';
 import { GITHUB_REPOSITORY } from './github.tokens';
-import type { GitHubTokenResponse } from './types/github-api.types';
+import type { GitHubTokenResponse, GitHubUser } from './types/github-api.types';
 import { GITHUB_AUTH_URL, GITHUB_TOKEN_URL, GITHUB_SCOPES } from './constants/github.constants';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class GithubService {
@@ -13,6 +14,7 @@ export class GithubService {
     private readonly config: ConfigService,
     @Inject(GITHUB_REPOSITORY)
     private readonly githubRepo: IGithubRepository,
+    private readonly prisma: PrismaService,
   ) {}
 
   getAuthorizationUrl(userId: string): string {
@@ -51,11 +53,33 @@ export class GithubService {
       throw new Error('GitHub OAuth: no access token in response');
     }
 
+    // Fetch GitHub user profile to cache username (and optional avatar) for profile displays.
+    const userResponse: AxiosResponse<GitHubUser> = await axios.get(
+      'https://api.github.com/user',
+      {
+        headers: {
+          Accept: 'application/vnd.github.v3+json',
+          Authorization: `Bearer ${access_token}`,
+        },
+      },
+    );
+    const login = userResponse.data?.login;
+    const avatarUrl = userResponse.data?.avatar_url;
+
     const secret = this.config.get<string>('TOKEN_ENCRYPTION_SECRET');
     await this.githubRepo.upsertAccount(userId, {
       accessToken: encrypt(access_token, secret || 'the secret'),
       refreshToken: refresh_token ? encrypt(refresh_token, secret || 'the secret') : undefined,
+      username: login ?? undefined,
+      avatarUrl: avatarUrl ?? undefined,
     });
+
+    if (login) {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { githubUsername: login },
+      });
+    }
   }
 
   async getConnectionStatus(userId: string): Promise<{ connected: boolean }> {

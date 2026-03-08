@@ -39,6 +39,7 @@ export class MeetingService {
       audioUrl,
       audioPublicId,
       projectId,
+      createdById: userId,
     });
 
     await this.meetingProducer.enqueue(meeting.id, meeting.audioUrl);
@@ -51,8 +52,8 @@ export class MeetingService {
   async listByProject(
     projectId: string,
     userId: string,
-    page: number = 1,
-    limit: number = 20,
+    page = 1,
+    limit = 20,
   ) {
     await this.ensureProjectAccess(projectId, userId);
     const skip = (page - 1) * limit;

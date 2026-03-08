@@ -42,6 +42,15 @@ export class TaskController {
     return this.taskService.sendToDeveloper(id, user, body.assigneeId);
   }
 
+  @Post(':id/unassign')
+  @Roles(Role.SCRUM_MASTER)
+  unassign(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    return this.taskService.unassignTask(id, user);
+  }
+
   @Get('by-project/:projectId')
   getByProject(
     @Param('projectId') projectId: string,

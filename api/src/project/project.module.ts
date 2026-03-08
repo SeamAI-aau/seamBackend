@@ -1,11 +1,14 @@
 import { Module } from '@nestjs/common';
 import { ProjectService } from './project.service';
 import { ProjectController } from './project.controller';
+import { InternalProjectBlockersController } from './internal-project-blockers.controller';
 import { PROJECT_REPOSITORY } from './types/project.tokens';
 import { PrismaProjectRepository } from '../prisma/repositories/prisma-project.repository';
+import { UserModule } from '../user/user.module';
 
 @Module({
-  controllers: [ProjectController],
+  imports: [UserModule],
+  controllers: [ProjectController, InternalProjectBlockersController],
   providers: [
     ProjectService,
     {
