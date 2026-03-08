@@ -55,6 +55,7 @@ model User {
   githubAccount   GithubAccount?
   activityLogs       ActivityLog[]
   developerActivities DeveloperActivity[]
+  notifications       Notification[]
 }
 
 model Project {
@@ -294,4 +295,22 @@ model TranscriptBlocker {
   project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
+}
+
+/// In-app notifications for browser and VS Code dashboards. Can optionally trigger email.
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  type      String    // invitation_sent | invitation_accepted | task_approved | task_declined | task_assigned | blocker_detected | meeting_uploaded
+  title     String
+  body      String?   // Optional longer message
+  metadata  Json?     // entityId, projectId, links, etc.
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([userId, readAt])
 }

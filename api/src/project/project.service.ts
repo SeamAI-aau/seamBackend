@@ -8,6 +8,7 @@ import { ErrorCode } from '../common/errors/error-codes';
 import { Role } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { NotificationService } from '../notification/notification.service';
 import type { CurrentUserType } from '../auth/types/current-user.type';
 import type { CreateProjectDto } from './dto/create-project.dto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -43,6 +44,7 @@ export class ProjectService {
     private readonly prisma: PrismaService,
     private readonly logger: Logger,
     private readonly activityLog: ActivityLogService,
+    private readonly notification: NotificationService,
   ) {}
 
   async createProject(user: CurrentUserType, body: CreateProjectDto) {
@@ -137,6 +139,17 @@ export class ProjectService {
       entityId: member.id,
       metadata: { email: normalizedEmail, pending },
     }).catch(() => {});
+
+    if (pending && project) {
+      this.notification
+        .notifyEmailOnly({
+          to: normalizedEmail,
+          type: 'invitation_sent',
+          title: `You're invited to ${project.name}`,
+          body: `You have been invited to join the project "${project.name}". Sign in or create an account to accept.`,
+        })
+        .catch(() => {});
+    }
     return {
       id: member.id,
       email: member.email,
@@ -186,6 +199,19 @@ export class ProjectService {
       entityId: result.id,
       metadata: { email: normalizedEmail },
     }).catch(() => {});
+
+    const ownerId = project.ownerId;
+    if (ownerId && ownerId !== userId) {
+      this.notification
+        .notify({
+          userId: ownerId,
+          type: 'invitation_accepted',
+          title: `${user?.name ?? normalizedEmail} joined the project`,
+          body: `${user?.name ?? normalizedEmail} accepted the invitation to join ${project.name}.`,
+          metadata: { projectId, userId },
+        })
+        .catch(() => {});
+    }
     return result;
   }
 

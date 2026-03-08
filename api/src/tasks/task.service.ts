@@ -10,6 +10,7 @@ import { PROJECT_REPOSITORY } from '../project/types/project.tokens';
 import type { IProjectRepository } from '../project/types/project.repository';
 import { JiraSyncQueue } from '../integrations/jira/queue/jira-sync.queue';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class TaskService {
@@ -20,6 +21,7 @@ export class TaskService {
     private readonly projectRepo: IProjectRepository,
     private readonly jiraSyncQueue: JiraSyncQueue,
     private readonly activityLog: ActivityLogService,
+    private readonly notification: NotificationService,
   ) {}
 
   async approveTask(taskId: string, userId: string) {
@@ -53,6 +55,19 @@ export class TaskService {
       entityId: taskId,
       metadata: { title: task.title },
     }).catch(() => {});
+
+    const ownerId = task.meeting.project.ownerId;
+    if (ownerId && ownerId !== userId) {
+      this.notification
+        .notify({
+          userId: ownerId,
+          type: 'task_approved',
+          title: `Task approved: ${task.title}`,
+          body: `A developer approved the task "${task.title}".`,
+          metadata: { taskId, projectId: task.meeting.projectId },
+        })
+        .catch(() => {});
+    }
     return approvedTask;
   }
 
@@ -85,6 +100,19 @@ export class TaskService {
       entityId: taskId,
       metadata: { title: task.title },
     }).catch(() => {});
+
+    const ownerId = task.meeting.project.ownerId;
+    if (ownerId && ownerId !== userId) {
+      this.notification
+        .notify({
+          userId: ownerId,
+          type: 'task_declined',
+          title: `Task declined: ${task.title}`,
+          body: `A developer declined the task "${task.title}".`,
+          metadata: { taskId, projectId: task.meeting.projectId },
+        })
+        .catch(() => {});
+    }
     return result;
   }
 
@@ -128,6 +156,16 @@ export class TaskService {
       entityId: taskId,
       metadata: { title: task.title, assigneeId },
     }).catch(() => {});
+
+    this.notification
+      .notify({
+        userId: assigneeId,
+        type: 'task_assigned',
+        title: `New task: ${task.title}`,
+        body: `You have been assigned the task "${task.title}".`,
+        metadata: { taskId, projectId: task.meeting.projectId },
+      })
+      .catch(() => {});
     return result;
   }
 
