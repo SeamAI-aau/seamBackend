@@ -36,7 +36,7 @@ Python worker that consumes **meeting-transcription** jobs from Redis (BullMQ), 
     "transcript": "...",      # full text
     "diarization": {...},     # optional JSON
     "tasks": [                # list of extracted tasks
-        {"title": "...", "description": "...", "assigneeId": None}
+        {"title": "...", "description": "...", "assigneeId": "user-uuid"}  # optional; if present, task is auto-assigned and sent to developer
     ],
     "blockers": [             # optional: blockers extracted from transcript (NLP)
         {"category": "risk", "message": "Deployment blocked by infra ticket"}
