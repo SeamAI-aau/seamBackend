@@ -13,6 +13,7 @@ import { PrismaGithubRepository } from '../../prisma/repositories/prisma-github.
 import { PrismaModule } from '../../prisma/prisma.module';
 import { ProjectModule } from '../../project/project.module';
 import { QueueModule } from '../../infrastracture/queue/queue.module';
+import { NotificationModule } from '../../notification/notification.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { QueueModule } from '../../infrastracture/queue/queue.module';
     PrismaModule,
     QueueModule,
     ProjectModule,
+    NotificationModule,
     BullModule.registerQueue({
       name: 'github-sync',
       defaultJobOptions: {

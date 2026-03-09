@@ -18,6 +18,5 @@ export type NotificationType = (typeof NOTIFICATION_TYPES)[keyof typeof NOTIFICA
 /** Types that should also trigger an email */
 export const EMAIL_ENABLED_TYPES: NotificationType[] = [
   NOTIFICATION_TYPES.INVITATION_SENT,
-  NOTIFICATION_TYPES.TASK_ASSIGNED,
   NOTIFICATION_TYPES.BLOCKER_DETECTED,
 ];

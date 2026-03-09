@@ -8,6 +8,8 @@ import {
   WAITING_REVIEW_DAYS,
   DRAFT_TOO_LONG_DAYS,
 } from './constants/github.constants';
+import { NotificationService } from '../../notification/notification.service';
+import { PrismaService } from '../../prisma/prisma.service';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -16,9 +18,16 @@ export class BlockerDetectionService {
   constructor(
     @Inject(GITHUB_REPOSITORY)
     private readonly githubRepo: IGithubRepository,
+    private readonly notification: NotificationService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async detectForProject(projectId: string): Promise<void> {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { ownerId: true },
+    });
+
     const prs = await this.githubRepo.findPullRequestsByProjectId(projectId);
 
     for (const pr of prs) {
@@ -28,6 +37,19 @@ export class BlockerDetectionService {
         projectId,
         blockers.map(({ type, message }) => ({ pullRequestId: pr.id, type, message })),
       );
+
+       if (blockers.length > 0 && project?.ownerId) {
+         const summary = blockers.map((b) => `- ${b.message}`).join('\n');
+         this.notification
+           .notify({
+             userId: project.ownerId,
+             type: 'blocker_detected',
+             title: `Blockers detected on PR: ${pr.title}`,
+             body: summary,
+             metadata: { projectId, pullRequestId: pr.id, githubId: pr.githubId },
+           })
+           .catch(() => {});
+       }
     }
   }
 

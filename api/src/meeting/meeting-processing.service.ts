@@ -4,6 +4,7 @@ import { Logger } from 'nestjs-pino';
 import { MeetingStatus, TaskStatus } from '@prisma/client';
 import { CloudinaryService } from '../infrastracture/cloudinary/cloudinary.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { NotificationService } from '../notification/notification.service';
 import type { WorkerResultPayload } from './dto/worker-result.dto';
 import { WORKER_RESULT_STATUS_SUCCESS } from './constants/meeting.constants';
 
@@ -21,6 +22,7 @@ export class MeetingProcessingService {
     private readonly prisma: PrismaService,
     private readonly cloudinaryService: CloudinaryService,
     private readonly activityLog: ActivityLogService,
+    private readonly notification: NotificationService,
     private readonly logger: Logger,
   ) {}
 
@@ -87,6 +89,16 @@ export class MeetingProcessingService {
             entityType: 'Task',
             entityId: t.id,
             metadata: { title: t.title, assigneeId: t.assigneeId, source: 'nlp_worker' },
+          })
+          .catch(() => {});
+
+        this.notification
+          .notify({
+            userId: t.assigneeId,
+            type: 'task_assigned',
+            title: `New task: ${t.title}`,
+            body: `A new task was extracted from a meeting and assigned to you: "${t.title}".`,
+            metadata: { taskId: t.id, projectId },
           })
           .catch(() => {});
       }

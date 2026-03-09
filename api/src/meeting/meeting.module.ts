@@ -9,9 +9,10 @@ import { ProjectModule } from '../project/project.module';
 import { QueueModule } from '../infrastracture/queue/queue.module';
 import { CloudinaryModule } from '../infrastracture/cloudinary/cloudinary.module';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
-  imports: [ProjectModule, QueueModule, CloudinaryModule, ActivityLogModule],
+  imports: [ProjectModule, QueueModule, CloudinaryModule, ActivityLogModule, NotificationModule],
   controllers: [MeetingController, InternalMeetingController],
   providers: [
     MeetingService,
