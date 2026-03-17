@@ -15,6 +15,20 @@ import { ProjectModule } from '../../project/project.module';
 import { QueueModule } from '../../infrastracture/queue/queue.module';
 import { NotificationModule } from '../../notification/notification.module';
 
+const queuesEnabled = process.env.DISABLE_QUEUES !== 'true';
+
+class NoopGithubSyncQueue {
+  async enqueueSyncProject(_projectId: string) {
+    return;
+  }
+  async enqueueSyncAll() {
+    return;
+  }
+  async registerRepeatableSyncAll() {
+    return;
+  }
+}
+
 @Module({
   imports: [
     ConfigModule,
@@ -22,22 +36,26 @@ import { NotificationModule } from '../../notification/notification.module';
     QueueModule,
     ProjectModule,
     NotificationModule,
-    BullModule.registerQueue({
-      name: 'github-sync',
-      defaultJobOptions: {
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 5000 },
-      },
-    }),
+    ...(queuesEnabled
+      ? [
+          BullModule.registerQueue({
+            name: 'github-sync',
+            defaultJobOptions: {
+              attempts: 3,
+              backoff: { type: 'exponential', delay: 5000 },
+            },
+          }),
+        ]
+      : []),
   ],
   controllers: [GithubController],
   providers: [
     GithubService,
     GithubSyncService,
     BlockerDetectionService,
-    GithubSyncQueue,
-    GithubSyncProcessor,
-    GithubSyncScheduler,
+    ...(queuesEnabled
+      ? [GithubSyncQueue, GithubSyncProcessor, GithubSyncScheduler]
+      : [{ provide: GithubSyncQueue, useClass: NoopGithubSyncQueue }]),
     {
       provide: GITHUB_REPOSITORY,
       useClass: PrismaGithubRepository,

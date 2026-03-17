@@ -9,8 +9,10 @@ import { Role } from '@prisma/client';
 import { Logger } from 'nestjs-pino';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { NotificationService } from '../notification/notification.service';
+import { ConfigService } from '@nestjs/config';
 import type { CurrentUserType } from '../auth/types/current-user.type';
 import type { CreateProjectDto } from './dto/create-project.dto';
+import type { UpdateProjectDto } from './dto/update-project.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import type { Prisma } from '@prisma/client';
 import type { DashboardFilterDto } from './dto/dashboard-filter.dto';
@@ -45,6 +47,7 @@ export class ProjectService {
     private readonly logger: Logger,
     private readonly activityLog: ActivityLogService,
     private readonly notification: NotificationService,
+    private readonly config: ConfigService,
   ) {}
 
   async createProject(user: CurrentUserType, body: CreateProjectDto) {
@@ -93,6 +96,24 @@ export class ProjectService {
     return project;
   }
 
+  async updateProject(projectId: string, userId: string, body: UpdateProjectDto) {
+    const project = await this.projectRepo.findById(projectId);
+    if (!project) {
+      throw new AppException(ErrorCode.PROJECT_NOT_FOUND, 'Project not found', 404);
+    }
+    const isOwner = await this.projectRepo.isOwner(projectId, userId);
+    if (!isOwner) {
+      throw new AppException(ErrorCode.FORBIDDEN, 'Only project owner can update project', 403);
+    }
+    const data: Parameters<IProjectRepository['updateProject']>[1] = {};
+    if (body.name !== undefined) data.name = body.name;
+    if (body.description !== undefined) data.description = body.description;
+    if (body.githubRepoUrl !== undefined) data.githubRepoUrl = body.githubRepoUrl;
+    if (body.jiraProjectKey !== undefined) data.jiraProjectKey = body.jiraProjectKey;
+    if (Object.keys(data).length === 0) return project;
+    return this.projectRepo.updateProject(projectId, data);
+  }
+
   async addMemberByEmail(projectId: string, ownerId: string, email: string) {
     const isOwner = await this.projectRepo.isOwner(projectId, ownerId);
     if (!isOwner) {
@@ -126,29 +147,73 @@ export class ProjectService {
       }
     }
 
+    // Always create a pending invitation first; membership becomes ACTIVE only
+    // after the invited user explicitly accepts the invite.
     const { member, pending } = await this.projectRepo.addMemberByEmail(
       projectId,
       normalizedEmail,
-      userByEmail?.id,
+      undefined,
     );
-    this.activityLog.log({
-      projectId,
-      userId: ownerId,
-      action: pending ? 'invitation.sent' : 'member.added',
-      entityType: 'ProjectMember',
-      entityId: member.id,
-      metadata: { email: normalizedEmail, pending },
-    }).catch(() => {});
+    this.activityLog
+      .log({
+        projectId,
+        userId: ownerId,
+        action: pending ? 'invitation.sent' : 'member.added',
+        entityType: 'ProjectMember',
+        entityId: member.id,
+        metadata: { email: normalizedEmail, pending },
+      })
+      .catch((error) => {
+        this.logger.warn(
+          { projectId, ownerId, err: error },
+          'Failed to write activity log for addMemberByEmail',
+        );
+      });
 
     if (pending && project) {
-      this.notification
+      const appUrl =
+        this.config.get<string>('APP_URL') ??
+        this.config.get<string>('FRONTEND_URL') ??
+        'https://app.seam.dev';
+      const baseUrl = appUrl.replace(/\/+$/, '');
+      const acceptUrl = `${baseUrl}/auth/invite?projectId=${project.id}&email=${encodeURIComponent(
+        normalizedEmail,
+      )}`;
+
+      const emailSent = await this.notification
         .notifyEmailOnly({
           to: normalizedEmail,
           type: 'invitation_sent',
           title: `You're invited to ${project.name}`,
-          body: `You have been invited to join the project "${project.name}". Sign in or create an account to accept.`,
+          body: [
+            `You've been invited to join the project "${project.name}".`,
+            '',
+            'To accept this invitation:',
+            '1. Click the link below.',
+            '2. Sign in or create an account using this email address.',
+            '3. After signing in, the project will appear in your dashboard once you accept the invite.',
+            '',
+            acceptUrl,
+          ].join('\n'),
         })
-        .catch(() => {});
+        .catch((error) => {
+          this.logger.warn(
+            { projectId, email: normalizedEmail, err: error },
+            'Failed to send invitation email',
+          );
+          return false;
+        });
+
+      // If the email could not be sent, roll back the pending member to avoid
+      // dangling invitations that the user never received.
+      if (!emailSent) {
+        await this.projectRepo.deleteMember(member.id);
+        throw new AppException(
+          ErrorCode.INTERNAL_SERVER_ERROR,
+          'Failed to send invitation email. Please try again later.',
+          500,
+        );
+      }
     }
     return {
       id: member.id,
@@ -191,14 +256,21 @@ export class ProjectService {
     }
 
     const result = await this.projectRepo.acceptInvite(projectId, normalizedEmail, userId);
-    this.activityLog.log({
-      projectId,
-      userId,
-      action: 'invitation.accepted',
-      entityType: 'ProjectMember',
-      entityId: result.id,
-      metadata: { email: normalizedEmail },
-    }).catch(() => {});
+    this.activityLog
+      .log({
+        projectId,
+        userId,
+        action: 'invitation.accepted',
+        entityType: 'ProjectMember',
+        entityId: result.id,
+        metadata: { email: normalizedEmail },
+      })
+      .catch((error) => {
+        this.logger.warn(
+          { projectId, userId, err: error },
+          'Failed to write activity log for acceptInvite',
+        );
+      });
 
     const ownerId = project.ownerId;
     if (ownerId && ownerId !== userId) {
@@ -210,7 +282,12 @@ export class ProjectService {
           body: `${user?.name ?? normalizedEmail} accepted the invitation to join ${project.name}.`,
           metadata: { projectId, userId },
         })
-        .catch(() => {});
+        .catch((error) => {
+          this.logger.warn(
+            { projectId, ownerId, invitedUserId: userId, err: error },
+            'Failed to send invitation_accepted notification',
+          );
+        });
     }
     return result;
   }
@@ -227,14 +304,21 @@ export class ProjectService {
     }
 
     const result = await this.projectRepo.deleteMember(memberId);
-    this.activityLog.log({
-      projectId,
-      userId: requesterId,
-      action: member.status === 'PENDING' ? 'invitation.cancelled' : 'member.removed',
-      entityType: 'ProjectMember',
-      entityId: memberId,
-      metadata: { email: member.email },
-    }).catch(() => {});
+    this.activityLog
+      .log({
+        projectId,
+        userId: requesterId,
+        action: member.status === 'PENDING' ? 'invitation.cancelled' : 'member.removed',
+        entityType: 'ProjectMember',
+        entityId: memberId,
+        metadata: { email: member.email },
+      })
+      .catch((error) => {
+        this.logger.warn(
+          { projectId, requesterId, memberId, err: error },
+          'Failed to write activity log for removeMember',
+        );
+      });
     return result;
   }
 

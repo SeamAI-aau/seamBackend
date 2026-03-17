@@ -9,6 +9,7 @@ import { UserResponseDto } from './dto/user-response.dto';
 import { CurrentUserType } from '../auth/types/current-user.type';
 import { CloudinaryService } from '../infrastracture/cloudinary/cloudinary.service';
 import { PrismaService } from '../prisma/prisma.service';
+import type { Response } from 'express';
 
 @Injectable()
 export class UserService {
@@ -65,7 +66,7 @@ export class UserService {
   async uploadVoiceSample(
     userId: string,
     file: Express.Multer.File,
-  ): Promise<{ voiceSampleUrl: string }> {
+  ): Promise<{ status: string; hasVoiceSample: boolean }> {
     const user = await this.userRepo.findById(userId);
     if (!user) {
       throw new AppException(ErrorCode.UNAUTHORIZED, 'User not found', 401);
@@ -89,7 +90,39 @@ export class UserService {
       data: { voiceSampleUrl: url, voiceSamplePublicId: publicId },
     });
 
-    return { voiceSampleUrl: url };
+    return { status: 'uploaded', hasVoiceSample: true };
+  }
+
+  /**
+   * Stream the user's voice sample audio through the HTTP response.
+   * The Cloudinary URL is never exposed to the client.
+   */
+  async streamVoiceSample(userId: string, res: Response): Promise<void> {
+    const user = await this.userRepo.findById(userId);
+    if (!user || !user.voiceSamplePublicId || !user.voiceSampleUrl) {
+      throw new AppException(
+        ErrorCode.NOT_FOUND,
+        'No voice sample uploaded for this user',
+        404,
+      );
+    }
+
+    const stream = await this.cloudinaryService.getVoiceSampleStream(user.voiceSampleUrl);
+
+    const contentType = stream.headers['content-type'] ?? 'audio/*';
+
+    res.set({
+      'Content-Type': contentType,
+      'Cache-Control': 'private, max-age=0, must-revalidate',
+    });
+
+    stream.on('error', () => {
+      if (!res.headersSent) {
+        res.status(502).end();
+      }
+    });
+
+    stream.pipe(res);
   }
 
   private toResponseDto(
@@ -102,7 +135,7 @@ export class UserService {
       name: user.name,
       role: user.role,
       githubUsername: user.githubUsername ?? null,
-      voiceSampleUrl: user.voiceSampleUrl ?? null,
+      hasVoiceSample: !!user.voiceSamplePublicId,
       projects: projects ?? [],
     };
   }

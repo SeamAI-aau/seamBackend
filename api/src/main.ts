@@ -1,9 +1,9 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { RolesGuard } from './auth/guards/roles.guard';
-import { Reflector } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import type { ComponentsObject, SecuritySchemeObject } from 'openapi3-ts';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -12,7 +12,6 @@ async function bootstrap() {
 
   app.use(cookieParser());
 
-  app.useGlobalGuards(new RolesGuard(app.get(Reflector)));
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -20,6 +19,58 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  const config = new DocumentBuilder()
+    .setTitle('SeamAi API')
+    .setDescription('Seam.ai Backend API — Authentication and core services')
+    .setVersion(process.env.npm_package_version ?? '1.0.0')
+    // .setContact('Seam.ai Dev Team', 'https://seam.ai', 'dev@seam.ai')
+    // .setLicense('MIT', 'https://opensource.org/licenses/MIT')
+    // .setTermsOfService('https://seam.ai/terms')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        description: 'Paste your JWT access token here.',
+      },
+      'access-token',
+    )
+    .build();
+  const document = SwaggerModule.createDocument(app, config);
+  // Remove undesired controllers/endpoints from the OpenAPI document
+  const pathsToRemove = ['/api', '/health'];
+  if (document.paths) {
+    for (const p of Object.keys(document.paths)) {
+      if (
+        pathsToRemove.includes(p) ||
+        pathsToRemove.some((t) => p.startsWith(t + '/'))
+      ) {
+        delete document.paths[p];
+      }
+    }
+  }
+  // Ensure cookie security scheme is present in the generated OpenAPI document
+  const components = (document.components ?? (document.components = {} as ComponentsObject)) as ComponentsObject;
+  components.securitySchemes = components.securitySchemes ?? {};
+  // add cookie-based scheme for refresh/access tokens (used by the app)
+  (components.securitySchemes as Record<string, SecuritySchemeObject>)["access-cookie"] = {
+    type: 'apiKey',
+    in: 'cookie',
+    name: 'accessToken',
+    description: 'HTTP-only cookie containing the access JWT',
+  } as SecuritySchemeObject;
+  // remove matching tags to keep Swagger UI tidy
+  if (Array.isArray(document.tags)) {
+    document.tags = document.tags.filter((t) => !['App', 'Health'].includes(t.name));
+  }
+  SwaggerModule.setup('api-docs', app, document, {
+    jsonDocumentUrl: 'api-docs/json',
+    swaggerOptions: {
+      persistAuthorization: true,
+      displayRequestDuration: true,
+    },
+  });
 
   await app.listen(process.env.PORT || 3000);
 }

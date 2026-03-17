@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { createReadStream } from 'fs';
+import { get as httpsGet } from 'https';
+import type { IncomingMessage } from 'http';
 import { v2 as cloudinary } from 'cloudinary';
-import type { UploadApiResponse } from 'cloudinary';
+import type { UploadApiResponse, UploadApiOptions } from 'cloudinary';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from 'nestjs-pino';
 
@@ -64,6 +66,42 @@ export class CloudinaryService {
   }
 
   /**
+   * Get a readable stream for a stored voice sample by its URL.
+   * The URL is never exposed to the client; it is only used server-side.
+   */
+  async getVoiceSampleStream(url: string): Promise<IncomingMessage> {
+    return new Promise((resolve, reject) => {
+      httpsGet(url, (response) => {
+        if (!response.statusCode || response.statusCode >= 400) {
+          this.logger.warn(
+            { url, statusCode: response.statusCode },
+            'Cloudinary voice sample stream failed',
+          );
+          reject(
+            new AppException(
+              ErrorCode.CLOUDINARY_UPLOAD_FAILED,
+              'Failed to stream voice sample from Cloudinary',
+              502,
+            ),
+          );
+          return;
+        }
+
+        resolve(response);
+      }).on('error', (error) => {
+        this.logger.warn({ url, err: error }, 'Cloudinary voice sample stream error');
+        reject(
+          new AppException(
+            ErrorCode.CLOUDINARY_UPLOAD_FAILED,
+            'Failed to stream voice sample from Cloudinary',
+            502,
+          ),
+        );
+      });
+    });
+  }
+
+  /**
    * Delete an asset by public ID. Use for cleanup when a meeting (and its audio) is removed.
    */
   async deleteByPublicId(publicId: string): Promise<void> {
@@ -113,7 +151,7 @@ export class CloudinaryService {
 
   private uploadStream(
     file: Express.Multer.File,
-    options: { resource_type: string; folder: string },
+    options: UploadApiOptions,
   ): Promise<UploadApiResponse> {
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(

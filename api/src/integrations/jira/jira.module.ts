@@ -13,27 +13,39 @@ import { TaskModule } from '../../tasks/task.module';
 import { QueueModule } from '../../infrastracture/queue/queue.module';
 import { ProjectModule } from '../../project/project.module';
 
+const queuesEnabled = process.env.DISABLE_QUEUES !== 'true';
+
+class NoopJiraSyncQueue {
+  async enqueue(_taskId: string) {
+    // no-op when queues are disabled
+    return;
+  }
+}
+
 @Module({
   imports: [
     ConfigModule,
     PrismaModule,
     ProjectModule,
     QueueModule,
-    BullModule.registerQueue({
-      name: 'jira-sync',
-      defaultJobOptions: {
-        attempts: 5,
-        backoff: { type: 'exponential', delay: 5000 },
-      },
-    }),
+    ...(queuesEnabled
+      ? [
+          BullModule.registerQueue({
+            name: 'jira-sync',
+            defaultJobOptions: {
+              attempts: 5,
+              backoff: { type: 'exponential', delay: 5000 },
+            },
+          }),
+        ]
+      : []),
     forwardRef(() => TaskModule),
   ],
   controllers: [JiraController],
   providers: [
     JiraService,
     JiraSyncService,
-    JiraSyncQueue,
-    JiraSyncProcessor,
+    ...(queuesEnabled ? [JiraSyncQueue, JiraSyncProcessor] : [{ provide: JiraSyncQueue, useClass: NoopJiraSyncQueue }]),
     {
       provide: JIRA_REPOSITORY,
       useClass: PrismaJiraRepository,

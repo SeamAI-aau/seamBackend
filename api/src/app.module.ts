@@ -14,6 +14,7 @@ import { ActivityLogModule } from './activity-log/activity-log.module';
 import { DeveloperActivityModule } from './developer-activity/developer-activity.module';
 import { MailModule } from './infrastracture/mail/mail.module';
 import { NotificationModule } from './notification/notification.module';
+import { RealtimeModule } from './infrastracture/realtime/realtime.module';
 import { APP_FILTER } from '@nestjs/core';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { AppController } from './app.controller';
@@ -34,6 +35,7 @@ import { AppController } from './app.controller';
     DeveloperActivityModule,
     MailModule,
     NotificationModule,
+    RealtimeModule,
     LoggerModule.forRoot({
       pinoHttp: {
         level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',

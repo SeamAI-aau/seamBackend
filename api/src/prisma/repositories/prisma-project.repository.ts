@@ -67,21 +67,12 @@ export class PrismaProjectRepository implements IProjectRepository {
     userId?: string,
   ): Promise<{ member: import('@prisma/client').ProjectMember; pending: boolean }> {
     const normalizedEmail = email.trim().toLowerCase();
-    if (userId) {
-      const member = await this.prisma.projectMember.create({
-        data: {
-          projectId,
-          email: normalizedEmail,
-          status: ProjectMemberStatus.ACTIVE,
-          userId,
-        },
-      });
-      return { member, pending: false };
-    }
     const member = await this.prisma.projectMember.create({
       data: {
         projectId,
         email: normalizedEmail,
+        // Always start as PENDING; user must explicitly accept the invite
+        // to become an ACTIVE member associated with their user account.
         status: ProjectMemberStatus.PENDING,
         userId: null,
       },

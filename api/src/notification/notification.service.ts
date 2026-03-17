@@ -5,8 +5,8 @@ import { NOTIFICATION_REPOSITORY } from './notification.tokens';
 import { MailService } from '../infrastracture/mail/mail.service';
 import { EMAIL_ENABLED_TYPES } from './constants/notification-types';
 import { ConfigService } from '@nestjs/config';
-import { AppException } from '../common/errors/app.exception';
-import { ErrorCode } from '../common/errors/error-codes';
+import { RealtimeService } from '../infrastracture/realtime/realtime.service';
+
 
 export interface NotifyInput {
   userId: string;
@@ -34,6 +34,7 @@ export class NotificationService {
     private readonly mail: MailService,
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   /**
@@ -47,6 +48,12 @@ export class NotificationService {
       body: input.body,
       metadata: input.metadata ?? undefined,
     });
+
+    this.realtime.emitToUser(input.userId, 'notification.created', notification);
+    this.repo
+      .count({ userId: input.userId, unreadOnly: true })
+      .then((count) => this.realtime.emitToUser(input.userId, 'notification.unreadCount', { count }))
+      .catch(() => undefined);
 
     const shouldSendEmail =
       input.sendEmail ?? EMAIL_ENABLED_TYPES.includes(input.type as (typeof EMAIL_ENABLED_TYPES)[number]);

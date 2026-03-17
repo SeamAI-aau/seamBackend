@@ -7,9 +7,10 @@ import { JiraModule } from '../integrations/jira/jira.module';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
 import { ProjectModule } from '../project/project.module';
 import { NotificationModule } from '../notification/notification.module';
+import { RealtimeModule } from '../infrastracture/realtime/realtime.module';
 
 @Module({
-  imports: [forwardRef(() => JiraModule), ActivityLogModule, ProjectModule, NotificationModule],
+  imports: [forwardRef(() => JiraModule), ActivityLogModule, ProjectModule, NotificationModule, RealtimeModule],
   controllers: [TaskController],
   providers: [
     TaskService,

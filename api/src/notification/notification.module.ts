@@ -5,9 +5,10 @@ import { NOTIFICATION_REPOSITORY } from './notification.tokens';
 import { PrismaNotificationRepository } from './prisma-notification.repository';
 import { PrismaModule } from '../prisma/prisma.module';
 import { MailModule } from '../infrastracture/mail/mail.module';
+import { RealtimeModule } from '../infrastracture/realtime/realtime.module';
 
 @Module({
-  imports: [PrismaModule, MailModule],
+  imports: [PrismaModule, MailModule, RealtimeModule],
   controllers: [NotificationController],
   providers: [
     NotificationService,

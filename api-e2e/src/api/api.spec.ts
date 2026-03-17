@@ -2,7 +2,7 @@ import axios from 'axios';
 
 describe('App bootstrap', () => {
   it('should start the application', async () => {
-    const res = await axios.get(`/api`);
+    const res = await axios.get(`/api-docs`);
     expect(res.status).toBe(200);
   });
 });

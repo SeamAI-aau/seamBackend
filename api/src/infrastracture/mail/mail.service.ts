@@ -24,6 +24,16 @@ export class MailService {
     private readonly config: ConfigService,
     private readonly logger: Logger,
   ) {
+
+    console.log('Initializing MailService with config:', {
+      host: this.config.get<string>('SMTP_HOST'),
+      user: this.config.get<string>('SMTP_USER'),
+      port: this.config.get<number>('SMTP_PORT'),
+      secure: this.config.get<boolean>('SMTP_SECURE'),
+      pass: this.config.get<string>('SMTP_PASS'),
+      mailFrom: this.config.get<string>('MAIL_FROM'),
+      appName: this.config.get<string>('APP_NAME'),
+    });
     const host = this.config.get<string>('SMTP_HOST');
     const user = this.config.get<string>('SMTP_USER');
     if (host && user) {
@@ -56,16 +66,16 @@ export class MailService {
     };
 
     if (!this.transporter) {
-      this.logger.debug({ to: options.to, subject: options.subject }, '[Mail] Would send (SMTP not configured)');
+      this.logger.warn({ to: options.to, subject: options.subject }, '[Mail] SKIPPED: SMTP not configured');
       return false;
     }
 
     try {
       await this.transporter.sendMail(mailOptions);
-      this.logger.debug({ to: options.to, subject: options.subject }, 'Email sent');
+      this.logger.log({ to: options.to, subject: options.subject }, 'Email sent successfully');
       return true;
     } catch (err) {
-      this.logger.warn({ err, to: options.to, subject: options.subject }, 'Failed to send email');
+      this.logger.error({ err, to: options.to, subject: options.subject }, 'Failed to send email');
       return false;
     }
   }
