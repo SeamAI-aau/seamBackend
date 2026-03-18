@@ -25,15 +25,6 @@ export class MailService {
     private readonly logger: Logger,
   ) {
 
-    console.log('Initializing MailService with config:', {
-      host: this.config.get<string>('SMTP_HOST'),
-      user: this.config.get<string>('SMTP_USER'),
-      port: this.config.get<number>('SMTP_PORT'),
-      secure: this.config.get<boolean>('SMTP_SECURE'),
-      pass: this.config.get<string>('SMTP_PASS'),
-      mailFrom: this.config.get<string>('MAIL_FROM'),
-      appName: this.config.get<string>('APP_NAME'),
-    });
     const host = this.config.get<string>('SMTP_HOST');
     const user = this.config.get<string>('SMTP_USER');
     if (host && user) {

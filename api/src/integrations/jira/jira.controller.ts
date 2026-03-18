@@ -37,7 +37,6 @@ import {
 @ApiTags('Integrations - Jira')
 @ApiBearerAuth('access-token')
 @Controller('integrations/jira')
-@UseGuards(JwtAuthGuard)
 export class JiraController {
   constructor(
     private readonly jiraService: JiraService,
@@ -55,6 +54,7 @@ export class JiraController {
     status: 302,
     description: 'Redirect to Atlassian OAuth authorization URL.',
   })
+  @UseGuards(JwtAuthGuard)
   connect(@CurrentUser() user: CurrentUserType, @Res() res: Response): void {
     const url = this.jiraService.getAuthorizationUrl(user.userId);
     res.redirect(url);
@@ -93,6 +93,7 @@ export class JiraController {
       properties: { connected: { type: 'boolean', description: 'True if Jira is connected for this user.' } },
     },
   })
+  @UseGuards(JwtAuthGuard)
   async getStatus(
     @CurrentUser() user: CurrentUserType,
   ): Promise<{ connected: boolean }> {
@@ -108,6 +109,7 @@ export class JiraController {
     description: 'Jira disconnected successfully.',
     schema: { example: { success: true } },
   })
+  @UseGuards(JwtAuthGuard)
   async disconnect(@CurrentUser() user: CurrentUserType): Promise<{ success: true }> {
     await this.jiraService.disconnect(user.userId);
     return { success: true };
@@ -136,6 +138,7 @@ export class JiraController {
       },
     },
   })
+  @UseGuards(JwtAuthGuard)
   async linkProject(
     @Param('projectId') projectId: string,
     @CurrentUser() user: CurrentUserType,

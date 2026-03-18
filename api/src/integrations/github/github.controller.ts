@@ -39,7 +39,6 @@ import {
 @ApiTags('Integrations - GitHub')
 @ApiBearerAuth('access-token')
 @Controller('integrations/github')
-@UseGuards(JwtAuthGuard)
 export class GithubController {
   constructor(
     private readonly githubService: GithubService,
@@ -58,6 +57,7 @@ export class GithubController {
     status: 302,
     description: 'Redirect to GitHub OAuth authorization URL.',
   })
+  @UseGuards(JwtAuthGuard)
   connect(@CurrentUser() user: CurrentUserType, @Res() res: Response): void {
     const url = this.githubService.getAuthorizationUrl(user.userId);
     res.redirect(url);
@@ -96,6 +96,7 @@ export class GithubController {
       properties: { connected: { type: 'boolean', description: 'True if GitHub is connected for this user.' } },
     },
   })
+  @UseGuards(JwtAuthGuard)
   async getStatus(@CurrentUser() user: CurrentUserType): Promise<{ connected: boolean }> {
     return this.githubService.getConnectionStatus(user.userId);
   }
@@ -109,6 +110,7 @@ export class GithubController {
     description: 'GitHub disconnected successfully.',
     schema: { example: { success: true } },
   })
+  @UseGuards(JwtAuthGuard)
   async disconnect(@CurrentUser() user: CurrentUserType): Promise<{ success: true }> {
     await this.githubService.disconnect(user.userId);
     return { success: true };
@@ -137,6 +139,7 @@ export class GithubController {
       },
     },
   })
+  @UseGuards(JwtAuthGuard)
   async linkRepo(
     @Param('projectId') projectId: string,
     @Body() body: LinkRepoDto,
@@ -162,6 +165,7 @@ export class GithubController {
   })
   @ApiForbiddenResponse({ description: 'User does not have access to the project.' })
   @ApiNotFoundResponse({ description: 'Project not found or project has no GitHub repo linked.' })
+  @UseGuards(JwtAuthGuard)
   async syncPullRequests(
     @Param('projectId') projectId: string,
     @CurrentUser() user: CurrentUserType,
@@ -204,6 +208,7 @@ export class GithubController {
   })
   @ApiForbiddenResponse({ description: 'User does not have access to the project.' })
   @ApiNotFoundResponse({ description: 'Project not found.' })
+  @UseGuards(JwtAuthGuard)
   async getPullRequests(
     @Param('projectId') projectId: string,
     @CurrentUser() user: CurrentUserType,

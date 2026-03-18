@@ -12,13 +12,11 @@ import { JiraSyncQueue } from '../integrations/jira/queue/jira-sync.queue';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { NotificationService } from '../notification/notification.service';
 import { RealtimeService } from '../infrastracture/realtime/realtime.service';
-import { JiraService } from '../integrations/jira/jira.service';
 import { PrismaService } from '../prisma/prisma.service';
-import axios from 'axios';
-import type { UpdateJiraIssueDto } from './dto/update-jira-issue.dto';
-import type { UpdateTaskDraftDto } from './dto/update-task-draft.dto';
 import type { CreateTaskDto } from './dto/create-task.dto';
+import type { UpdateTaskOutcomeDto } from './dto/update-task-outcome.dto';
 import { MANUAL_TASK_PLACEHOLDER_AUDIO_URL } from './constants/task.constants';
+import { Logger } from 'nestjs-pino';
 
 @Injectable()
 export class TaskService {
@@ -31,8 +29,8 @@ export class TaskService {
     private readonly activityLog: ActivityLogService,
     private readonly notification: NotificationService,
     private readonly realtime: RealtimeService,
-    private readonly jira: JiraService,
     private readonly prisma: PrismaService,
+    private readonly logger: Logger,
   ) {}
 
   async createTask(userId: string, body: CreateTaskDto): Promise<TaskWithMeetingProject> {
@@ -101,7 +99,10 @@ export class TaskService {
         entityId: task.id,
         metadata: { title: task.title },
       })
-      .catch(() => {});
+      .catch((err) => {
+        // Log the error but don't fail the request
+        this.logger.error(`Failed to log activity for task creation: ${err instanceof Error ? err.message : String(err)}`, { taskId: task.id, projectId: body.projectId, userId });
+      });
 
     if (body.assigneeId) {
       this.realtime.emitToUser(body.assigneeId, 'task.assigned', {
@@ -118,145 +119,264 @@ export class TaskService {
           body: `You have been assigned the task "${task.title}".`,
           metadata: { taskId: task.id, projectId: body.projectId },
         })
-        .catch(() => {});
+        .catch((err) => {
+          this.logger.error(`Failed to send notification for task assignment: ${err instanceof Error ? err.message : String(err)}`, { userId: body.assigneeId, taskId: task.id, projectId: body.projectId });
+        });
     }
 
     return task;
   }
 
-  async approveTask(taskId: string, userId: string) {
+  /**
+   * Combined: edit draft (title/description) and/or set outcome (APPROVED / REJECTED).
+   * Only the assigned developer can call.
+   * - Approve: optional title/description in the same request are applied first (final draft), then status is set to APPROVED and Jira is enqueued. The task must have a title (existing or in this request). We never update the task body after it is approved/synced.
+   * - Decline: set status REJECTED.
+   * - Draft only: send title/description when status is SENT_TO_DEVELOPER and not yet synced.
+   */
+  async updateTaskOutcome(
+    taskId: string,
+    userId: string,
+    body: UpdateTaskOutcomeDto,
+  ) {
     const task = await this.taskRepo.findByIdWithMeetingAndProject(taskId);
-
     if (!task) {
       throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
     }
-
     if (task.assigneeId !== userId) {
-      throw new AppException(ErrorCode.FORBIDDEN, 'Only assigned developer can approve', 403);
+      throw new AppException(ErrorCode.FORBIDDEN, 'Only the assigned developer can update draft or set outcome', 403);
     }
 
-    if (!TaskStateMachine.canTransition(task.status, TaskStatus.APPROVED)) {
-      throw new AppException(
-        ErrorCode.INVALID_STATE,
-        `Cannot transition from ${task.status} to APPROVED`,
-        400,
-      );
+    const hasStatus = body.status === 'APPROVED' || body.status === 'REJECTED';
+    const hasDraft = (body.title !== undefined && body.title !== '') || body.description !== undefined;
+    if (!hasStatus && !hasDraft) {
+      return task;
     }
 
-    const approvedTask = await this.taskRepo.updateStatus(taskId, TaskStatus.APPROVED);
-    this.realtime.emitToProject(task.meeting.projectId, 'task.updated', {
-      taskId,
-      projectId: task.meeting.projectId,
-      status: approvedTask.status,
-      assigneeId: approvedTask.assigneeId ?? null,
-      updatedAt: (approvedTask as unknown as { updatedAt?: Date }).updatedAt ?? new Date(),
-    });
-    if (!approvedTask.jiraIssueKey) {
-      await this.jiraSyncQueue.enqueue(task.id);
+    if (hasStatus) {
+      if (body.status === 'APPROVED') {
+        if (!TaskStateMachine.canTransition(task.status, TaskStatus.APPROVED)) {
+          throw new AppException(
+            ErrorCode.INVALID_STATE,
+            `Cannot approve from ${task.status}`,
+            400,
+          );
+        }
+        // Apply optional final draft in the same request (before status change). We never update body after approving.
+        const updateData: { title?: string; description?: string | null } = {};
+        if (!task.jiraIssueKey) {
+          if (body.title?.trim()) updateData.title = body.title.trim();
+          if (body.description !== undefined) updateData.description = body.description;
+        }
+        if (Object.keys(updateData).length > 0) {
+          await this.prisma.task.update({
+            where: { id: taskId },
+            data: updateData,
+          });
+        }
+        const taskAfterDraft = await this.prisma.task.findUnique({
+          where: { id: taskId },
+          select: { title: true },
+        });
+        const effectiveTitle = (updateData.title ?? taskAfterDraft?.title ?? task.title)?.trim();
+        if (!effectiveTitle) {
+          throw new AppException(
+            ErrorCode.VALIDATION_ERROR,
+            'Task must have a title before approving (set draft first or send title in this request)',
+            400,
+          );
+        }
+        const approvedTask = await this.taskRepo.updateStatus(taskId, TaskStatus.APPROVED);
+        const finalTask = await this.taskRepo.findByIdWithMeetingAndProject(taskId);
+        this.realtime.emitToProject(task.meeting.projectId, 'task.updated', {
+          taskId,
+          projectId: task.meeting.projectId,
+          status: approvedTask.status,
+          assigneeId: approvedTask.assigneeId ?? null,
+          updatedAt: (approvedTask as unknown as { updatedAt?: Date }).updatedAt ?? new Date(),
+        });
+        if (!approvedTask.jiraIssueKey) {
+          await this.jiraSyncQueue.enqueue(task.id);
+        }
+        this.activityLog.log({
+          projectId: task.meeting.projectId,
+          userId,
+          action: 'task.approved',
+          entityType: 'Task',
+          entityId: taskId,
+          metadata: { title: finalTask?.title ?? task.title },
+        }).catch((err) => {
+          this.logger.error(`Failed to log activity for task approval: ${err instanceof Error ? err.message : String(err)}`, { taskId, projectId: task.meeting.projectId, userId });
+        });
+        const ownerId = task.meeting.project.ownerId;
+        if (ownerId && ownerId !== userId) {
+          this.notification
+            .notify({
+              userId: ownerId,
+              type: 'task_approved',
+              title: `Task approved: ${approvedTask.title}`,
+              body: `A developer approved the task "${approvedTask.title}".`,
+              metadata: { taskId, projectId: task.meeting.projectId },
+            })
+            .catch((err) => {
+              this.logger.error(`Failed to send notification for task approval: ${err instanceof Error ? err.message : String(err)}`, { userId: ownerId, taskId, projectId: task.meeting.projectId });
+            });
+        }
+        return finalTask ?? approvedTask;
+      }
+      if (body.status === 'REJECTED') {
+        if (!TaskStateMachine.canTransition(task.status, TaskStatus.REJECTED)) {
+          throw new AppException(
+            ErrorCode.INVALID_STATE,
+            `Cannot decline from ${task.status}`,
+            400,
+          );
+        }
+        const result = await this.taskRepo.updateStatus(taskId, TaskStatus.REJECTED);
+        this.realtime.emitToProject(task.meeting.projectId, 'task.updated', {
+          taskId,
+          projectId: task.meeting.projectId,
+          status: result.status,
+          assigneeId: result.assigneeId ?? null,
+          updatedAt: (result as unknown as { updatedAt?: Date }).updatedAt ?? new Date(),
+        });
+        this.activityLog.log({
+          projectId: task.meeting.projectId,
+          userId,
+          action: 'task.declined',
+          entityType: 'Task',
+          entityId: taskId,
+          metadata: { title: task.title },
+        }).catch((err) => {
+          this.logger.error(`Failed to log activity for task decline: ${err instanceof Error ? err.message : String(err)}`, { taskId, projectId: task.meeting.projectId, userId });
+        });
+        const ownerId = task.meeting.project.ownerId;
+        if (ownerId && ownerId !== userId) {
+          this.notification
+            .notify({
+              userId: ownerId,
+              type: 'task_declined',
+              title: `Task declined: ${result.title}`,
+              body: `A developer declined the task "${result.title}".`,
+              metadata: { taskId, projectId: task.meeting.projectId },
+            })
+            .catch((err) => {
+              this.logger.error(`Failed to send notification for task decline: ${err instanceof Error ? err.message : String(err)}`, { userId: ownerId, taskId, projectId: task.meeting.projectId });
+            });
+        }
+        return result;
+      }
     }
-    this.activityLog.log({
-      projectId: task.meeting.projectId,
-      userId,
-      action: 'task.approved',
-      entityType: 'Task',
-      entityId: taskId,
-      metadata: { title: task.title },
-    }).catch(() => {});
 
-    const ownerId = task.meeting.project.ownerId;
-    if (ownerId && ownerId !== userId) {
-      this.notification
-        .notify({
-          userId: ownerId,
-          type: 'task_approved',
-          title: `Task approved: ${approvedTask.title}`,
-          body: `A developer approved the task "${approvedTask.title}".`,
-          metadata: { taskId, projectId: task.meeting.projectId },
+    if (hasDraft && !hasStatus) {
+      if (task.status !== TaskStatus.SENT_TO_DEVELOPER) {
+        throw new AppException(
+          ErrorCode.INVALID_STATE,
+          `Cannot edit draft when status is ${task.status}`,
+          400,
+        );
+      }
+      if (task.jiraIssueKey) {
+        throw new AppException(
+          ErrorCode.INVALID_STATE,
+          'Task is already synced to Jira; cannot edit draft',
+          400,
+        );
+      }
+      const title = body.title?.trim();
+      const description = body.description;
+      const updated = await this.prisma.task.update({
+        where: { id: taskId },
+        data: {
+          ...(title ? { title } : {}),
+          ...(description !== undefined ? { description } : {}),
+        },
+      });
+      this.activityLog
+        .log({
+          projectId: task.meeting.projectId,
+          userId,
+          action: 'task.draft.updated',
+          entityType: 'Task',
+          entityId: taskId,
+          metadata: { title: updated.title },
         })
-        .catch(() => {});
+        .catch((err) => {
+          this.logger.error(`Failed to log activity for task draft update: ${err instanceof Error ? err.message : String(err)}`, { taskId, projectId: task.meeting.projectId, userId });
+        });
+      this.realtime.emitToProject(task.meeting.projectId, 'task.updated', {
+        taskId,
+        projectId: task.meeting.projectId,
+        status: updated.status,
+        assigneeId: updated.assigneeId ?? null,
+        title: updated.title,
+        updatedAt: (updated as unknown as { updatedAt?: Date }).updatedAt ?? new Date(),
+      });
+      return updated;
     }
-    return approvedTask;
+
+    return task;
   }
 
-
-  async declineTask(taskId: string, userId: string) {
-    const task = await this.taskRepo.findByIdWithMeetingAndProject(taskId);
-
-    if (!task) {
-      throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
-    }
-
-    if (task.assigneeId !== userId) {
-      throw new AppException(ErrorCode.FORBIDDEN, 'Only assigned developer can decline', 403);
-    }
-
-    if (!TaskStateMachine.canTransition(task.status, TaskStatus.REJECTED)) {
-      throw new AppException(
-        ErrorCode.INVALID_STATE,
-        `Cannot transition from ${task.status} to REJECTED`,
-        400,
-      );
-    }
-
-    const result = await this.taskRepo.updateStatus(taskId, TaskStatus.REJECTED);
-    this.realtime.emitToProject(task.meeting.projectId, 'task.updated', {
-      taskId,
-      projectId: task.meeting.projectId,
-      status: result.status,
-      assigneeId: result.assigneeId ?? null,
-      updatedAt: (result as unknown as { updatedAt?: Date }).updatedAt ?? new Date(),
-    });
-    this.activityLog.log({
-      projectId: task.meeting.projectId,
-      userId,
-      action: 'task.declined',
-      entityType: 'Task',
-      entityId: taskId,
-      metadata: { title: task.title },
-    }).catch(() => {});
-
-    const ownerId = task.meeting.project.ownerId;
-    if (ownerId && ownerId !== userId) {
-      this.notification
-        .notify({
-          userId: ownerId,
-          type: 'task_declined',
-          title: `Task declined: ${result.title}`,
-          body: `A developer declined the task "${result.title}".`,
-          metadata: { taskId, projectId: task.meeting.projectId },
-        })
-        .catch(() => {});
-    }
-    return result;
-  }
-
-  async sendToDeveloper(
+  /**
+   * Reassign or unassign a task. Allowed: Scrum Master or current assignee.
+   * assigneeId null/undefined = unassign (status EXTRACTED).
+   */
+  async reassignTask(
     taskId: string,
     currentUser: CurrentUserType,
-    assigneeId: string,
+    assigneeId: string | null | undefined,
   ) {
-    if (currentUser.role !== Role.SCRUM_MASTER) {
+    const task = await this.taskRepo.findByIdWithMeetingAndProject(taskId);
+    if (!task) {
+      throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
+    }
+    const isSm = currentUser.role === Role.SCRUM_MASTER;
+    const isCurrentAssignee = task.assigneeId === currentUser.userId;
+    if (!isSm && !isCurrentAssignee) {
       throw new AppException(
         ErrorCode.FORBIDDEN,
-        'Only Scrum Masters can send tasks to developers',
+        'Only Scrum Master or current assignee can reassign or unassign',
         403,
       );
     }
 
-    const task = await this.taskRepo.findByIdWithMeetingAndProject(taskId);
-
-    if (!task) {
-      throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
+    if (assigneeId === undefined || assigneeId === null || assigneeId === '') {
+      if (!TaskStateMachine.canTransition(task.status, TaskStatus.EXTRACTED)) {
+        throw new AppException(
+          ErrorCode.INVALID_STATE,
+          `Cannot unassign from ${task.status}`,
+          400,
+        );
+      }
+      const result = await this.taskRepo.clearAssigneeAndStatus(taskId, TaskStatus.EXTRACTED);
+      this.realtime.emitToProject(task.meeting.projectId, 'task.updated', {
+        taskId,
+        projectId: task.meeting.projectId,
+        status: result.status,
+        assigneeId: null,
+        updatedAt: (result as unknown as { updatedAt?: Date }).updatedAt ?? new Date(),
+      });
+      this.activityLog.log({
+        projectId: task.meeting.projectId,
+        userId: currentUser.userId,
+        action: 'task.unassigned',
+        entityType: 'Task',
+        entityId: taskId,
+        metadata: { title: task.title },
+      }).catch((err) => {
+        this.logger.error(`Failed to log activity for task unassignment: ${err instanceof Error ? err.message : String(err)}`, { taskId, projectId: task.meeting.projectId, userId: currentUser.userId });
+      });
+      return result;
     }
 
     if (!TaskStateMachine.canTransition(task.status, TaskStatus.SENT_TO_DEVELOPER)) {
       throw new AppException(
         ErrorCode.INVALID_STATE,
-        `Cannot transition from ${task.status} to SENT_TO_DEVELOPER`,
+        `Cannot assign from ${task.status}`,
         400,
       );
     }
-
     const result = await this.taskRepo.updateAssigneeAndStatus(
       taskId,
       assigneeId,
@@ -282,8 +402,9 @@ export class TaskService {
       entityType: 'Task',
       entityId: taskId,
       metadata: { title: task.title, assigneeId },
-    }).catch(() => {});
-
+    }).catch((err) => {
+      this.logger.error(`Failed to log activity for task assignment: ${err instanceof Error ? err.message : String(err)}`, { taskId, projectId: task.meeting.projectId, userId: currentUser.userId });
+    });
     this.notification
       .notify({
         userId: assigneeId,
@@ -292,197 +413,10 @@ export class TaskService {
         body: `You have been assigned the task "${task.title}".`,
         metadata: { taskId, projectId: task.meeting.projectId },
       })
-      .catch(() => {});
+      .catch((err) => {
+        this.logger.error(`Failed to send notification for task assignment: ${err instanceof Error ? err.message : String(err)}`, { userId: assigneeId, taskId, projectId: task.meeting.projectId });
+      });
     return result;
-  }
-
-  async unassignTask(
-    taskId: string,
-    currentUser: CurrentUserType,
-  ) {
-    if (currentUser.role !== Role.SCRUM_MASTER) {
-      throw new AppException(
-        ErrorCode.FORBIDDEN,
-        'Only Scrum Masters can unassign tasks',
-        403,
-      );
-    }
-
-    const task = await this.taskRepo.findByIdWithMeetingAndProject(taskId);
-
-    if (!task) {
-      throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
-    }
-
-    if (!TaskStateMachine.canTransition(task.status, TaskStatus.EXTRACTED)) {
-      throw new AppException(
-        ErrorCode.INVALID_STATE,
-        `Cannot transition from ${task.status} to EXTRACTED`,
-        400,
-      );
-    }
-
-    const result = await this.taskRepo.clearAssigneeAndStatus(taskId, TaskStatus.EXTRACTED);
-    this.realtime.emitToProject(task.meeting.projectId, 'task.updated', {
-      taskId,
-      projectId: task.meeting.projectId,
-      status: result.status,
-      assigneeId: null,
-      updatedAt: (result as unknown as { updatedAt?: Date }).updatedAt ?? new Date(),
-    });
-    this.activityLog.log({
-      projectId: task.meeting.projectId,
-      userId: currentUser.userId,
-      action: 'task.unassigned',
-      entityType: 'Task',
-      entityId: taskId,
-      metadata: { title: task.title },
-    }).catch(() => {});
-    return result;
-  }
-
-  async updateTaskDraft(taskId: string, userId: string, body: UpdateTaskDraftDto) {
-    const task = await this.taskRepo.findByIdWithMeetingAndProject(taskId);
-    if (!task) {
-      throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
-    }
-
-    if (task.assigneeId !== userId) {
-      throw new AppException(ErrorCode.FORBIDDEN, 'Only assigned developer can edit this task', 403);
-    }
-
-    if (task.status !== TaskStatus.SENT_TO_DEVELOPER) {
-      throw new AppException(
-        ErrorCode.INVALID_STATE,
-        `Cannot edit task draft when status is ${task.status}`,
-        400,
-      );
-    }
-
-    if (task.jiraIssueKey) {
-      throw new AppException(
-        ErrorCode.INVALID_STATE,
-        'Task is already synced to Jira; use the Jira update endpoint instead',
-        400,
-      );
-    }
-
-    const title = body.title?.trim();
-    const description = typeof body.description === 'string' ? body.description : undefined;
-    if (!title && typeof description !== 'string') {
-      return task;
-    }
-
-    const updated = await this.prisma.task.update({
-      where: { id: taskId },
-      data: {
-        ...(title ? { title } : {}),
-        ...(typeof description === 'string' ? { description } : {}),
-      },
-    });
-
-    this.activityLog
-      .log({
-        projectId: task.meeting.projectId,
-        userId,
-        action: 'task.draft.updated',
-        entityType: 'Task',
-        entityId: taskId,
-        metadata: { title: updated.title },
-      })
-      .catch(() => {});
-
-    this.realtime.emitToProject(task.meeting.projectId, 'task.updated', {
-      taskId,
-      projectId: task.meeting.projectId,
-      status: updated.status,
-      assigneeId: updated.assigneeId ?? null,
-      title: updated.title,
-      updatedAt: (updated as unknown as { updatedAt?: Date }).updatedAt ?? new Date(),
-    });
-
-    return updated;
-  }
-
-  async updateJiraIssue(taskId: string, userId: string, body: UpdateJiraIssueDto) {
-    const task = await this.taskRepo.findByIdWithMeetingAndProject(taskId);
-    if (!task) {
-      throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
-    }
-
-    const projectId = task.meeting.projectId;
-    const isOwner = await this.projectRepo.isOwner(projectId, userId);
-    const isAssignee = task.assigneeId === userId;
-    if (!isOwner && !isAssignee) {
-      throw new AppException(ErrorCode.FORBIDDEN, 'Access denied to update this Jira issue', 403);
-    }
-
-    if (!task.jiraIssueKey) {
-      throw new AppException(
-        ErrorCode.INVALID_STATE,
-        'Task has not been synced to Jira yet',
-        400,
-      );
-    }
-
-    const ownerId = task.meeting.project.ownerId;
-    const { accessToken, cloudId } = await this.jira.getValidAccessToken(ownerId);
-
-    const fields: Record<string, unknown> = {};
-    const fieldsChanged: string[] = [];
-    if (body.title?.trim()) {
-      fields.summary = body.title.trim();
-      fieldsChanged.push('summary');
-    }
-    if (typeof body.description === 'string') {
-      fields.description = body.description;
-      fieldsChanged.push('description');
-    }
-
-    if (fieldsChanged.length === 0) {
-      return { success: true, jiraIssueKey: task.jiraIssueKey, fieldsChanged: [] as string[] };
-    }
-
-    await axios.put(
-      `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/issue/${task.jiraIssueKey}`,
-      { fields },
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-        },
-      },
-    );
-
-    await this.prisma.task.update({
-      where: { id: taskId },
-      data: {
-        ...(body.title?.trim() ? { title: body.title.trim() } : {}),
-        ...(typeof body.description === 'string' ? { description: body.description } : {}),
-      },
-    });
-
-    this.activityLog
-      .log({
-        projectId,
-        userId,
-        action: 'jira.issue.updated',
-        entityType: 'Task',
-        entityId: taskId,
-        metadata: { jiraIssueKey: task.jiraIssueKey, fieldsChanged },
-      })
-      .catch(() => {});
-
-    this.realtime.emitToProject(projectId, 'jira.issueUpdated', {
-      taskId,
-      projectId,
-      jiraIssueKey: task.jiraIssueKey,
-      fieldsChanged,
-      updatedAt: new Date(),
-    });
-
-    return { success: true, jiraIssueKey: task.jiraIssueKey, fieldsChanged };
   }
 
   async getById(taskId: string, userId: string) {
@@ -504,62 +438,62 @@ export class TaskService {
     return task;
   }
 
-  async getTasksByProject(
-    projectId: string,
+  /**
+   * Unified list: filter by projectId, meetingId, and/or assigneeId (resolved; use "me" for current user).
+   * When filtering by another user's assigneeId, projectId or meetingId is required.
+   */
+  async getTasks(
     userId: string,
-    filters: Omit<TaskFilters, 'projectId'>,
-    page = 1,
-    limit = 20,
+    query: {
+      projectId?: string;
+      meetingId?: string;
+      assigneeId?: string;
+      status?: TaskStatus;
+      page?: number;
+      limit?: number;
+    },
   ) {
-    const isOwner = await this.projectRepo.isOwner(projectId, userId);
-    const isMember = await this.projectRepo.isMember(projectId, userId);
-    if (!isOwner && !isMember) {
-      throw new AppException(ErrorCode.FORBIDDEN, 'Access denied to this project', 403);
+    const { projectId, meetingId, assigneeId, status, page = 1, limit = 20 } = query;
+    if (!projectId && !meetingId && !assigneeId) {
+      throw new AppException(
+        ErrorCode.VALIDATION_ERROR,
+        'Provide at least one of projectId, meetingId, or assigneeId (use assigneeId=me for current user)',
+        400,
+      );
     }
-    const fullFilters: TaskFilters = { ...filters, projectId };
-    const skip = (page - 1) * limit;
-    const [items, total] = await Promise.all([
-      this.taskRepo.findManyWithMeetingAndAssignee(fullFilters, { skip, take: limit }),
-      this.taskRepo.count(fullFilters),
-    ]);
-    return { items, total, page, limit, totalPages: Math.ceil(total / limit) || 1 };
-  }
-
-  async getTasksByMeeting(
-    meetingId: string,
-    userId: string,
-    filters: Omit<TaskFilters, 'meetingId'>,
-    page = 1,
-    limit = 20,
-  ) {
-    const meeting = await this.prisma.meeting.findUnique({
-      where: { id: meetingId },
-      select: { projectId: true },
-    });
-    if (!meeting) {
-      throw new AppException(ErrorCode.MEETING_NOT_FOUND, 'Meeting not found', 404);
+    if (assigneeId && assigneeId !== userId && !projectId && !meetingId) {
+      throw new AppException(
+        ErrorCode.VALIDATION_ERROR,
+        'When filtering by another user\'s assigneeId, projectId or meetingId is required',
+        400,
+      );
     }
-    const isOwner = await this.projectRepo.isOwner(meeting.projectId, userId);
-    const isMember = await this.projectRepo.isMember(meeting.projectId, userId);
-    if (!isOwner && !isMember) {
-      throw new AppException(ErrorCode.FORBIDDEN, 'Access denied to this project', 403);
+    if (projectId) {
+      const isOwner = await this.projectRepo.isOwner(projectId, userId);
+      const isMember = await this.projectRepo.isMember(projectId, userId);
+      if (!isOwner && !isMember) {
+        throw new AppException(ErrorCode.FORBIDDEN, 'Access denied to this project', 403);
+      }
     }
-    const fullFilters: TaskFilters = { ...filters, meetingId };
-    const skip = (page - 1) * limit;
-    const [items, total] = await Promise.all([
-      this.taskRepo.findManyWithMeetingAndAssignee(fullFilters, { skip, take: limit }),
-      this.taskRepo.count(fullFilters),
-    ]);
-    return { items, total, page, limit, totalPages: Math.ceil(total / limit) || 1 };
-  }
-
-  async getTasksForAssignee(
-    userId: string,
-    status?: TaskStatus,
-    page = 1,
-    limit = 20,
-  ) {
-    const filters = { assigneeId: userId, status };
+    if (meetingId) {
+      const meeting = await this.prisma.meeting.findUnique({
+        where: { id: meetingId },
+        select: { projectId: true },
+      });
+      if (!meeting) {
+        throw new AppException(ErrorCode.MEETING_NOT_FOUND, 'Meeting not found', 404);
+      }
+      const isOwner = await this.projectRepo.isOwner(meeting.projectId, userId);
+      const isMember = await this.projectRepo.isMember(meeting.projectId, userId);
+      if (!isOwner && !isMember) {
+        throw new AppException(ErrorCode.FORBIDDEN, 'Access denied to this project', 403);
+      }
+    }
+    const filters: TaskFilters = {};
+    if (projectId) filters.projectId = projectId;
+    if (meetingId) filters.meetingId = meetingId;
+    if (assigneeId) filters.assigneeId = assigneeId;
+    if (status) filters.status = status;
     const skip = (page - 1) * limit;
     const [items, total] = await Promise.all([
       this.taskRepo.findManyWithMeetingAndAssignee(filters, { skip, take: limit }),

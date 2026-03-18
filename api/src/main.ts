@@ -9,6 +9,10 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
   });
+  // Allow all origins by echoing the request origin and allow credentials.
+  // WARNING: This effectively allows requests from any origin and is
+  // insecure for production. Use only for local development/testing.
+  app.enableCors({ origin: true, credentials: true });
 
   app.use(cookieParser());
 
