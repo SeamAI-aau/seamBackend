@@ -17,10 +17,10 @@ export class UpdateTaskDraftDto {
   @ApiPropertyOptional({
     example:
       'Please add exponential backoff with jitter for webhook retries. Ensure idempotency keys are used.',
-    description: 'Optional task description update (will be used as Jira description when approved).',
+    description:
+      'Optional task description update (will be used as Jira description when approved).',
   })
   @IsOptional()
   @IsString()
   description?: string;
 }
-

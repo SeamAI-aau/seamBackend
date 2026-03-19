@@ -4,7 +4,8 @@ import { IsString, IsUrl, Matches } from 'class-validator';
 export class LinkRepoDto {
   @ApiProperty({
     example: 'https://github.com/acme/payments-api',
-    description: 'Full GitHub repository URL. Must be https (or http) and match github.com/owner/repo.',
+    description:
+      'Full GitHub repository URL. Must be https (or http) and match github.com/owner/repo.',
   })
   @IsString()
   @IsUrl()

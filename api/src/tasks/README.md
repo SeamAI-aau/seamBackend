@@ -13,14 +13,14 @@ Transitions are enforced by `TaskStateMachine` in `task-state-machine.ts`.
 
 ## API
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/tasks/:id/approve` | Developer approves task (assignee only). |
-| POST | `/tasks/:id/decline` | Developer declines task (assignee only). |
-| POST | `/tasks/:id/send-to-developer` | Scrum Master assigns developer (body: `{ assigneeId }`). |
-| GET | `/tasks/by-project/:projectId` | List tasks for project (query: `?status=&assigneeId=`). |
-| GET | `/tasks/by-meeting/:meetingId` | List tasks for meeting (query: `?status=&assigneeId=`). |
-| GET | `/tasks/my` | List tasks assigned to current user (query: `?status=`). |
+| Method | Path                           | Description                                              |
+| ------ | ------------------------------ | -------------------------------------------------------- |
+| POST   | `/tasks/:id/approve`           | Developer approves task (assignee only).                 |
+| POST   | `/tasks/:id/decline`           | Developer declines task (assignee only).                 |
+| POST   | `/tasks/:id/send-to-developer` | Scrum Master assigns developer (body: `{ assigneeId }`). |
+| GET    | `/tasks/by-project/:projectId` | List tasks for project (query: `?status=&assigneeId=`).  |
+| GET    | `/tasks/by-meeting/:meetingId` | List tasks for meeting (query: `?status=&assigneeId=`).  |
+| GET    | `/tasks/my`                    | List tasks assigned to current user (query: `?status=`). |
 
 All routes require JWT. `send-to-developer` requires `SCRUM_MASTER` role.
 

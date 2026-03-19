@@ -18,7 +18,7 @@ export class TaskListQueryDto {
 
   @ApiPropertyOptional({
     example: 'm1m1m1m1-e5f6-7890-abcd-ef1234567890',
-    description: 'Filter by meeting. Requires project access for the meeting\'s project.',
+    description: "Filter by meeting. Requires project access for the meeting's project.",
   })
   @IsOptional()
   @IsUUID()
@@ -26,7 +26,8 @@ export class TaskListQueryDto {
 
   @ApiPropertyOptional({
     example: 'me',
-    description: 'Filter by assignee. Use "me" for current user, or a user UUID (when used with projectId).',
+    description:
+      'Filter by assignee. Use "me" for current user, or a user UUID (when used with projectId).',
   })
   @IsOptional()
   @IsString()

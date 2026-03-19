@@ -20,4 +20,3 @@ export class UpdateJiraIssueDto {
   @IsString()
   description?: string;
 }
-

@@ -10,7 +10,13 @@ import { NotificationModule } from '../notification/notification.module';
 import { RealtimeModule } from '../infrastracture/realtime/realtime.module';
 
 @Module({
-  imports: [forwardRef(() => JiraModule), ActivityLogModule, ProjectModule, NotificationModule, RealtimeModule],
+  imports: [
+    forwardRef(() => JiraModule),
+    ActivityLogModule,
+    ProjectModule,
+    NotificationModule,
+    RealtimeModule,
+  ],
   controllers: [TaskController],
   providers: [
     TaskService,

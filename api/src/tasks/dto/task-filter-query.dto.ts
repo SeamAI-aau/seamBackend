@@ -27,7 +27,13 @@ export class TaskFilterQueryDto {
   @Min(1)
   page?: number = 1;
 
-  @ApiPropertyOptional({ example: 20, minimum: 1, maximum: 100, default: 20, description: 'Items per page.' })
+  @ApiPropertyOptional({
+    example: 20,
+    minimum: 1,
+    maximum: 100,
+    default: 20,
+    description: 'Items per page.',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -35,4 +41,3 @@ export class TaskFilterQueryDto {
   @Max(100)
   limit?: number = 20;
 }
-

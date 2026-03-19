@@ -17,4 +17,3 @@ export class RealtimeService {
     this.server?.to(`project:${projectId}`).emit(event, payload);
   }
 }
-

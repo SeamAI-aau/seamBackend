@@ -20,11 +20,7 @@ export interface SendMailOptions {
 export class MailService {
   private transporter: Transporter | null = null;
 
-  constructor(
-    private readonly config: ConfigService,
-    private readonly logger: Logger,
-  ) {
-
+  constructor(private readonly config: ConfigService, private readonly logger: Logger) {
     const host = this.config.get<string>('SMTP_HOST');
     const user = this.config.get<string>('SMTP_USER');
     if (host && user) {
@@ -44,7 +40,10 @@ export class MailService {
   }
 
   async send(options: SendMailOptions): Promise<boolean> {
-    const from = this.config.get<string>('MAIL_FROM') ?? this.config.get<string>('SMTP_USER') ?? 'noreply@seam.local';
+    const from =
+      this.config.get<string>('MAIL_FROM') ??
+      this.config.get<string>('SMTP_USER') ??
+      'noreply@seam.local';
     const appName = this.config.get<string>('APP_NAME') ?? 'Seam';
 
     const mailOptions = {
@@ -57,7 +56,10 @@ export class MailService {
     };
 
     if (!this.transporter) {
-      this.logger.warn({ to: options.to, subject: options.subject }, '[Mail] SKIPPED: SMTP not configured');
+      this.logger.warn(
+        { to: options.to, subject: options.subject },
+        '[Mail] SKIPPED: SMTP not configured',
+      );
       return false;
     }
 

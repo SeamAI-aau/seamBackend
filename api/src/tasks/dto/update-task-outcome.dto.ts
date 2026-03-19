@@ -15,7 +15,8 @@ export type TaskOutcomeStatus = (typeof TASK_OUTCOME_STATUS)[number];
 export class UpdateTaskOutcomeDto {
   @ApiPropertyOptional({
     enum: TASK_OUTCOME_STATUS,
-    description: 'Set outcome: APPROVED (approve task, may include final title/description) or REJECTED (decline).',
+    description:
+      'Set outcome: APPROVED (approve task, may include final title/description) or REJECTED (decline).',
   })
   @IsOptional()
   @IsEnum(TASK_OUTCOME_STATUS)

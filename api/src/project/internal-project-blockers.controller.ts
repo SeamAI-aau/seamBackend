@@ -20,10 +20,7 @@ const WORKER_SECRET_HEADER = 'x-worker-secret';
  */
 @Controller('internal/projects')
 export class InternalProjectBlockersController {
-  constructor(
-    private readonly config: ConfigService,
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly config: ConfigService, private readonly prisma: PrismaService) {}
 
   @Post(':id/blockers/ci-failure')
   @HttpCode(200)
@@ -98,10 +95,7 @@ export class InternalProjectBlockersController {
 
     await this.prisma.transcriptBlocker.createMany({
       data: tasks.map((task) => {
-        const assigneeLabel =
-          task.assignee?.name ||
-          task.assignee?.email ||
-          'developer';
+        const assigneeLabel = task.assignee?.name || task.assignee?.email || 'developer';
 
         return {
           projectId,
@@ -127,4 +121,3 @@ export class InternalProjectBlockersController {
     }
   }
 }
-

@@ -62,12 +62,9 @@ export class JiraService {
 
     const { access_token, refresh_token, expires_in } = tokenResponse.data;
 
-    const resourcesResponse = await axios.get<AtlassianResource[]>(
-      ATLASSIAN_RESOURCES_URL,
-      {
-        headers: { Authorization: `Bearer ${access_token}` },
-      },
-    );
+    const resourcesResponse = await axios.get<AtlassianResource[]>(ATLASSIAN_RESOURCES_URL, {
+      headers: { Authorization: `Bearer ${access_token}` },
+    });
 
     const cloudId = resourcesResponse.data[0]?.id;
     if (!cloudId) {

@@ -31,9 +31,7 @@ export class JiraSyncService {
     const projectKey = task.meeting.project.jiraProjectKey;
 
     if (!projectKey?.trim()) {
-      throw new Error(
-        `Project ${task.meeting.project.id} has no Jira project key configured`,
-      );
+      throw new Error(`Project ${task.meeting.project.id} has no Jira project key configured`);
     }
 
     const { accessToken, cloudId } = await this.jiraService.getValidAccessToken(ownerId);

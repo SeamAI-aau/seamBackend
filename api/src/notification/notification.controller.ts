@@ -1,22 +1,10 @@
-import {
-  Controller,
-  Get,
-  Patch,
-  Param,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Patch, Param, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserType } from '../auth/types/current-user.type';
 import { NotificationService } from './notification.service';
 import { NotificationQueryDto } from './dto/notification-query.dto';
-import {
-  ApiTags,
-  ApiBearerAuth,
-  ApiOperation,
-  ApiOkResponse,
-} from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiOkResponse } from '@nestjs/swagger';
 
 @ApiTags('Notifications')
 @ApiBearerAuth('access-token')
@@ -36,7 +24,7 @@ export class NotificationController {
             id: 'notif_1',
             type: 'task_assigned',
             title: 'New task: Fix payment retries',
-            body: 'You have been assigned the task \"Fix payment retries\".',
+            body: 'You have been assigned the task "Fix payment retries".',
             metadata: { taskId: 'task_1', projectId: 'proj_1' },
             readAt: null,
             createdAt: '2026-03-06T10:00:00.000Z',
@@ -49,10 +37,7 @@ export class NotificationController {
       },
     },
   })
-  getMyNotifications(
-    @CurrentUser() user: CurrentUserType,
-    @Query() query: NotificationQueryDto,
-  ) {
+  getMyNotifications(@CurrentUser() user: CurrentUserType, @Query() query: NotificationQueryDto) {
     return this.notificationService.getForUser(user.userId, {
       unreadOnly: query.unreadOnly,
       type: query.type,
@@ -71,10 +56,7 @@ export class NotificationController {
 
   @Patch(':id/read')
   @ApiOperation({ summary: 'Mark a single notification as read' })
-  markAsRead(
-    @Param('id') id: string,
-    @CurrentUser() user: CurrentUserType,
-  ) {
+  markAsRead(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
     return this.notificationService.markAsRead(id, user.userId).then((ok) => ({ success: ok }));
   }
 

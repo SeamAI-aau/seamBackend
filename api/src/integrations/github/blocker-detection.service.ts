@@ -38,18 +38,18 @@ export class BlockerDetectionService {
         blockers.map(({ type, message }) => ({ pullRequestId: pr.id, type, message })),
       );
 
-       if (blockers.length > 0 && project?.ownerId) {
-         const summary = blockers.map((b) => `- ${b.message}`).join('\n');
-         this.notification
-           .notify({
-             userId: project.ownerId,
-             type: 'blocker_detected',
-             title: `Blockers detected on PR: ${pr.title}`,
-             body: summary,
-             metadata: { projectId, pullRequestId: pr.id, githubId: pr.githubId },
-           })
-           .catch(() => {});
-       }
+      if (blockers.length > 0 && project?.ownerId) {
+        const summary = blockers.map((b) => `- ${b.message}`).join('\n');
+        this.notification
+          .notify({
+            userId: project.ownerId,
+            type: 'blocker_detected',
+            title: `Blockers detected on PR: ${pr.title}`,
+            body: summary,
+            metadata: { projectId, pullRequestId: pr.id, githubId: pr.githubId },
+          })
+          .catch(() => {});
+      }
     }
   }
 
@@ -71,7 +71,9 @@ export class BlockerDetectionService {
     if (daysSinceUpdate >= STALE_PR_DAYS) {
       blockers.push({
         type: BlockerType.STALE_PR,
-        message: `PR open > ${STALE_PR_DAYS} days with no recent activity (last update ${Math.floor(daysSinceUpdate)} days ago)`,
+        message: `PR open > ${STALE_PR_DAYS} days with no recent activity (last update ${Math.floor(
+          daysSinceUpdate,
+        )} days ago)`,
       });
     }
     if (!hasReviewers) {

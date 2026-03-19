@@ -74,12 +74,7 @@ export class MeetingService {
     return { id: meeting.id };
   }
 
-  async listByProject(
-    projectId: string,
-    userId: string,
-    page = 1,
-    limit = 20,
-  ) {
+  async listByProject(projectId: string, userId: string, page = 1, limit = 20) {
     await this.ensureProjectAccess(projectId, userId);
     const skip = (page - 1) * limit;
     const [items, total] = await Promise.all([

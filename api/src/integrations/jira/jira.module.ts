@@ -45,7 +45,9 @@ class NoopJiraSyncQueue {
   providers: [
     JiraService,
     JiraSyncService,
-    ...(queuesEnabled ? [JiraSyncQueue, JiraSyncProcessor] : [{ provide: JiraSyncQueue, useClass: NoopJiraSyncQueue }]),
+    ...(queuesEnabled
+      ? [JiraSyncQueue, JiraSyncProcessor]
+      : [{ provide: JiraSyncQueue, useClass: NoopJiraSyncQueue }]),
     {
       provide: JIRA_REPOSITORY,
       useClass: PrismaJiraRepository,

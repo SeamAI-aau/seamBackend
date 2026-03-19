@@ -60,11 +60,7 @@ export class GithubSyncService {
     return { synced: prs.length };
   }
 
-  async getPullRequests(
-    projectId: string,
-    page = 1,
-    limit = 20,
-  ) {
+  async getPullRequests(projectId: string, page = 1, limit = 20) {
     const skip = (page - 1) * limit;
     const [items, total] = await Promise.all([
       this.githubRepo.findPullRequestsByProjectId(projectId, { skip, take: limit }),
@@ -73,11 +69,7 @@ export class GithubSyncService {
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) || 1 };
   }
 
-  async getBlockers(
-    projectId: string,
-    page = 1,
-    limit = 50,
-  ) {
+  async getBlockers(projectId: string, page = 1, limit = 50) {
     const skip = (page - 1) * limit;
     const [items, total] = await Promise.all([
       this.githubRepo.findBlockersByProjectId(projectId, { skip, take: limit }),

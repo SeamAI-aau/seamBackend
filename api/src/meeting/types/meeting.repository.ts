@@ -29,9 +29,7 @@ export interface IMeetingRepository {
 
   findById(id: string): Promise<Meeting | null>;
 
-  findByIdWithTranscriptsAndTasks(
-    id: string,
-  ): Promise<MeetingWithTranscriptsAndTasks | null>;
+  findByIdWithTranscriptsAndTasks(id: string): Promise<MeetingWithTranscriptsAndTasks | null>;
 
   updateStatus(id: string, status: MeetingStatus): Promise<Meeting>;
 

@@ -20,4 +20,3 @@ import { RealtimeService } from './realtime.service';
   exports: [RealtimeService],
 })
 export class RealtimeModule {}
-

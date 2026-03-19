@@ -22,10 +22,7 @@ export class PrismaProjectRepository implements IProjectRepository {
     });
   }
 
-  findUserProjects(
-    userId: string,
-    options?: { skip?: number; take?: number },
-  ) {
+  findUserProjects(userId: string, options?: { skip?: number; take?: number }) {
     return this.prisma.project.findMany({
       where: {
         OR: [
@@ -118,9 +115,7 @@ export class PrismaProjectRepository implements IProjectRepository {
     });
   }
 
-  async findMemberById(
-    memberId: string,
-  ): Promise<ProjectMemberWithUser | null> {
+  async findMemberById(memberId: string): Promise<ProjectMemberWithUser | null> {
     const row = await this.prisma.projectMember.findUnique({
       where: { id: memberId },
       include: {
@@ -152,9 +147,7 @@ export class PrismaProjectRepository implements IProjectRepository {
     return member;
   }
 
-  async deleteMember(
-    memberId: string,
-  ): Promise<import('@prisma/client').ProjectMember> {
+  async deleteMember(memberId: string): Promise<import('@prisma/client').ProjectMember> {
     return this.prisma.projectMember.delete({
       where: { id: memberId },
     });

@@ -11,7 +11,6 @@ class DummyMeetingProducer {
 
   async enqueue(meetingId: string, audioUrl: string) {
     this.logger.warn({ meetingId, audioUrl }, 'Queues are disabled; skipping enqueue');
-
   }
 }
 

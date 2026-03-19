@@ -15,12 +15,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserType } from '../auth/types/current-user.type';
 import { MeetingService } from './meeting.service';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
-import {
-  ApiTags,
-  ApiBearerAuth,
-  ApiOperation,
-  ApiConsumes,
-} from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 
 @ApiTags('Meetings')
 @ApiBearerAuth('access-token')

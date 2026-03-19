@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Param,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserType } from '../auth/types/current-user.type';
@@ -15,11 +8,7 @@ import {
   DeveloperActivityQueryDto,
   DeveloperActivityChartQueryDto,
 } from './dto/developer-activity-query.dto';
-import {
-  ApiTags,
-  ApiBearerAuth,
-  ApiOperation,
-} from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 
 @ApiTags('Developer Activity')
 @ApiBearerAuth('access-token')
@@ -62,18 +51,12 @@ export class DeveloperActivityController {
   }
 
   @Post('sync/projects/:projectId/github')
-  async syncGitHub(
-    @Param('projectId') projectId: string,
-    @CurrentUser() user: CurrentUserType,
-  ) {
+  async syncGitHub(@Param('projectId') projectId: string, @CurrentUser() user: CurrentUserType) {
     return this.syncService.syncGitHubActivity(projectId, user.userId);
   }
 
   @Post('sync/projects/:projectId/jira')
-  async syncJira(
-    @Param('projectId') projectId: string,
-    @CurrentUser() user: CurrentUserType,
-  ) {
+  async syncJira(@Param('projectId') projectId: string, @CurrentUser() user: CurrentUserType) {
     return this.syncService.syncJiraActivity(projectId, user.userId);
   }
 }

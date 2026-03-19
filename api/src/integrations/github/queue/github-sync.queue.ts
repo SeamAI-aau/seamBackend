@@ -19,24 +19,16 @@ export class GithubSyncQueue {
   ) {}
 
   async enqueueSyncProject(projectId: string): Promise<void> {
-    await this.queue.add(
-      JOB_SYNC_PROJECT,
-      { projectId } as GithubSyncProjectJobData,
-      {
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 5000 },
-      },
-    );
+    await this.queue.add(JOB_SYNC_PROJECT, { projectId } as GithubSyncProjectJobData, {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 5000 },
+    });
   }
 
   async enqueueSyncAll(): Promise<void> {
-    await this.queue.add(
-      JOB_SYNC_ALL,
-      {} as GithubSyncAllJobData,
-      {
-        attempts: 1,
-      },
-    );
+    await this.queue.add(JOB_SYNC_ALL, {} as GithubSyncAllJobData, {
+      attempts: 1,
+    });
   }
 
   /**
@@ -44,13 +36,9 @@ export class GithubSyncQueue {
    * Call once (e.g. on module init).
    */
   async registerRepeatableSyncAll(): Promise<void> {
-    await this.queue.add(
-      JOB_SYNC_ALL,
-      {} as GithubSyncAllJobData,
-      {
-        repeat: { every: SYNC_ALL_REPEAT_MS },
-        attempts: 1,
-      },
-    );
+    await this.queue.add(JOB_SYNC_ALL, {} as GithubSyncAllJobData, {
+      repeat: { every: SYNC_ALL_REPEAT_MS },
+      attempts: 1,
+    });
   }
 }

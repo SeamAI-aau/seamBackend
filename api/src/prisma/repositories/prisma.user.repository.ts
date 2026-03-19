@@ -31,10 +31,7 @@ export class PrismaUserRepository implements IUserRepository {
     return this.prisma.user.count({ where: { role: Role.DEVELOPER } });
   }
 
-  async findProjectMembers(
-    projectId: string,
-    options?: { skip?: number; take?: number },
-  ) {
+  async findProjectMembers(projectId: string, options?: { skip?: number; take?: number }) {
     return this.prisma.user.findMany({
       where: {
         OR: [

@@ -155,15 +155,8 @@ export class ProjectController {
     description: 'Number of items per page. Defaults to 20, max 100.',
     example: 20,
   })
-  getProjects(
-    @CurrentUser() user: CurrentUserType,
-    @Query() query: PaginationQueryDto,
-  ) {
-    return this.projectService.getUserProjects(
-      user.userId,
-      query.page ?? 1,
-      query.limit ?? 20,
-    );
+  getProjects(@CurrentUser() user: CurrentUserType, @Query() query: PaginationQueryDto) {
+    return this.projectService.getUserProjects(user.userId, query.page ?? 1, query.limit ?? 20);
   }
 
   @Get(':id/dashboard')
@@ -559,10 +552,7 @@ export class ProjectController {
       },
     },
   })
-  getConfig(
-    @Param('id') id: string,
-    @CurrentUser() user: CurrentUserType,
-  ) {
+  getConfig(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
     return this.projectService.getProjectConfig(id, user.userId);
   }
 

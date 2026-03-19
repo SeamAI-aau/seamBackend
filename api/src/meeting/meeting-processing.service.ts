@@ -57,18 +57,12 @@ export class MeetingProcessingService {
       return;
     }
 
-    if (
-      typeof payload.transcript !== 'string' ||
-      !Array.isArray(payload.tasks)
-    ) {
+    if (typeof payload.transcript !== 'string' || !Array.isArray(payload.tasks)) {
       await this.prisma.meeting.update({
         where: { id: meetingId },
         data: { status: MeetingStatus.FAILED },
       });
-      this.logger.warn(
-        { meetingId },
-        'Invalid worker payload: missing transcript or tasks array',
-      );
+      this.logger.warn({ meetingId }, 'Invalid worker payload: missing transcript or tasks array');
       return;
     }
 
@@ -185,7 +179,11 @@ export class MeetingProcessingService {
         });
       }
 
-      const meetingUpdate: { status: MeetingStatus; durationSeconds?: number; participants?: object } = {
+      const meetingUpdate: {
+        status: MeetingStatus;
+        durationSeconds?: number;
+        participants?: object;
+      } = {
         status: MeetingStatus.TASKS_EXTRACTED,
       };
       if (payload.meeting?.durationSeconds != null && payload.meeting.durationSeconds > 0) {

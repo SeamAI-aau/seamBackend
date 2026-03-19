@@ -7,7 +7,6 @@ import { EMAIL_ENABLED_TYPES } from './constants/notification-types';
 import { ConfigService } from '@nestjs/config';
 import { RealtimeService } from '../infrastracture/realtime/realtime.service';
 
-
 export interface NotifyInput {
   userId: string;
   type: string;
@@ -52,11 +51,14 @@ export class NotificationService {
     this.realtime.emitToUser(input.userId, 'notification.created', notification);
     this.repo
       .count({ userId: input.userId, unreadOnly: true })
-      .then((count) => this.realtime.emitToUser(input.userId, 'notification.unreadCount', { count }))
+      .then((count) =>
+        this.realtime.emitToUser(input.userId, 'notification.unreadCount', { count }),
+      )
       .catch(() => undefined);
 
     const shouldSendEmail =
-      input.sendEmail ?? EMAIL_ENABLED_TYPES.includes(input.type as (typeof EMAIL_ENABLED_TYPES)[number]);
+      input.sendEmail ??
+      EMAIL_ENABLED_TYPES.includes(input.type as (typeof EMAIL_ENABLED_TYPES)[number]);
     let emailSent = false;
 
     if (shouldSendEmail) {
@@ -81,10 +83,7 @@ export class NotificationService {
    * Send email only (no in-app notification). Use for recipients without a user account (e.g. invitation_sent).
    */
   async notifyEmailOnly(input: NotifyEmailOnlyInput): Promise<boolean> {
-    const { subject, text } = this.buildEmailContent(
-      { ...input, userId: '' },
-      null,
-    );
+    const { subject, text } = this.buildEmailContent({ ...input, userId: '' }, null);
     return this.mail.send({
       to: input.to,
       subject,
@@ -94,7 +93,14 @@ export class NotificationService {
 
   async getForUser(
     userId: string,
-    filters: { unreadOnly?: boolean; type?: string; fromDate?: string; toDate?: string; page?: number; limit?: number },
+    filters: {
+      unreadOnly?: boolean;
+      type?: string;
+      fromDate?: string;
+      toDate?: string;
+      page?: number;
+      limit?: number;
+    },
   ) {
     const page = filters.page ?? 1;
     const limit = Math.min(filters.limit ?? 50, 100);

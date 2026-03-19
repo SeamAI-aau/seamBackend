@@ -68,10 +68,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     // Join all project rooms this user can access (owner or ACTIVE member).
     const projects = await this.prisma.project.findMany({
       where: {
-        OR: [
-          { ownerId: userId },
-          { members: { some: { userId, status: 'ACTIVE' } } },
-        ],
+        OR: [{ ownerId: userId }, { members: { some: { userId, status: 'ACTIVE' } } }],
       },
       select: { id: true },
     });
@@ -99,4 +96,3 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     return null;
   }
 }
-

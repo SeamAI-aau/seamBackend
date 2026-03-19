@@ -13,7 +13,7 @@ const connection = new IORedis({
 
 new Worker(
   'jira-sync',
-  async job => {
+  async (job) => {
     const { taskId } = job.data;
 
     const task = await prisma.task.findUnique({
@@ -44,10 +44,7 @@ new Worker(
 
     const secret = process.env.TOKEN_ENCRYPTION_SECRET || 'this is a secret';
 
-    const accessToken = decrypt(
-      jiraAccount.accessToken,
-      secret,
-    );
+    const accessToken = decrypt(jiraAccount.accessToken, secret);
 
     const cloudId = jiraAccount.cloudId;
 

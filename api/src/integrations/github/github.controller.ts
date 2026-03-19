@@ -1,16 +1,6 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Param,
-  Body,
-  Query,
-  UseGuards,
-  Res,
-  Inject,
-} from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Query, UseGuards, Res, Inject } from '@nestjs/common';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
-import type{ Response } from 'express';
+import type { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -51,7 +41,8 @@ export class GithubController {
   @Get('connect')
   @ApiOperation({
     summary: 'Start GitHub OAuth flow',
-    description: 'Redirects the browser to GitHub\'s OAuth consent page. The user signs in and authorizes the app; GitHub then redirects to your callback URL with a code.',
+    description:
+      "Redirects the browser to GitHub's OAuth consent page. The user signs in and authorizes the app; GitHub then redirects to your callback URL with a code.",
   })
   @ApiResponse({
     status: 302,
@@ -66,11 +57,24 @@ export class GithubController {
   @Get('callback')
   @ApiOperation({
     summary: 'OAuth callback (used by GitHub redirect)',
-    description: 'Exchanges the authorization code for access and refresh tokens, stores them for the user, and updates the user\'s GitHub username. Then redirects to your frontend (e.g. /oauth-success). Do not call this manually; GitHub redirects here after the user authorizes.',
+    description:
+      "Exchanges the authorization code for access and refresh tokens, stores them for the user, and updates the user's GitHub username. Then redirects to your frontend (e.g. /oauth-success). Do not call this manually; GitHub redirects here after the user authorizes.",
   })
-  @ApiQuery({ name: 'code', description: 'Authorization code from GitHub (query param).', required: true })
-  @ApiQuery({ name: 'state', description: 'State passed to connect (your user id).', required: true })
-  @ApiResponse({ status: 302, description: 'Redirect to GITHUB_OAUTH_SUCCESS_REDIRECT_URL or http://localhost:5173/oauth-success.' })
+  @ApiQuery({
+    name: 'code',
+    description: 'Authorization code from GitHub (query param).',
+    required: true,
+  })
+  @ApiQuery({
+    name: 'state',
+    description: 'State passed to connect (your user id).',
+    required: true,
+  })
+  @ApiResponse({
+    status: 302,
+    description:
+      'Redirect to GITHUB_OAUTH_SUCCESS_REDIRECT_URL or http://localhost:5173/oauth-success.',
+  })
   @ApiBadRequestResponse({ description: 'Invalid or missing code; OAuth exchange failed.' })
   async callback(
     @Query('code') code: string | undefined,
@@ -87,13 +91,16 @@ export class GithubController {
   @Get('status')
   @ApiOperation({
     summary: 'Check if current user has GitHub connected',
-    description: 'Returns whether the authenticated user has completed GitHub OAuth and has stored tokens.',
+    description:
+      'Returns whether the authenticated user has completed GitHub OAuth and has stored tokens.',
   })
   @ApiOkResponse({
     description: 'Connection status for the current user.',
     schema: {
       example: { connected: true },
-      properties: { connected: { type: 'boolean', description: 'True if GitHub is connected for this user.' } },
+      properties: {
+        connected: { type: 'boolean', description: 'True if GitHub is connected for this user.' },
+      },
     },
   })
   @UseGuards(JwtAuthGuard)
@@ -104,7 +111,8 @@ export class GithubController {
   @Post('disconnect')
   @ApiOperation({
     summary: 'Disconnect GitHub for the current user',
-    description: 'Removes stored GitHub tokens for the authenticated user. Does not unlink repos from projects; use PATCH /projects/:id to clear githubRepoUrl per project.',
+    description:
+      'Removes stored GitHub tokens for the authenticated user. Does not unlink repos from projects; use PATCH /projects/:id to clear githubRepoUrl per project.',
   })
   @ApiOkResponse({
     description: 'GitHub disconnected successfully.',
@@ -119,14 +127,21 @@ export class GithubController {
   @Post('link/:projectId')
   @ApiOperation({
     summary: 'Link a GitHub repository to a Seam project',
-    description: 'Stores the repository URL on the project. The project owner must have GitHub connected (OAuth). After linking, use POST sync/:projectId to fetch pull requests. Only the project owner can link.',
+    description:
+      'Stores the repository URL on the project. The project owner must have GitHub connected (OAuth). After linking, use POST sync/:projectId to fetch pull requests. Only the project owner can link.',
   })
-  @ApiParam({ name: 'projectId', description: 'Seam project UUID to link.', example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
+  @ApiParam({
+    name: 'projectId',
+    description: 'Seam project UUID to link.',
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+  })
   @ApiOkResponse({
     description: 'Repository linked successfully.',
     schema: { example: { success: true } },
   })
-  @ApiBadRequestResponse({ description: 'Invalid request body (e.g. not a valid GitHub repo URL).' })
+  @ApiBadRequestResponse({
+    description: 'Invalid request body (e.g. not a valid GitHub repo URL).',
+  })
   @ApiForbiddenResponse({ description: 'Only the project owner can link a repository.' })
   @ApiNotFoundResponse({ description: 'Project not found.' })
   @ApiBody({
@@ -153,14 +168,21 @@ export class GithubController {
   @Post('sync/:projectId')
   @ApiOperation({
     summary: 'Sync pull requests from GitHub',
-    description: 'Fetches open/closed pull requests from the linked GitHub repo and upserts them. Also runs blocker detection (stale PRs, missing reviewers, etc.). Requires the project to have a repo linked and the project owner to have GitHub connected.',
+    description:
+      'Fetches open/closed pull requests from the linked GitHub repo and upserts them. Also runs blocker detection (stale PRs, missing reviewers, etc.). Requires the project to have a repo linked and the project owner to have GitHub connected.',
   })
-  @ApiParam({ name: 'projectId', description: 'Seam project UUID.', example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
+  @ApiParam({
+    name: 'projectId',
+    description: 'Seam project UUID.',
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+  })
   @ApiOkResponse({
     description: 'Number of PRs synced.',
     schema: {
       example: { synced: 12 },
-      properties: { synced: { type: 'number', description: 'Number of pull requests fetched and stored.' } },
+      properties: {
+        synced: { type: 'number', description: 'Number of pull requests fetched and stored.' },
+      },
     },
   })
   @ApiForbiddenResponse({ description: 'User does not have access to the project.' })
@@ -177,9 +199,14 @@ export class GithubController {
   @Get('prs/:projectId')
   @ApiOperation({
     summary: 'List pull requests for a project',
-    description: 'Returns paginated pull requests that have been synced for the project\'s linked GitHub repository.',
+    description:
+      "Returns paginated pull requests that have been synced for the project's linked GitHub repository.",
   })
-  @ApiParam({ name: 'projectId', description: 'Seam project UUID.', example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
+  @ApiParam({
+    name: 'projectId',
+    description: 'Seam project UUID.',
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+  })
   @ApiOkResponse({
     description: 'Paginated list of pull requests.',
     schema: {
@@ -215,11 +242,7 @@ export class GithubController {
     @Query() query: PaginationQueryDto,
   ) {
     await this.ensureProjectAccess(projectId, user.userId, false);
-    return this.githubSyncService.getPullRequests(
-      projectId,
-      query.page ?? 1,
-      query.limit ?? 20,
-    );
+    return this.githubSyncService.getPullRequests(projectId, query.page ?? 1, query.limit ?? 20);
   }
 
   private async ensureProjectAccess(
@@ -234,7 +257,11 @@ export class GithubController {
     const isOwner = await this.projectRepo.isOwner(projectId, userId);
     const isMember = await this.projectRepo.isMember(projectId, userId);
     if (ownerOnly && !isOwner) {
-      throw new AppException(ErrorCode.FORBIDDEN, 'Only project owner can perform this action', 403);
+      throw new AppException(
+        ErrorCode.FORBIDDEN,
+        'Only project owner can perform this action',
+        403,
+      );
     }
     if (!isOwner && !isMember) {
       throw new AppException(ErrorCode.FORBIDDEN, 'Access denied', 403);

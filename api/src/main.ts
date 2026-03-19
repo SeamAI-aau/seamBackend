@@ -46,19 +46,17 @@ async function bootstrap() {
   const pathsToRemove = ['/api', '/health'];
   if (document.paths) {
     for (const p of Object.keys(document.paths)) {
-      if (
-        pathsToRemove.includes(p) ||
-        pathsToRemove.some((t) => p.startsWith(t + '/'))
-      ) {
+      if (pathsToRemove.includes(p) || pathsToRemove.some((t) => p.startsWith(t + '/'))) {
         delete document.paths[p];
       }
     }
   }
   // Ensure cookie security scheme is present in the generated OpenAPI document
-  const components = (document.components ?? (document.components = {} as ComponentsObject)) as ComponentsObject;
+  const components = (document.components ??
+    (document.components = {} as ComponentsObject)) as ComponentsObject;
   components.securitySchemes = components.securitySchemes ?? {};
   // add cookie-based scheme for refresh/access tokens (used by the app)
-  (components.securitySchemes as Record<string, SecuritySchemeObject>)["access-cookie"] = {
+  (components.securitySchemes as Record<string, SecuritySchemeObject>)['access-cookie'] = {
     type: 'apiKey',
     in: 'cookie',
     name: 'accessToken',

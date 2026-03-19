@@ -48,7 +48,10 @@ export class DeveloperActivitySyncService {
    * Sync GitHub activity (commits, PRs) for a project.
    * Caller must have project access (owner or member).
    */
-  async syncGitHubActivity(projectId: string, userId: string): Promise<{ commits: number; prs: number }> {
+  async syncGitHubActivity(
+    projectId: string,
+    userId: string,
+  ): Promise<{ commits: number; prs: number }> {
     await this.ensureProjectAccess(projectId, userId);
     const project = await this.projectRepo.findById(projectId);
     if (!project?.githubRepoUrl?.trim()) return { commits: 0, prs: 0 };
@@ -71,7 +74,9 @@ export class DeveloperActivitySyncService {
       const authorLogin = (c.author?.login ?? c.commit.author.email)?.toLowerCase();
       const userId = authorLogin ? loginToUserId.get(authorLogin) : null;
       if (!userId) continue; // only count mapped developers
-      const dateStr = new Date(c.commit.author?.date ?? c.commit.committer.date).toISOString().slice(0, 10);
+      const dateStr = new Date(c.commit.author?.date ?? c.commit.committer.date)
+        .toISOString()
+        .slice(0, 10);
       const key = `${userId}:${dateStr}`;
       dailyCounts.set(key, (dailyCounts.get(key) ?? 0) + 1);
     }
@@ -95,7 +100,14 @@ export class DeveloperActivitySyncService {
 
     const prs = await this.prisma.pullRequest.findMany({
       where: { projectId },
-      select: { githubId: true, title: true, author: true, state: true, prCreatedAt: true, prUpdatedAt: true },
+      select: {
+        githubId: true,
+        title: true,
+        author: true,
+        state: true,
+        prCreatedAt: true,
+        prUpdatedAt: true,
+      },
     });
     let prsSynced = 0;
     for (const pr of prs) {
@@ -140,12 +152,11 @@ export class DeveloperActivitySyncService {
         maxResults: 50,
         fields: 'summary,created,updated,assignee',
       },
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Accept: 'application/json',
-        },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
       },
-    );
+    });
 
     const accountIdToUserId = await this.getJiraAccountIdToUserIdMap(projectId);
     let count = 0;
@@ -218,7 +229,9 @@ export class DeveloperActivitySyncService {
     const members = await this.prisma.projectMember.findMany({
       where: { projectId, status: 'ACTIVE', userId: { not: null } },
       include: {
-        user: { select: { id: true, githubUsername: true, githubAccount: { select: { username: true } } } },
+        user: {
+          select: { id: true, githubUsername: true, githubAccount: { select: { username: true } } },
+        },
       },
     });
     const map = new Map<string, string>();
@@ -229,10 +242,16 @@ export class DeveloperActivitySyncService {
     }
     const owner = await this.prisma.project.findUnique({
       where: { id: projectId },
-      select: { owner: { select: { id: true, githubUsername: true, githubAccount: { select: { username: true } } } } },
+      select: {
+        owner: {
+          select: { id: true, githubUsername: true, githubAccount: { select: { username: true } } },
+        },
+      },
     });
     if (owner?.owner) {
-      const login = (owner.owner.githubUsername ?? owner.owner.githubAccount?.username)?.toLowerCase();
+      const login = (
+        owner.owner.githubUsername ?? owner.owner.githubAccount?.username
+      )?.toLowerCase();
       if (login) map.set(login, owner.owner.id);
     }
     return map;

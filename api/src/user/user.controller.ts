@@ -94,8 +94,7 @@ export class UserController {
         file: {
           type: 'string',
           format: 'binary',
-          description:
-            'Audio file for the voice sample (e.g. audio/mpeg, audio/wav).',
+          description: 'Audio file for the voice sample (e.g. audio/mpeg, audio/wav).',
         },
       },
       required: ['file'],
@@ -155,10 +154,7 @@ export class UserController {
       },
     },
   })
-  streamMyVoiceSample(
-    @CurrentUser() user: CurrentUserType,
-    @Res() res: Response,
-  ) {
+  streamMyVoiceSample(@CurrentUser() user: CurrentUserType, @Res() res: Response) {
     return this.userService.streamVoiceSample(user.userId, res);
   }
 
@@ -222,14 +218,7 @@ export class UserController {
     description: 'Number of items per page. Defaults to 20, max 100.',
     example: 20,
   })
-  getDevelopers(
-    @CurrentUser() user: CurrentUserType,
-    @Query() query: PaginationQueryDto,
-  ) {
-    return this.userService.getDevelopers(
-      user,
-      query.page ?? 1,
-      query.limit ?? 20,
-    );
+  getDevelopers(@CurrentUser() user: CurrentUserType, @Query() query: PaginationQueryDto) {
+    return this.userService.getDevelopers(user, query.page ?? 1, query.limit ?? 20);
   }
 }

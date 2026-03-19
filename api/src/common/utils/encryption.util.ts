@@ -7,10 +7,7 @@ export function encrypt(text: string, secret: string): string {
   const key = crypto.createHash('sha256').update(secret).digest();
 
   const cipher = crypto.createCipheriv(algorithm, key, iv);
-  const encrypted = Buffer.concat([
-    cipher.update(text),
-    cipher.final(),
-  ]);
+  const encrypted = Buffer.concat([cipher.update(text), cipher.final()]);
 
   return iv.toString('hex') + ':' + encrypted.toString('hex');
 }
@@ -23,10 +20,7 @@ export function decrypt(text: string, secret: string): string {
   const key = crypto.createHash('sha256').update(secret).digest();
 
   const decipher = crypto.createDecipheriv(algorithm, key, iv);
-  const decrypted = Buffer.concat([
-    decipher.update(encryptedText),
-    decipher.final(),
-  ]);
+  const decrypted = Buffer.concat([decipher.update(encryptedText), decipher.final()]);
 
   return decrypted.toString();
 }

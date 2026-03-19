@@ -20,11 +20,7 @@ export class UserService {
     private readonly prisma: PrismaService,
   ) {}
 
-  async getDevelopers(
-    currentUser: CurrentUserType,
-    page = 1,
-    limit = 20,
-  ) {
+  async getDevelopers(currentUser: CurrentUserType, page = 1, limit = 20) {
     if (currentUser.role !== Role.SCRUM_MASTER) {
       throw new AppException(ErrorCode.FORBIDDEN, 'Only Scrum Masters can view developers', 403);
     }
@@ -43,10 +39,7 @@ export class UserService {
       this.userRepo.findById(userId),
       this.prisma.project.findMany({
         where: {
-          OR: [
-            { ownerId: userId },
-            { members: { some: { userId, status: 'ACTIVE' } } },
-          ],
+          OR: [{ ownerId: userId }, { members: { some: { userId, status: 'ACTIVE' } } }],
         },
         select: { id: true, name: true },
       }),
@@ -72,10 +65,7 @@ export class UserService {
       throw new AppException(ErrorCode.UNAUTHORIZED, 'User not found', 401);
     }
 
-    const { url, publicId } = await this.cloudinaryService.uploadVoiceSample(
-      file,
-      userId,
-    );
+    const { url, publicId } = await this.cloudinaryService.uploadVoiceSample(file, userId);
 
     if (user.voiceSamplePublicId) {
       try {
@@ -100,11 +90,7 @@ export class UserService {
   async streamVoiceSample(userId: string, res: Response): Promise<void> {
     const user = await this.userRepo.findById(userId);
     if (!user || !user.voiceSamplePublicId || !user.voiceSampleUrl) {
-      throw new AppException(
-        ErrorCode.NOT_FOUND,
-        'No voice sample uploaded for this user',
-        404,
-      );
+      throw new AppException(ErrorCode.NOT_FOUND, 'No voice sample uploaded for this user', 404);
     }
 
     const stream = await this.cloudinaryService.getVoiceSampleStream(user.voiceSampleUrl);
@@ -125,10 +111,7 @@ export class UserService {
     stream.pipe(res);
   }
 
-  private toResponseDto(
-    user: User,
-    projects?: { id: string; name: string }[],
-  ): UserResponseDto {
+  private toResponseDto(user: User, projects?: { id: string; name: string }[]): UserResponseDto {
     return {
       id: user.id,
       email: user.email,

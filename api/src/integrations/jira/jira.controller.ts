@@ -1,15 +1,5 @@
-import {
-  Controller,
-  Get,
-  Param,
-  Post,
-  Body,
-  Query,
-  UseGuards,
-  Res,
-  Inject,
-} from '@nestjs/common';
-import type{ Response } from 'express';
+import { Controller, Get, Param, Post, Body, Query, UseGuards, Res, Inject } from '@nestjs/common';
+import type { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -48,7 +38,8 @@ export class JiraController {
   @Get('connect')
   @ApiOperation({
     summary: 'Start Jira OAuth flow',
-    description: 'Redirects the browser to Atlassian\'s OAuth consent page. The user signs in and authorizes the app; Atlassian then redirects to your callback URL with a code.',
+    description:
+      "Redirects the browser to Atlassian's OAuth consent page. The user signs in and authorizes the app; Atlassian then redirects to your callback URL with a code.",
   })
   @ApiResponse({
     status: 302,
@@ -63,11 +54,24 @@ export class JiraController {
   @Get('callback')
   @ApiOperation({
     summary: 'OAuth callback (used by Atlassian redirect)',
-    description: 'Exchanges the authorization code for access and refresh tokens, stores them for the user, then redirects to your frontend (e.g. /oauth-success). Do not call this manually; Atlassian redirects here after the user authorizes.',
+    description:
+      'Exchanges the authorization code for access and refresh tokens, stores them for the user, then redirects to your frontend (e.g. /oauth-success). Do not call this manually; Atlassian redirects here after the user authorizes.',
   })
-  @ApiQuery({ name: 'code', description: 'Authorization code from Atlassian (query param).', required: true })
-  @ApiQuery({ name: 'state', description: 'State passed to connect (your user id).', required: true })
-  @ApiResponse({ status: 302, description: 'Redirect to JIRA_OAUTH_SUCCESS_REDIRECT_URL or http://localhost:5173/oauth-success.' })
+  @ApiQuery({
+    name: 'code',
+    description: 'Authorization code from Atlassian (query param).',
+    required: true,
+  })
+  @ApiQuery({
+    name: 'state',
+    description: 'State passed to connect (your user id).',
+    required: true,
+  })
+  @ApiResponse({
+    status: 302,
+    description:
+      'Redirect to JIRA_OAUTH_SUCCESS_REDIRECT_URL or http://localhost:5173/oauth-success.',
+  })
   @ApiBadRequestResponse({ description: 'Invalid or missing code; OAuth exchange failed.' })
   async callback(
     @Query('code') code: string,
@@ -84,26 +88,28 @@ export class JiraController {
   @Get('status')
   @ApiOperation({
     summary: 'Check if current user has Jira connected',
-    description: 'Returns whether the authenticated user has completed Jira OAuth and has stored tokens.',
+    description:
+      'Returns whether the authenticated user has completed Jira OAuth and has stored tokens.',
   })
   @ApiOkResponse({
     description: 'Connection status for the current user.',
     schema: {
       example: { connected: true },
-      properties: { connected: { type: 'boolean', description: 'True if Jira is connected for this user.' } },
+      properties: {
+        connected: { type: 'boolean', description: 'True if Jira is connected for this user.' },
+      },
     },
   })
   @UseGuards(JwtAuthGuard)
-  async getStatus(
-    @CurrentUser() user: CurrentUserType,
-  ): Promise<{ connected: boolean }> {
+  async getStatus(@CurrentUser() user: CurrentUserType): Promise<{ connected: boolean }> {
     return this.jiraService.getConnectionStatus(user.userId);
   }
 
   @Post('disconnect')
   @ApiOperation({
     summary: 'Disconnect Jira for the current user',
-    description: 'Removes stored Jira tokens for the authenticated user. Does not unlink project keys; use PATCH /projects/:id to clear jiraProjectKey per project.',
+    description:
+      'Removes stored Jira tokens for the authenticated user. Does not unlink project keys; use PATCH /projects/:id to clear jiraProjectKey per project.',
   })
   @ApiOkResponse({
     description: 'Jira disconnected successfully.',
@@ -118,14 +124,21 @@ export class JiraController {
   @Post('link/:projectId')
   @ApiOperation({
     summary: 'Link a Jira project to a Seam project',
-    description: 'Stores the Jira project key on the Seam project. When tasks are approved, they are synced to this Jira project. Only the project owner can link. The project owner must have Jira connected (OAuth) for sync to work.',
+    description:
+      'Stores the Jira project key on the Seam project. When tasks are approved, they are synced to this Jira project. Only the project owner can link. The project owner must have Jira connected (OAuth) for sync to work.',
   })
-  @ApiParam({ name: 'projectId', description: 'Seam project UUID to link.', example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
+  @ApiParam({
+    name: 'projectId',
+    description: 'Seam project UUID to link.',
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+  })
   @ApiOkResponse({
     description: 'Jira project key linked successfully.',
     schema: { example: { success: true } },
   })
-  @ApiBadRequestResponse({ description: 'Invalid request body (e.g. missing or empty projectKey).' })
+  @ApiBadRequestResponse({
+    description: 'Invalid request body (e.g. missing or empty projectKey).',
+  })
   @ApiForbiddenResponse({ description: 'Only the project owner can link a Jira project.' })
   @ApiNotFoundResponse({ description: 'Project not found.' })
   @ApiBody({

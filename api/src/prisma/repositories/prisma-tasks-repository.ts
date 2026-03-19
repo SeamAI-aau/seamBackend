@@ -33,9 +33,7 @@ export class PrismaTaskRepository implements ITaskRepository {
     return task as TaskWithMeetingProject | null;
   }
 
-  async findByIdWithMeetingAndProject(
-    id: string,
-  ): Promise<TaskWithMeetingAndProject | null> {
+  async findByIdWithMeetingAndProject(id: string): Promise<TaskWithMeetingAndProject | null> {
     const task = await this.prisma.task.findUnique({
       where: { id },
       include: {
@@ -62,27 +60,19 @@ export class PrismaTaskRepository implements ITaskRepository {
     });
   }
 
-  async updateAssigneeAndStatus(
-    id: string,
-    assigneeId: string,
-    status: TaskStatus,
-  ) {
+  async updateAssigneeAndStatus(id: string, assigneeId: string, status: TaskStatus) {
     return this.prisma.task.update({
       where: { id },
       data: { status, assigneeId },
     });
   }
 
-  async clearAssigneeAndStatus(
-    id: string,
-    status: TaskStatus,
-  ) {
+  async clearAssigneeAndStatus(id: string, status: TaskStatus) {
     return this.prisma.task.update({
       where: { id },
       data: { status, assigneeId: null },
     });
   }
-
 
   async findMany(filters: TaskFilters) {
     const where: Prisma.TaskWhereInput = {};

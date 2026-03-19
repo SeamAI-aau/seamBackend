@@ -18,9 +18,11 @@ import type { Prisma } from '@prisma/client';
 import type { DashboardFilterDto } from './dto/dashboard-filter.dto';
 import type { BlockersFilterDto } from './dto/blockers-filter.dto';
 
-function parseGithubRepoUrl(
-  url: string | null,
-): { repoUrl: string | null; repoName: string | null; organization: string | null } {
+function parseGithubRepoUrl(url: string | null): {
+  repoUrl: string | null;
+  repoName: string | null;
+  organization: string | null;
+} {
   if (!url?.trim()) return { repoUrl: null, repoName: null, organization: null };
   try {
     const parsed = new URL(url);
@@ -66,11 +68,7 @@ export class ProjectService {
     return project;
   }
 
-  async getUserProjects(
-    userId: string,
-    page = 1,
-    limit = 20,
-  ) {
+  async getUserProjects(userId: string, page = 1, limit = 20) {
     const skip = (page - 1) * limit;
     const [items, total] = await Promise.all([
       this.projectRepo.findUserProjects(userId, { skip, take: limit }),
@@ -139,11 +137,7 @@ export class ProjectService {
     if (userByEmail) {
       const isAlreadyMember = await this.projectRepo.isMember(projectId, userByEmail.id);
       if (isAlreadyMember) {
-        throw new AppException(
-          ErrorCode.CONFLICT,
-          'User is already a member of this project',
-          409,
-        );
+        throw new AppException(ErrorCode.CONFLICT, 'User is already a member of this project', 409);
       }
     }
 
@@ -233,7 +227,11 @@ export class ProjectService {
     const normalizedEmail = inviteEmail.trim().toLowerCase();
     const pending = await this.projectRepo.findPendingInvite(projectId, normalizedEmail);
     if (!pending) {
-      throw new AppException(ErrorCode.NOT_FOUND, 'No pending invitation found for this email', 404);
+      throw new AppException(
+        ErrorCode.NOT_FOUND,
+        'No pending invitation found for this email',
+        404,
+      );
     }
 
     const user = await this.userRepo.findById(userId);
@@ -248,11 +246,7 @@ export class ProjectService {
     const existingMember = await this.projectRepo.isMember(projectId, userId);
     if (existingMember) {
       await this.projectRepo.deleteMember(pending.id);
-      throw new AppException(
-        ErrorCode.CONFLICT,
-        'You are already a member of this project',
-        409,
-      );
+      throw new AppException(ErrorCode.CONFLICT, 'You are already a member of this project', 409);
     }
 
     const result = await this.projectRepo.acceptInvite(projectId, normalizedEmail, userId);
@@ -295,7 +289,11 @@ export class ProjectService {
   async removeMember(projectId: string, memberId: string, requesterId: string) {
     const isOwner = await this.projectRepo.isOwner(projectId, requesterId);
     if (!isOwner) {
-      throw new AppException(ErrorCode.FORBIDDEN, 'Only owner can remove members or cancel invites', 403);
+      throw new AppException(
+        ErrorCode.FORBIDDEN,
+        'Only owner can remove members or cancel invites',
+        403,
+      );
     }
 
     const member = await this.projectRepo.findMemberById(memberId);
@@ -322,12 +320,7 @@ export class ProjectService {
     return result;
   }
 
-  async getProjectMembers(
-    projectId: string,
-    userId: string,
-    page = 1,
-    limit = 20,
-  ) {
+  async getProjectMembers(projectId: string, userId: string, page = 1, limit = 20) {
     const project = await this.projectRepo.findById(projectId);
 
     if (!project) {
@@ -351,9 +344,8 @@ export class ProjectService {
       email: row.email,
       status: row.status,
       userId: row.userId ?? null,
-      user:
-        row.user ?
-          {
+      user: row.user
+        ? {
             id: row.user.id,
             email: row.user.email,
             name: row.user.name,
@@ -424,11 +416,7 @@ export class ProjectService {
     };
   }
 
-  async getProjectDashboard(
-    projectId: string,
-    userId: string,
-    filters: DashboardFilterDto = {},
-  ) {
+  async getProjectDashboard(projectId: string, userId: string, filters: DashboardFilterDto = {}) {
     const project = await this.projectRepo.findById(projectId);
 
     if (!project) {
@@ -504,13 +492,13 @@ export class ProjectService {
           take: recentMeetingsLimit,
           orderBy: { createdAt: 'desc' },
           select: {
-          id: true,
-          title: true,
-          status: true,
-          createdAt: true,
-          durationSeconds: true,
-          participants: true,
-        },
+            id: true,
+            title: true,
+            status: true,
+            createdAt: true,
+            durationSeconds: true,
+            participants: true,
+          },
         }),
         this.prisma.meeting.count({ where: meetingWhere }),
       ]),
@@ -554,8 +542,7 @@ export class ProjectService {
     const tasksApproved = taskCounts['APPROVED'] ?? 0;
     const tasksRejected = taskCounts['REJECTED'] ?? 0;
     const tasksCompleted = tasksApproved + tasksRejected + (taskCounts['SYNCED'] ?? 0);
-    const tasksPending =
-      (taskCounts['EXTRACTED'] ?? 0) + (taskCounts['SENT_TO_DEVELOPER'] ?? 0);
+    const tasksPending = (taskCounts['EXTRACTED'] ?? 0) + (taskCounts['SENT_TO_DEVELOPER'] ?? 0);
     const openBlockersCount = githubBlockersTotal + transcriptBlockersTotal;
     const sprintProgressPercent =
       totalTasks > 0 ? Math.round((tasksCompleted / totalTasks) * 100) : 0;
@@ -609,11 +596,7 @@ export class ProjectService {
    * Developer dashboard: my tasks, recent meetings, blockers, sprint progress.
    * Accessible to project members (owner or member).
    */
-  async getDeveloperDashboard(
-    projectId: string,
-    userId: string,
-    filters: DashboardFilterDto = {},
-  ) {
+  async getDeveloperDashboard(projectId: string, userId: string, filters: DashboardFilterDto = {}) {
     const project = await this.projectRepo.findById(projectId);
     if (!project) {
       throw new AppException(ErrorCode.PROJECT_NOT_FOUND, 'Project not found', 404);
@@ -708,9 +691,7 @@ export class ProjectService {
       0,
     );
     const tasksCompleted =
-      (taskCounts['APPROVED'] ?? 0) +
-      (taskCounts['REJECTED'] ?? 0) +
-      (taskCounts['SYNCED'] ?? 0);
+      (taskCounts['APPROVED'] ?? 0) + (taskCounts['REJECTED'] ?? 0) + (taskCounts['SYNCED'] ?? 0);
     const sprintProgressPercent =
       totalTasks > 0 ? Math.round((tasksCompleted / totalTasks) * 100) : 0;
 
@@ -755,11 +736,7 @@ export class ProjectService {
   }
 
   /** Returns unified list of GitHub and transcript blockers for the project. Scrum Master only. */
-  async getProjectBlockers(
-    projectId: string,
-    userId: string,
-    filters: BlockersFilterDto = {},
-  ) {
+  async getProjectBlockers(projectId: string, userId: string, filters: BlockersFilterDto = {}) {
     const project = await this.projectRepo.findById(projectId);
     if (!project) {
       throw new AppException(ErrorCode.PROJECT_NOT_FOUND, 'Project not found', 404);

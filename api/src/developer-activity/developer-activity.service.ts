@@ -71,13 +71,7 @@ export class DeveloperActivityService {
       : new Date(toDate.getTime() - 30 * 24 * 60 * 60 * 1000);
     const groupBy = filters.groupBy ?? 'day';
 
-    return this.activityRepo.getChartData(
-      projectId,
-      fromDate,
-      toDate,
-      groupBy,
-      filters.userId,
-    );
+    return this.activityRepo.getChartData(projectId, fromDate, toDate, groupBy, filters.userId);
   }
 
   private async ensureProjectAccess(projectId: string, userId: string): Promise<void> {

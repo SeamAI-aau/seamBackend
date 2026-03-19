@@ -74,10 +74,7 @@ export class PrismaGithubRepository implements IGithubRepository {
     );
   }
 
-  async findPullRequestsByProjectId(
-    projectId: string,
-    options?: { skip?: number; take?: number },
-  ) {
+  async findPullRequestsByProjectId(projectId: string, options?: { skip?: number; take?: number }) {
     return this.prisma.pullRequest.findMany({
       where: { projectId },
       orderBy: { prUpdatedAt: 'desc' },
@@ -108,10 +105,7 @@ export class PrismaGithubRepository implements IGithubRepository {
     }
   }
 
-  async findBlockersByProjectId(
-    projectId: string,
-    options?: { skip?: number; take?: number },
-  ) {
+  async findBlockersByProjectId(projectId: string, options?: { skip?: number; take?: number }) {
     return this.prisma.blocker.findMany({
       where: { projectId },
       include: { pullRequest: true },

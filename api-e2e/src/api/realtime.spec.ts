@@ -1,7 +1,14 @@
 import { JwtService } from '@nestjs/jwt';
 
 /** Callable io() from socket.io-client (module has no call signature; the .io property does). */
-type IoFn = (url: string, opts?: Record<string, unknown>) => { on: (ev: string, fn: (...args: unknown[]) => void) => unknown; disconnect: () => void; connected: boolean };
+type IoFn = (
+  url: string,
+  opts?: Record<string, unknown>,
+) => {
+  on: (ev: string, fn: (...args: unknown[]) => void) => unknown;
+  disconnect: () => void;
+  connected: boolean;
+};
 
 let io: IoFn | null = null;
 try {

@@ -101,7 +101,12 @@ export class TaskService {
       })
       .catch((err) => {
         // Log the error but don't fail the request
-        this.logger.error(`Failed to log activity for task creation: ${err instanceof Error ? err.message : String(err)}`, { taskId: task.id, projectId: body.projectId, userId });
+        this.logger.error(
+          `Failed to log activity for task creation: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+          { taskId: task.id, projectId: body.projectId, userId },
+        );
       });
 
     if (body.assigneeId) {
@@ -120,7 +125,12 @@ export class TaskService {
           metadata: { taskId: task.id, projectId: body.projectId },
         })
         .catch((err) => {
-          this.logger.error(`Failed to send notification for task assignment: ${err instanceof Error ? err.message : String(err)}`, { userId: body.assigneeId, taskId: task.id, projectId: body.projectId });
+          this.logger.error(
+            `Failed to send notification for task assignment: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+            { userId: body.assigneeId, taskId: task.id, projectId: body.projectId },
+          );
         });
     }
 
@@ -134,21 +144,22 @@ export class TaskService {
    * - Decline: set status REJECTED.
    * - Draft only: send title/description when status is SENT_TO_DEVELOPER and not yet synced.
    */
-  async updateTaskOutcome(
-    taskId: string,
-    userId: string,
-    body: UpdateTaskOutcomeDto,
-  ) {
+  async updateTaskOutcome(taskId: string, userId: string, body: UpdateTaskOutcomeDto) {
     const task = await this.taskRepo.findByIdWithMeetingAndProject(taskId);
     if (!task) {
       throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
     }
     if (task.assigneeId !== userId) {
-      throw new AppException(ErrorCode.FORBIDDEN, 'Only the assigned developer can update draft or set outcome', 403);
+      throw new AppException(
+        ErrorCode.FORBIDDEN,
+        'Only the assigned developer can update draft or set outcome',
+        403,
+      );
     }
 
     const hasStatus = body.status === 'APPROVED' || body.status === 'REJECTED';
-    const hasDraft = (body.title !== undefined && body.title !== '') || body.description !== undefined;
+    const hasDraft =
+      (body.title !== undefined && body.title !== '') || body.description !== undefined;
     if (!hasStatus && !hasDraft) {
       return task;
     }
@@ -198,16 +209,23 @@ export class TaskService {
         if (!approvedTask.jiraIssueKey) {
           await this.jiraSyncQueue.enqueue(task.id);
         }
-        this.activityLog.log({
-          projectId: task.meeting.projectId,
-          userId,
-          action: 'task.approved',
-          entityType: 'Task',
-          entityId: taskId,
-          metadata: { title: finalTask?.title ?? task.title },
-        }).catch((err) => {
-          this.logger.error(`Failed to log activity for task approval: ${err instanceof Error ? err.message : String(err)}`, { taskId, projectId: task.meeting.projectId, userId });
-        });
+        this.activityLog
+          .log({
+            projectId: task.meeting.projectId,
+            userId,
+            action: 'task.approved',
+            entityType: 'Task',
+            entityId: taskId,
+            metadata: { title: finalTask?.title ?? task.title },
+          })
+          .catch((err) => {
+            this.logger.error(
+              `Failed to log activity for task approval: ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+              { taskId, projectId: task.meeting.projectId, userId },
+            );
+          });
         const ownerId = task.meeting.project.ownerId;
         if (ownerId && ownerId !== userId) {
           this.notification
@@ -219,7 +237,12 @@ export class TaskService {
               metadata: { taskId, projectId: task.meeting.projectId },
             })
             .catch((err) => {
-              this.logger.error(`Failed to send notification for task approval: ${err instanceof Error ? err.message : String(err)}`, { userId: ownerId, taskId, projectId: task.meeting.projectId });
+              this.logger.error(
+                `Failed to send notification for task approval: ${
+                  err instanceof Error ? err.message : String(err)
+                }`,
+                { userId: ownerId, taskId, projectId: task.meeting.projectId },
+              );
             });
         }
         return finalTask ?? approvedTask;
@@ -240,16 +263,23 @@ export class TaskService {
           assigneeId: result.assigneeId ?? null,
           updatedAt: (result as unknown as { updatedAt?: Date }).updatedAt ?? new Date(),
         });
-        this.activityLog.log({
-          projectId: task.meeting.projectId,
-          userId,
-          action: 'task.declined',
-          entityType: 'Task',
-          entityId: taskId,
-          metadata: { title: task.title },
-        }).catch((err) => {
-          this.logger.error(`Failed to log activity for task decline: ${err instanceof Error ? err.message : String(err)}`, { taskId, projectId: task.meeting.projectId, userId });
-        });
+        this.activityLog
+          .log({
+            projectId: task.meeting.projectId,
+            userId,
+            action: 'task.declined',
+            entityType: 'Task',
+            entityId: taskId,
+            metadata: { title: task.title },
+          })
+          .catch((err) => {
+            this.logger.error(
+              `Failed to log activity for task decline: ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+              { taskId, projectId: task.meeting.projectId, userId },
+            );
+          });
         const ownerId = task.meeting.project.ownerId;
         if (ownerId && ownerId !== userId) {
           this.notification
@@ -261,7 +291,12 @@ export class TaskService {
               metadata: { taskId, projectId: task.meeting.projectId },
             })
             .catch((err) => {
-              this.logger.error(`Failed to send notification for task decline: ${err instanceof Error ? err.message : String(err)}`, { userId: ownerId, taskId, projectId: task.meeting.projectId });
+              this.logger.error(
+                `Failed to send notification for task decline: ${
+                  err instanceof Error ? err.message : String(err)
+                }`,
+                { userId: ownerId, taskId, projectId: task.meeting.projectId },
+              );
             });
         }
         return result;
@@ -302,7 +337,12 @@ export class TaskService {
           metadata: { title: updated.title },
         })
         .catch((err) => {
-          this.logger.error(`Failed to log activity for task draft update: ${err instanceof Error ? err.message : String(err)}`, { taskId, projectId: task.meeting.projectId, userId });
+          this.logger.error(
+            `Failed to log activity for task draft update: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+            { taskId, projectId: task.meeting.projectId, userId },
+          );
         });
       this.realtime.emitToProject(task.meeting.projectId, 'task.updated', {
         taskId,
@@ -343,11 +383,7 @@ export class TaskService {
 
     if (assigneeId === undefined || assigneeId === null || assigneeId === '') {
       if (!TaskStateMachine.canTransition(task.status, TaskStatus.EXTRACTED)) {
-        throw new AppException(
-          ErrorCode.INVALID_STATE,
-          `Cannot unassign from ${task.status}`,
-          400,
-        );
+        throw new AppException(ErrorCode.INVALID_STATE, `Cannot unassign from ${task.status}`, 400);
       }
       const result = await this.taskRepo.clearAssigneeAndStatus(taskId, TaskStatus.EXTRACTED);
       this.realtime.emitToProject(task.meeting.projectId, 'task.updated', {
@@ -357,25 +393,28 @@ export class TaskService {
         assigneeId: null,
         updatedAt: (result as unknown as { updatedAt?: Date }).updatedAt ?? new Date(),
       });
-      this.activityLog.log({
-        projectId: task.meeting.projectId,
-        userId: currentUser.userId,
-        action: 'task.unassigned',
-        entityType: 'Task',
-        entityId: taskId,
-        metadata: { title: task.title },
-      }).catch((err) => {
-        this.logger.error(`Failed to log activity for task unassignment: ${err instanceof Error ? err.message : String(err)}`, { taskId, projectId: task.meeting.projectId, userId: currentUser.userId });
-      });
+      this.activityLog
+        .log({
+          projectId: task.meeting.projectId,
+          userId: currentUser.userId,
+          action: 'task.unassigned',
+          entityType: 'Task',
+          entityId: taskId,
+          metadata: { title: task.title },
+        })
+        .catch((err) => {
+          this.logger.error(
+            `Failed to log activity for task unassignment: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+            { taskId, projectId: task.meeting.projectId, userId: currentUser.userId },
+          );
+        });
       return result;
     }
 
     if (!TaskStateMachine.canTransition(task.status, TaskStatus.SENT_TO_DEVELOPER)) {
-      throw new AppException(
-        ErrorCode.INVALID_STATE,
-        `Cannot assign from ${task.status}`,
-        400,
-      );
+      throw new AppException(ErrorCode.INVALID_STATE, `Cannot assign from ${task.status}`, 400);
     }
     const result = await this.taskRepo.updateAssigneeAndStatus(
       taskId,
@@ -395,16 +434,23 @@ export class TaskService {
       title: task.title,
       status: result.status,
     });
-    this.activityLog.log({
-      projectId: task.meeting.projectId,
-      userId: currentUser.userId,
-      action: 'task.assigned',
-      entityType: 'Task',
-      entityId: taskId,
-      metadata: { title: task.title, assigneeId },
-    }).catch((err) => {
-      this.logger.error(`Failed to log activity for task assignment: ${err instanceof Error ? err.message : String(err)}`, { taskId, projectId: task.meeting.projectId, userId: currentUser.userId });
-    });
+    this.activityLog
+      .log({
+        projectId: task.meeting.projectId,
+        userId: currentUser.userId,
+        action: 'task.assigned',
+        entityType: 'Task',
+        entityId: taskId,
+        metadata: { title: task.title, assigneeId },
+      })
+      .catch((err) => {
+        this.logger.error(
+          `Failed to log activity for task assignment: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+          { taskId, projectId: task.meeting.projectId, userId: currentUser.userId },
+        );
+      });
     this.notification
       .notify({
         userId: assigneeId,
@@ -414,7 +460,12 @@ export class TaskService {
         metadata: { taskId, projectId: task.meeting.projectId },
       })
       .catch((err) => {
-        this.logger.error(`Failed to send notification for task assignment: ${err instanceof Error ? err.message : String(err)}`, { userId: assigneeId, taskId, projectId: task.meeting.projectId });
+        this.logger.error(
+          `Failed to send notification for task assignment: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+          { userId: assigneeId, taskId, projectId: task.meeting.projectId },
+        );
       });
     return result;
   }
@@ -464,7 +515,7 @@ export class TaskService {
     if (assigneeId && assigneeId !== userId && !projectId && !meetingId) {
       throw new AppException(
         ErrorCode.VALIDATION_ERROR,
-        'When filtering by another user\'s assigneeId, projectId or meetingId is required',
+        "When filtering by another user's assigneeId, projectId or meetingId is required",
         400,
       );
     }
@@ -511,7 +562,11 @@ export class TaskService {
       { take: 200 },
     );
     const activeStatuses: TaskStatus[] = [TaskStatus.EXTRACTED, TaskStatus.SENT_TO_DEVELOPER];
-    const completedStatuses: TaskStatus[] = [TaskStatus.APPROVED, TaskStatus.REJECTED, TaskStatus.SYNCED];
+    const completedStatuses: TaskStatus[] = [
+      TaskStatus.APPROVED,
+      TaskStatus.REJECTED,
+      TaskStatus.SYNCED,
+    ];
 
     const active = all
       .filter((t) => activeStatuses.includes(t.status))

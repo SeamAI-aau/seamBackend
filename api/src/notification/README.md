@@ -20,12 +20,12 @@ If SMTP is not configured, emails are logged only and the app runs normally.
 
 ## API (JWT required)
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/notifications` | List my notifications (query: `unreadOnly`, `type`, `fromDate`, `toDate`, `page`, `limit`) |
-| GET | `/notifications/unread-count` | Unread count |
-| PATCH | `/notifications/:id/read` | Mark one as read |
-| PATCH | `/notifications/read-all` | Mark all as read |
+| Method | Path                          | Description                                                                                |
+| ------ | ----------------------------- | ------------------------------------------------------------------------------------------ |
+| GET    | `/notifications`              | List my notifications (query: `unreadOnly`, `type`, `fromDate`, `toDate`, `page`, `limit`) |
+| GET    | `/notifications/unread-count` | Unread count                                                                               |
+| PATCH  | `/notifications/:id/read`     | Mark one as read                                                                           |
+| PATCH  | `/notifications/read-all`     | Mark all as read                                                                           |
 
 ## Notification Types
 

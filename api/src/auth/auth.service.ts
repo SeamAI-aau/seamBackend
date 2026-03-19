@@ -26,7 +26,8 @@ export class AuthService {
       this.logger.warn('Registration failed: email exists', { email: dto.email });
       throw new ConflictException({
         code: ErrorCode.EMAIL_ALREADY_EXISTS,
-        message: 'A user with this email already exists. Please log in instead or use a different email address.',
+        message:
+          'A user with this email already exists. Please log in instead or use a different email address.',
         details: {
           field: 'email',
         },

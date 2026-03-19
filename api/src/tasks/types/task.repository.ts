@@ -28,24 +28,15 @@ export interface ITaskRepository {
 
   findByIdWithProject(taskId: string): Promise<TaskWithMeetingProject | null>;
 
-  findByIdWithMeetingAndProject(
-    id: string,
-  ): Promise<TaskWithMeetingAndProject | null>;
+  findByIdWithMeetingAndProject(id: string): Promise<TaskWithMeetingAndProject | null>;
 
   updateStatus(id: string, status: TaskStatus): Promise<Task>;
 
   markAsCreatedInJira(taskId: string, jiraIssueKey: string): Promise<Task>;
 
-  updateAssigneeAndStatus(
-    id: string,
-    assigneeId: string,
-    status: TaskStatus,
-  ): Promise<Task>;
+  updateAssigneeAndStatus(id: string, assigneeId: string, status: TaskStatus): Promise<Task>;
 
-  clearAssigneeAndStatus(
-    id: string,
-    status: TaskStatus,
-  ): Promise<Task>;
+  clearAssigneeAndStatus(id: string, status: TaskStatus): Promise<Task>;
 
   findMany(filters: TaskFilters): Promise<Task[]>;
 

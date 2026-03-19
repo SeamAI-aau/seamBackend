@@ -1,13 +1,4 @@
-import {
-  Controller,
-  Post,
-  Param,
-  UseGuards,
-  Body,
-  Patch,
-  Get,
-  Query,
-} from '@nestjs/common';
+import { Controller, Post, Param, UseGuards, Body, Patch, Get, Query } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserType } from '../auth/types/current-user.type';
@@ -98,10 +89,22 @@ export class TaskController {
     schema: {
       example: {
         active: [
-          { id: 'task-1', title: 'Active task', status: 'SENT_TO_DEVELOPER', meeting: { id: 'm1', title: 'Meeting' }, assignee: { id: 'u1', email: 'd@e.com', name: 'Dev' } },
+          {
+            id: 'task-1',
+            title: 'Active task',
+            status: 'SENT_TO_DEVELOPER',
+            meeting: { id: 'm1', title: 'Meeting' },
+            assignee: { id: 'u1', email: 'd@e.com', name: 'Dev' },
+          },
         ],
         completed: [
-          { id: 'task-2', title: 'Done task', status: 'APPROVED', meeting: { id: 'm2', title: 'Meeting' }, assignee: { id: 'u1', email: 'd@e.com', name: 'Dev' } },
+          {
+            id: 'task-2',
+            title: 'Done task',
+            status: 'APPROVED',
+            meeting: { id: 'm2', title: 'Meeting' },
+            assignee: { id: 'u1', email: 'd@e.com', name: 'Dev' },
+          },
         ],
       },
     },
@@ -114,13 +117,19 @@ export class TaskController {
   @ApiOperation({
     summary: 'List tasks with filters',
     description:
-      'Paginated list. At least one of projectId, meetingId, or assigneeId is required. Use assigneeId=me for current user\'s tasks. When filtering by another user\'s assigneeId, projectId or meetingId is required. Access: project member when projectId/meetingId is set.',
+      "Paginated list. At least one of projectId, meetingId, or assigneeId is required. Use assigneeId=me for current user's tasks. When filtering by another user's assigneeId, projectId or meetingId is required. Access: project member when projectId/meetingId is set.",
   })
   @ApiOkResponse({
     schema: {
       example: {
         items: [
-          { id: 'task-uuid', title: 'Implement retry backoff', status: 'SENT_TO_DEVELOPER', meeting: { id: 'meeting-uuid', title: 'Sprint planning' }, assignee: { id: 'user-uuid', email: 'dev@example.com', name: 'Dev User' } },
+          {
+            id: 'task-uuid',
+            title: 'Implement retry backoff',
+            status: 'SENT_TO_DEVELOPER',
+            meeting: { id: 'meeting-uuid', title: 'Sprint planning' },
+            assignee: { id: 'user-uuid', email: 'dev@example.com', name: 'Dev User' },
+          },
         ],
         total: 1,
         page: 1,
@@ -129,15 +138,13 @@ export class TaskController {
       },
     },
   })
-  @ApiBadRequestResponse({ description: 'When filtering by another user\'s assigneeId without projectId/meetingId.' })
+  @ApiBadRequestResponse({
+    description: "When filtering by another user's assigneeId without projectId/meetingId.",
+  })
   @ApiForbiddenResponse({ description: 'User does not have access to the project.' })
   @ApiNotFoundResponse({ description: 'Meeting not found (when meetingId is used).' })
-  list(
-    @Query() query: TaskListQueryDto,
-    @CurrentUser() user: CurrentUserType,
-  ) {
-    const assigneeIdResolved =
-      query.assigneeId === 'me' ? user.userId : query.assigneeId;
+  list(@Query() query: TaskListQueryDto, @CurrentUser() user: CurrentUserType) {
+    const assigneeIdResolved = query.assigneeId === 'me' ? user.userId : query.assigneeId;
     return this.taskService.getTasks(user.userId, {
       projectId: query.projectId,
       meetingId: query.meetingId,
@@ -157,19 +164,34 @@ export class TaskController {
   @ApiParam({ name: 'id', description: 'Task UUID.' })
   @ApiOkResponse({
     description: 'Updated task or outcome applied.',
-    schema: { example: { id: 'task-uuid', status: 'APPROVED', title: 'Final title', assigneeId: 'user-uuid' } },
+    schema: {
+      example: {
+        id: 'task-uuid',
+        status: 'APPROVED',
+        title: 'Final title',
+        assigneeId: 'user-uuid',
+      },
+    },
   })
   @ApiBadRequestResponse({
-    description: 'Invalid state transition; no fields provided; draft edit when already synced; or approve without a title (set draft first or send title in the approve request).',
+    description:
+      'Invalid state transition; no fields provided; draft edit when already synced; or approve without a title (set draft first or send title in the approve request).',
   })
-  @ApiForbiddenResponse({ description: 'Only the assigned developer can update draft or set outcome.' })
+  @ApiForbiddenResponse({
+    description: 'Only the assigned developer can update draft or set outcome.',
+  })
   @ApiNotFoundResponse({ description: 'Task not found.' })
   @ApiBody({
     type: UpdateTaskOutcomeDto,
     examples: {
       approve: {
-        summary: 'Approve (optionally send final title/description in same request; applied before Jira sync)',
-        value: { status: 'APPROVED', title: 'Final title for Jira', description: 'Final description.' },
+        summary:
+          'Approve (optionally send final title/description in same request; applied before Jira sync)',
+        value: {
+          status: 'APPROVED',
+          title: 'Final title for Jira',
+          description: 'Final description.',
+        },
       },
       decline: {
         summary: 'Decline',
@@ -197,15 +219,22 @@ export class TaskController {
   })
   @ApiParam({ name: 'id', description: 'Task UUID.' })
   @ApiOkResponse({
-    schema: { example: { id: 'task-uuid', status: 'SENT_TO_DEVELOPER', assigneeId: 'new-user-uuid' } },
+    schema: {
+      example: { id: 'task-uuid', status: 'SENT_TO_DEVELOPER', assigneeId: 'new-user-uuid' },
+    },
   })
   @ApiBadRequestResponse({ description: 'Invalid state transition.' })
-  @ApiForbiddenResponse({ description: 'Only Scrum Master or current assignee can reassign/unassign.' })
+  @ApiForbiddenResponse({
+    description: 'Only Scrum Master or current assignee can reassign/unassign.',
+  })
   @ApiNotFoundResponse({ description: 'Task not found.' })
   @ApiBody({
     type: ReassignTaskDto,
     examples: {
-      reassign: { summary: 'Reassign to another developer', value: { assigneeId: 'b2c3d4e5-f6a7-8901-bcde-f12345678901' } },
+      reassign: {
+        summary: 'Reassign to another developer',
+        value: { assigneeId: 'b2c3d4e5-f6a7-8901-bcde-f12345678901' },
+      },
       unassign: { summary: 'Unassign', value: { assigneeId: null } },
     },
   })
@@ -231,7 +260,11 @@ export class TaskController {
         transcriptId: 'transcript-uuid',
         jiraIssueKey: null,
         assigneeId: 'user-uuid',
-        meeting: { id: 'meeting-uuid', projectId: 'project-uuid', project: { id: 'project-uuid', name: 'My Project' } },
+        meeting: {
+          id: 'meeting-uuid',
+          projectId: 'project-uuid',
+          project: { id: 'project-uuid', name: 'My Project' },
+        },
       },
     },
   })

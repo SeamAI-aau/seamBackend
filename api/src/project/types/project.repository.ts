@@ -10,7 +10,13 @@ export type ProjectMemberWithUser = {
   status: 'PENDING' | 'ACTIVE';
   userId: string | null;
   createdAt: Date;
-  user: { id: string; email: string; name: string | null; role: string; githubUsername: string | null } | null;
+  user: {
+    id: string;
+    email: string;
+    name: string | null;
+    role: string;
+    githubUsername: string | null;
+  } | null;
 };
 
 export interface IProjectRepository {
@@ -18,10 +24,7 @@ export interface IProjectRepository {
 
   findById(projectId: string): Promise<Project | null>;
 
-  findUserProjects(
-    userId: string,
-    options?: { skip?: number; take?: number },
-  ): Promise<Project[]>;
+  findUserProjects(userId: string, options?: { skip?: number; take?: number }): Promise<Project[]>;
 
   countUserProjects(userId: string): Promise<number>;
 
@@ -38,7 +41,14 @@ export interface IProjectRepository {
     email: string,
     userId?: string,
   ): Promise<{
-    member: { id: string; projectId: string; email: string; status: 'PENDING' | 'ACTIVE'; userId: string | null; createdAt: Date };
+    member: {
+      id: string;
+      projectId: string;
+      email: string;
+      status: 'PENDING' | 'ACTIVE';
+      userId: string | null;
+      createdAt: Date;
+    };
     pending: boolean;
   }>;
 

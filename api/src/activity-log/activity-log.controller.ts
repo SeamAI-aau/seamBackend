@@ -4,10 +4,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserType } from '../auth/types/current-user.type';
 import { ActivityLogService } from './activity-log.service';
 import { ActivityLogQueryDto } from './dto/activity-log-query.dto';
-import {
-  ApiTags,
-  ApiBearerAuth,
-} from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
 @ApiTags('Activity Log')
 @ApiBearerAuth('access-token')
@@ -32,10 +29,7 @@ export class ActivityLogController {
   }
 
   @Get('my')
-  getMyActivity(
-    @CurrentUser() user: CurrentUserType,
-    @Query() query: ActivityLogQueryDto,
-  ) {
+  getMyActivity(@CurrentUser() user: CurrentUserType, @Query() query: ActivityLogQueryDto) {
     return this.activityLogService.getMyActivity(user.userId, {
       action: query.action,
       fromDate: query.fromDate,

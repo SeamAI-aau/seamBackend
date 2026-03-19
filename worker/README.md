@@ -12,13 +12,13 @@ Python worker that consumes **meeting-transcription** jobs from Redis (BullMQ), 
 
 ## Config (env)
 
-| Variable        | Description                          | Default        |
-|----------------|--------------------------------------|----------------|
-| `REDIS_HOST`   | Redis host for the queue             | `localhost`    |
-| `REDIS_PORT`   | Redis port                           | `6379`         |
-| `API_URL`      | NestJS API base URL                  | `http://localhost:3000` |
-| `WORKER_SECRET`| Secret for callback auth (required)  | —              |
-| `LOG_LEVEL`    | Logging level                        | `INFO`         |
+| Variable        | Description                         | Default                 |
+| --------------- | ----------------------------------- | ----------------------- |
+| `REDIS_HOST`    | Redis host for the queue            | `localhost`             |
+| `REDIS_PORT`    | Redis port                          | `6379`                  |
+| `API_URL`       | NestJS API base URL                 | `http://localhost:3000` |
+| `WORKER_SECRET` | Secret for callback auth (required) | —                       |
+| `LOG_LEVEL`     | Logging level                       | `INFO`                  |
 
 ## Pipeline placeholder
 

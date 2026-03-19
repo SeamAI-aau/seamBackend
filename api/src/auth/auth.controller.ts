@@ -1,13 +1,5 @@
 // auth/auth.controller.ts
-import {
-  Body,
-  Controller,
-  Post,
-  UseGuards,
-  Res,
-  Req,
-  BadRequestException,
-} from '@nestjs/common';
+import { Body, Controller, Post, UseGuards, Res, Req, BadRequestException } from '@nestjs/common';
 import type { Response } from 'express';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
@@ -50,7 +42,10 @@ export class AuthController {
     schema: {
       example: {
         statusCode: 400,
-        message: ['email must be an email', 'password must be longer than or equal to 6 characters'],
+        message: [
+          'email must be an email',
+          'password must be longer than or equal to 6 characters',
+        ],
         error: 'Bad Request',
       },
     },
@@ -60,7 +55,8 @@ export class AuthController {
     schema: {
       example: {
         code: ErrorCode.EMAIL_ALREADY_EXISTS,
-        message: 'A user with this email already exists. Please log in instead or use a different email address.',
+        message:
+          'A user with this email already exists. Please log in instead or use a different email address.',
         details: {
           field: 'email',
         },

@@ -54,15 +54,12 @@ export class GithubService {
     }
 
     // Fetch GitHub user profile to cache username (and optional avatar) for profile displays.
-    const userResponse: AxiosResponse<GitHubUser> = await axios.get(
-      'https://api.github.com/user',
-      {
-        headers: {
-          Accept: 'application/vnd.github.v3+json',
-          Authorization: `Bearer ${access_token}`,
-        },
+    const userResponse: AxiosResponse<GitHubUser> = await axios.get('https://api.github.com/user', {
+      headers: {
+        Accept: 'application/vnd.github.v3+json',
+        Authorization: `Bearer ${access_token}`,
       },
-    );
+    });
     const login = userResponse.data?.login;
     const avatarUrl = userResponse.data?.avatar_url;
 

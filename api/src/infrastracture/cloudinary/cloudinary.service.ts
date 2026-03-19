@@ -36,13 +36,10 @@ export class CloudinaryService {
     options: MeetingAudioUploadOptions = {},
   ): Promise<CloudinaryUploadResult> {
     const folder = this.buildMeetingAudioFolder(options.folderPrefix);
-    const result = await this.uploadStream(
-      file,
-      {
-        resource_type: CLOUDINARY_AUDIO_RESOURCE_TYPE,
-        folder,
-      },
-    );
+    const result = await this.uploadStream(file, {
+      resource_type: CLOUDINARY_AUDIO_RESOURCE_TYPE,
+      folder,
+    });
     return this.toUploadResult(result);
   }
 
@@ -55,13 +52,10 @@ export class CloudinaryService {
     userId: string,
   ): Promise<CloudinaryUploadResult> {
     const folder = `${CLOUDINARY_VOICE_SAMPLE_FOLDER}/${userId}`;
-    const result = await this.uploadStream(
-      file,
-      {
-        resource_type: CLOUDINARY_AUDIO_RESOURCE_TYPE,
-        folder,
-      },
-    );
+    const result = await this.uploadStream(file, {
+      resource_type: CLOUDINARY_AUDIO_RESOURCE_TYPE,
+      folder,
+    });
     return this.toUploadResult(result);
   }
 
@@ -154,23 +148,20 @@ export class CloudinaryService {
     options: UploadApiOptions,
   ): Promise<UploadApiResponse> {
     return new Promise((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        options,
-        (error, result) => {
-          if (error || !result) {
-            this.logger.warn({ err: error }, 'Cloudinary upload failed');
-            reject(
-              new AppException(
-                ErrorCode.CLOUDINARY_UPLOAD_FAILED,
-                'Failed to upload audio to Cloudinary',
-                500,
-              ),
-            );
-            return;
-          }
-          resolve(result);
-        },
-      );
+      const uploadStream = cloudinary.uploader.upload_stream(options, (error, result) => {
+        if (error || !result) {
+          this.logger.warn({ err: error }, 'Cloudinary upload failed');
+          reject(
+            new AppException(
+              ErrorCode.CLOUDINARY_UPLOAD_FAILED,
+              'Failed to upload audio to Cloudinary',
+              500,
+            ),
+          );
+          return;
+        }
+        resolve(result);
+      });
 
       const onStreamError = (error: Error) => {
         uploadStream.destroy();

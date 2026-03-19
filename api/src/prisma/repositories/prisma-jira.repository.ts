@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import type { IJiraRepository, JiraAccountUpsertData } from '../../integrations/jira/jira.repository';
+import type {
+  IJiraRepository,
+  JiraAccountUpsertData,
+} from '../../integrations/jira/jira.repository';
 
 @Injectable()
 export class PrismaJiraRepository implements IJiraRepository {
@@ -12,12 +15,7 @@ export class PrismaJiraRepository implements IJiraRepository {
     });
   }
 
-  async updateTokens(
-    userId: string,
-    accessToken: string,
-    refreshToken: string,
-    expiresAt: Date,
-  ) {
+  async updateTokens(userId: string, accessToken: string, refreshToken: string, expiresAt: Date) {
     return this.prisma.jiraAccount.update({
       where: { userId },
       data: {
