@@ -1,15 +1,17 @@
-import { Module } from '@nestjs/common';
+import { Module, Injectable } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MeetingProducer } from './meeting.producer';
 import { MEETING_TRANSCRIPTION_QUEUE_NAME } from '../../meeting/constants/meeting.constants';
 import { Logger } from 'nestjs-pino';
 
+@Injectable()
 class DummyMeetingProducer {
   constructor(private readonly logger: Logger) {}
 
   async enqueue(meetingId: string, audioUrl: string) {
-    this.logger.warn({ meetingId }, 'Queues are disabled; skipping enqueue');
+    this.logger.warn({ meetingId, audioUrl }, 'Queues are disabled; skipping enqueue');
+
   }
 }
 
