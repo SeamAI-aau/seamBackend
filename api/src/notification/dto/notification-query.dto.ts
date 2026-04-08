@@ -1,4 +1,4 @@
-import { IsOptional, IsBoolean, IsUUID, IsDateString, Min, Max } from 'class-validator';
+import { IsOptional, IsDateString, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class NotificationQueryDto {

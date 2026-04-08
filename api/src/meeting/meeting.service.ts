@@ -57,7 +57,9 @@ export class MeetingService {
         entityId: meeting.id,
         metadata: { title: meeting.title },
       })
-      .catch(() => {});
+      .catch(() => {
+        // ignore activity log errors
+      });
 
     this.notification
       .notify({
@@ -67,7 +69,9 @@ export class MeetingService {
         body: `A meeting recording was uploaded for project and queued for processing.`,
         metadata: { meetingId: meeting.id, projectId },
       })
-      .catch(() => {});
+      .catch(() => {
+        // ignore notification errors
+      });
 
     this.logger.log({ meetingId: meeting.id }, 'Meeting uploaded and enqueued');
 

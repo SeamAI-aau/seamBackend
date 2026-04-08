@@ -5,7 +5,7 @@ import type {
   IProjectRepository,
   ProjectMemberWithUser,
 } from '../../project/types/project.repository';
-import type { Prisma, Project } from '@prisma/client';
+import type { Project } from '@prisma/client';
 import { ProjectMemberStatus } from '@prisma/client';
 
 @Injectable()
@@ -61,7 +61,7 @@ export class PrismaProjectRepository implements IProjectRepository {
   async addMemberByEmail(
     projectId: string,
     email: string,
-    userId?: string,
+    _userId?: string,
   ): Promise<{ member: import('@prisma/client').ProjectMember; pending: boolean }> {
     const normalizedEmail = email.trim().toLowerCase();
     const member = await this.prisma.projectMember.create({

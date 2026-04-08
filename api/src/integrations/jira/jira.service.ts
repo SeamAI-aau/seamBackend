@@ -24,6 +24,9 @@ export class JiraService {
   getAuthorizationUrl(userId: string): string {
     const clientId = this.config.get<string>('JIRA_CLIENT_ID');
     const redirectUri = this.config.get<string>('JIRA_REDIRECT_URI');
+    if (!clientId?.trim() || !redirectUri?.trim()) {
+      throw new Error('Jira OAuth is not configured (JIRA_CLIENT_ID / JIRA_REDIRECT_URI)');
+    }
     const scopes = JIRA_SCOPES.join(' ');
 
     const params = new URLSearchParams({

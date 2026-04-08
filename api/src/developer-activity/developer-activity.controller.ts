@@ -8,7 +8,7 @@ import {
   DeveloperActivityQueryDto,
   DeveloperActivityChartQueryDto,
 } from './dto/developer-activity-query.dto';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
 @ApiTags('Developer Activity')
 @ApiBearerAuth('access-token')

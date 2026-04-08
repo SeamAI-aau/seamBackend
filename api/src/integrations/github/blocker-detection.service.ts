@@ -48,7 +48,9 @@ export class BlockerDetectionService {
             body: summary,
             metadata: { projectId, pullRequestId: pr.id, githubId: pr.githubId },
           })
-          .catch(() => {});
+          .catch(() => {
+            // ignore notification errors
+          });
       }
     }
   }

@@ -1,15 +1,15 @@
 import { Worker } from 'bullmq';
-import IORedis from 'ioredis';
 import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
 import { decrypt } from '../../../common/utils/encryption.util';
 
 const prisma = new PrismaClient();
 
-const connection = new IORedis({
-  host: 'localhost',
-  port: 6379,
-});
+/** Plain options avoid duplicate `ioredis` typings between root and bullmq's nested copy. */
+const connection = {
+  host: process.env.REDIS_HOST ?? 'localhost',
+  port: Number(process.env.REDIS_PORT ?? 6379),
+};
 
 new Worker(
   'jira-sync',

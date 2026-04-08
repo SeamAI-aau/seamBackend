@@ -3,10 +3,10 @@ import {
   WebSocketServer,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
 } from '@nestjs/websockets';
-import type { Server, Socket } from 'socket.io';
+import type { ExtendedError, Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeService } from './realtime.service';
 
@@ -24,45 +24,53 @@ type SocketJwtPayload = {
     credentials: true,
   },
 })
-export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server!: Server;
 
   constructor(
     private readonly jwt: JwtService,
-    private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeService,
   ) {}
 
+  afterInit(server: Server) {
+    const unauthorized = (): ExtendedError => {
+      const err = new Error('Unauthorized') as ExtendedError;
+      return err;
+    };
+
+    // Validate token during handshake so invalid tokens yield `connect_error` on client
+    server.use((socket, next) => {
+      try {
+        const authToken = (socket.handshake.auth as { token?: string } | undefined)?.token;
+        const header = socket.handshake.headers?.authorization;
+        let token: string | null = null;
+        if (authToken?.trim()) token = authToken.trim();
+        else if (typeof header === 'string') {
+          const match = header.match(/^Bearer\s+(.+)$/i);
+          if (match?.[1]) token = match[1].trim();
+        }
+        if (!token) return next(unauthorized());
+        const payload = this.jwt.verify<SocketJwtPayload>(token);
+        const userId = payload?.sub;
+        if (!userId) return next(unauthorized());
+        socket.data = socket.data || {};
+        socket.data.userId = userId;
+        return next();
+      } catch {
+        return next(unauthorized());
+      }
+    });
+  }
+
   async handleConnection(client: Socket) {
-    const token = this.extractToken(client);
-    if (!token) {
-      client.disconnect(true);
-      return;
-    }
-
-    const secret = this.config.get<string>('JWT_SECRET');
-    if (!secret) {
-      client.disconnect(true);
-      return;
-    }
-
-    let payload: SocketJwtPayload | null = null;
-    try {
-      payload = this.jwt.verify<SocketJwtPayload>(token, { secret });
-    } catch {
-      client.disconnect(true);
-      return;
-    }
-
-    const userId = payload?.sub;
+    // `afterInit` middleware already validated the token and set `client.data.userId`.
+    const userId = client.data?.userId as string | undefined;
     if (!userId) {
       client.disconnect(true);
       return;
     }
-
-    client.data.userId = userId;
     client.join(`user:${userId}`);
 
     // Join all project rooms this user can access (owner or ACTIVE member).
@@ -82,17 +90,5 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   handleDisconnect(_client: Socket) {
     // no-op
-  }
-
-  private extractToken(client: Socket): string | null {
-    const authToken = (client.handshake.auth as { token?: string } | undefined)?.token;
-    if (authToken?.trim()) return authToken.trim();
-
-    const header = client.handshake.headers?.authorization;
-    if (typeof header === 'string') {
-      const match = header.match(/^Bearer\s+(.+)$/i);
-      if (match?.[1]) return match[1].trim();
-    }
-    return null;
   }
 }

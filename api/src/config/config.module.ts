@@ -1,12 +1,25 @@
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { Module } from '@nestjs/common';
 import { ConfigModule as NestConfigModule } from '@nestjs/config';
 import * as Joi from 'joi';
+
+/** Works when cwd is repo root or `api/` (Nx serve uses `cwd: api`). */
+function resolveApiEnvFilePaths(): string[] {
+  const cwd = process.cwd();
+  return [
+    join(cwd, 'api', 'src', '.env'),
+    join(cwd, 'api', '.env'),
+    join(cwd, 'src', '.env'),
+    join(cwd, '.env'),
+  ].filter((p) => existsSync(p));
+}
 
 @Module({
   imports: [
     NestConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: 'api/src/.env',
+      envFilePath: resolveApiEnvFilePaths(),
       validationSchema: Joi.object({
         PORT: Joi.number().default(3000),
 

@@ -8,7 +8,7 @@ import { GithubService } from '../integrations/github/github.service';
 import { JiraService } from '../integrations/jira/jira.service';
 import { GithubApiClient } from '../integrations/github/github.client';
 import { parseGitHubRepoUrl } from '../integrations/github/utils/parse-repo-url';
-import type { GitHubCommit } from '../integrations/github/types/github-api.types';
+// Removed unused type import to satisfy linter
 import axios from 'axios';
 import { PullRequestState } from '@prisma/client';
 import { AppException } from '../common/errors/app.exception';

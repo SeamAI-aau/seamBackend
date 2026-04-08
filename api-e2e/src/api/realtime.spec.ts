@@ -1,34 +1,22 @@
 import { JwtService } from '@nestjs/jwt';
+import { io as socketConnect } from 'socket.io-client';
 
-/** Callable io() from socket.io-client (module has no call signature; the .io property does). */
-type IoFn = (
-  url: string,
-  opts?: Record<string, unknown>,
-) => {
-  on: (ev: string, fn: (...args: unknown[]) => void) => unknown;
-  disconnect: () => void;
-  connected: boolean;
-};
+type IoFn = typeof socketConnect;
 
-let io: IoFn | null = null;
-try {
-  const mod = require('socket.io-client');
-  const fn = typeof mod === 'function' ? mod : mod?.io;
-  io = fn ? (fn as IoFn) : null;
-} catch {
-  io = null;
-}
-
-const describeIf = io ? describe : describe.skip;
-
-describeIf('RealtimeGateway (e2e)', () => {
-  const connect = io as IoFn;
+describe('RealtimeGateway (e2e)', () => {
+  const connect: IoFn = socketConnect;
   let jwt: JwtService;
   let port: number;
   let token: string;
 
   beforeAll(async () => {
-    const secret = process.env.JWT_SECRET ?? 'test-secret';
+    const secret = process.env.JWT_SECRET;
+    if (!secret || secret.length < 10) {
+      throw new Error(
+        'JWT_SECRET (min 10 chars) must be set for realtime e2e — same value the API uses. ' +
+          'Load your api .env via test-setup or export JWT_SECRET before running nx e2e.',
+      );
+    }
     jwt = new JwtService({ secret });
     port = process.env.PORT ? Number(process.env.PORT) : 3000;
     token = jwt.sign({ sub: 'test-user-id', email: 'test@example.com' });
@@ -47,7 +35,7 @@ describeIf('RealtimeGateway (e2e)', () => {
 
     socket.on('connect_error', (err: unknown) => {
       socket.disconnect();
-      done.fail(err as Error);
+      done(err instanceof Error ? err : new Error(String(err)));
     });
   });
 
@@ -59,7 +47,7 @@ describeIf('RealtimeGateway (e2e)', () => {
 
     socket.on('connect', () => {
       socket.disconnect();
-      done.fail(new Error('Expected connect_error, but connected'));
+      done(new Error('Expected connect_error, but connected'));
     });
 
     socket.on('connect_error', () => {
