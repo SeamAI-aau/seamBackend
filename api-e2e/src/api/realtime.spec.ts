@@ -47,7 +47,7 @@ describeIf('RealtimeGateway (e2e)', () => {
 
     socket.on('connect_error', (err: unknown) => {
       socket.disconnect();
-      done.fail(err as Error);
+      done(err as Error);
     });
   });
 
@@ -57,12 +57,26 @@ describeIf('RealtimeGateway (e2e)', () => {
       reconnection: false,
     });
 
-    socket.on('connect', () => {
+    // Depending on timing, Socket.IO may emit `connect_error` (handshake rejected)
+    // OR may briefly connect and then get disconnected by the server.
+    const failTimer = setTimeout(() => {
       socket.disconnect();
-      done.fail(new Error('Expected connect_error, but connected'));
+      done(new Error('Expected connection to be rejected/disconnected, but it stayed connected'));
+    }, 1500);
+
+    socket.on('connect', () => {
+      // If it connects, it should be disconnected quickly by the server.
+      // Wait for disconnect event instead of failing immediately.
+    });
+
+    socket.on('disconnect', () => {
+      clearTimeout(failTimer);
+      expect(socket.connected).toBe(false);
+      done();
     });
 
     socket.on('connect_error', () => {
+      clearTimeout(failTimer);
       expect(socket.connected).toBe(false);
       done();
     });
