@@ -45,7 +45,7 @@ export class TaskService {
     }
 
     const status = body.assigneeId ? TaskStatus.SENT_TO_DEVELOPER : TaskStatus.EXTRACTED;
-    let createdTaskId: string;
+    let createdTaskId: string | undefined;
 
     await this.prisma.$transaction(async (tx) => {
       const meeting = await tx.meeting.create({
@@ -77,7 +77,11 @@ export class TaskService {
       createdTaskId = task.id;
     });
 
-    const task = await this.taskRepo.findByIdWithMeetingAndProject(createdTaskId!);
+    if (!createdTaskId) {
+      throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not created', 500);
+    }
+
+    const task = await this.taskRepo.findByIdWithMeetingAndProject(createdTaskId);
     if (!task) {
       throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
     }

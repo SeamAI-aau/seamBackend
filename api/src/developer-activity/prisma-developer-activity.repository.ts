@@ -108,7 +108,7 @@ export class PrismaDeveloperActivityRepository implements IDeveloperActivityRepo
       if (!buckets.has(key)) {
         buckets.set(key, { count: 0, byType: {} });
       }
-      const b = buckets.get(key)!;
+      const b = buckets.get(key) as { count: number; byType: Record<string, number> };
       const inc = a.type === 'commit_count' ? (a.metadata as { count?: number })?.count ?? 0 : 1;
       b.count += inc;
       if (a.type === 'commit_count') {

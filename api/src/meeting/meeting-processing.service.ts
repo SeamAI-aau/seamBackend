@@ -84,7 +84,9 @@ export class MeetingProcessingService {
             entityId: t.id,
             metadata: { title: t.title, assigneeId: t.assigneeId, source: 'nlp_worker' },
           })
-          .catch(() => {});
+          .catch(() => {
+            // ignore logging errors for background notifications
+          });
 
         this.notification
           .notify({
@@ -94,7 +96,9 @@ export class MeetingProcessingService {
             body: `A new task was extracted from a meeting and assigned to you: "${t.title}".`,
             metadata: { taskId: t.id, projectId },
           })
-          .catch(() => {});
+          .catch(() => {
+            // ignore notification delivery errors for background processing
+          });
       }
     }
 
@@ -149,14 +153,16 @@ export class MeetingProcessingService {
         data: {
           meetingId,
           version: nextVersion,
-          content: payload.transcript!,
+          content: payload.transcript,
           diarization: payload.diarization ?? {},
         },
       });
 
-      if (payload.tasks!.length > 0) {
+      const tasksArray = payload.tasks ?? [];
+
+      if (tasksArray.length > 0) {
         await tx.task.createMany({
-          data: payload.tasks!.map((task) => ({
+          data: tasksArray.map((task) => ({
             meetingId,
             transcriptId: transcript.id,
             title: task.title,
