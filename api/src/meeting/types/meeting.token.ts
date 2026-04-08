@@ -1,2 +1,0 @@
-export const MEETING_REPOSITORY = Symbol('MEETING_REPOSITORY');
-export const MEETING_SERVICE = Symbol('MEETING_SERVICE');

@@ -47,6 +47,3 @@ Thumbs.db
 test-output
 
 /generated/prisma
-
-# Local static frontend used for testing auth and integrations
-frontend/

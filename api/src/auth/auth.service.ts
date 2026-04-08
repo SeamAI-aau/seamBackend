@@ -26,24 +26,14 @@ export class AuthService {
       this.logger.warn('Registration failed: email exists', { email: dto.email });
       throw new ConflictException({
         code: ErrorCode.EMAIL_ALREADY_EXISTS,
-        message:
-          'A user with this email already exists. Please log in instead or use a different email address.',
-        details: {
-          field: 'email',
-        },
+        message: 'Email already exists',
       });
     }
 
     const saltRounds = parseInt(this.configService.get<string>('BCRYPT_SALT_ROUNDS') ?? '10', 10);
 
     const passwordHash = await hash(dto.password, saltRounds);
-    const createData: Omit<RegisterDto, 'password'> = {
-      email: dto.email,
-      name: dto.name,
-      ...(dto.role !== undefined ? { role: dto.role } : {}),
-    };
-
-    const user = await this.userRepo.create({ ...createData, passwordHash });
+    const user = await this.userRepo.create({ ...dto, passwordHash });
 
     this.logger.log('User registered successfully', { userId: user.id });
     return { message: 'User registered successfully' };
@@ -56,10 +46,7 @@ export class AuthService {
       this.logger.warn('Login failed: user not found', { email: dto.email });
       throw new UnauthorizedException({
         code: ErrorCode.INVALID_CREDENTIALS,
-        message: 'Invalid email or password.',
-        details: {
-          hint: 'Check that your email and password are correct.',
-        },
+        message: 'Invalid credentials',
       });
     }
 
@@ -68,10 +55,7 @@ export class AuthService {
       this.logger.warn('Login failed: invalid password', { email: dto.email });
       throw new UnauthorizedException({
         code: ErrorCode.INVALID_CREDENTIALS,
-        message: 'Invalid email or password.',
-        details: {
-          hint: 'Check that your email and password are correct.',
-        },
+        message: 'Invalid credentials',
       });
     }
 
@@ -93,22 +77,14 @@ export class AuthService {
       this.logger.warn('Refresh failed: invalid refresh token', { err: error });
       throw new UnauthorizedException({
         code: ErrorCode.UNAUTHORIZED,
-        message:
-          'The provided refresh token is invalid, expired, or has already been used. Please log in again.',
-        details: {
-          reason: 'verification_failed',
-        },
+        message: 'Invalid refresh token',
       });
     }
     const tokens = await this.getValidRefreshToken(payload.sub, oldToken);
     if (!tokens) {
       throw new UnauthorizedException({
         code: ErrorCode.UNAUTHORIZED,
-        message:
-          'The provided refresh token is invalid, expired, or has already been used. Please log in again.',
-        details: {
-          reason: 'not_found_or_expired',
-        },
+        message: 'Invalid refresh token',
       });
     }
 
