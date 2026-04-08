@@ -17,6 +17,35 @@ import * as Joi from 'joi';
         BCRYPT_SALT_ROUNDS: Joi.number().default(10),
 
         DATABASE_URL: Joi.string().required(),
+
+        CLOUDINARY_CLOUD_NAME: Joi.string().required(),
+        CLOUDINARY_API_KEY: Joi.string().required(),
+        CLOUDINARY_API_SECRET: Joi.string().required(),
+
+        REDIS_HOST: Joi.string().default('localhost'),
+        REDIS_PORT: Joi.number().default(6379),
+
+        WORKER_SECRET: Joi.string().min(1).optional(),
+
+        TOKEN_ENCRYPTION_SECRET: Joi.string().min(16).required(),
+
+        JIRA_CLIENT_ID: Joi.string().optional(),
+        JIRA_CLIENT_SECRET: Joi.string().optional(),
+        JIRA_REDIRECT_URI: Joi.string().uri().optional(),
+        JIRA_OAUTH_SUCCESS_REDIRECT_URL: Joi.string().uri().optional(),
+
+        GITHUB_CLIENT_ID: Joi.string().optional(),
+        GITHUB_CLIENT_SECRET: Joi.string().optional(),
+        GITHUB_REDIRECT_URI: Joi.string().uri().optional(),
+        GITHUB_OAUTH_SUCCESS_REDIRECT_URL: Joi.string().uri().optional(),
+
+        SMTP_HOST: Joi.string().optional(),
+        SMTP_PORT: Joi.number().optional(),
+        SMTP_SECURE: Joi.boolean().optional(),
+        SMTP_USER: Joi.string().optional(),
+        SMTP_PASS: Joi.string().optional(),
+        MAIL_FROM: Joi.string().email().optional(),
+        APP_NAME: Joi.string().default('Seam'),
       }),
     }),
   ],

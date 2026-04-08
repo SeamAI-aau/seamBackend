@@ -16,7 +16,8 @@
         "configurations": {
           "development": {
             "args": [
-              "--node-env=development"
+              "--node-env=development",
+              "--watch"
             ]
           }
         }
@@ -57,21 +58,16 @@
       },
       "serve": {
         "continuous": true,
-        "executor": "@nx/js:node",
+        "executor": "nx:run-commands",
         "defaultConfiguration": "development",
-        "dependsOn": [
-          "build"
-        ],
         "options": {
-          "buildTarget": "@org/api:build",
-          "runBuildTargetDependencies": false
+          "command": "concurrently \"webpack-cli build --node-env=development --watch\" \"nodemon --watch dist --ext js,json --exec node dist/main.js\"",
+          "cwd": "api"
         },
         "configurations": {
-          "development": {
-            "buildTarget": "@org/api:build:development"
-          },
+          "development": {},
           "production": {
-            "buildTarget": "@org/api:build:production"
+            "command": "node dist/main.js"
           }
         }
       },
@@ -83,23 +79,37 @@
     }
   },
   "dependencies": {
+    "@nestjs-modules/mailer": "^1.8.1",
+    "@nestjs/bullmq": "^11.0.4",
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.0",
+    "@nestjs/platform-socket.io": "^11.0.0",
+    "@nestjs/swagger": "^11.2.6",
+    "@nestjs/websockets": "^11.0.0",
     "@prisma/client": "^6.19.2",
     "bcryptjs": "^3.0.3",
+    "bullmq": "^5.70.1",
     "cookie-parser": "^1.4.6",
+    "ioredis": "^5.10.0",
+    "nodemailer": "^8.0.1",
     "passport-jwt": "^4.0.1",
     "prisma": "^6.19.2",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.0",
+    "swagger-ui-express": "^5.0.1",
+    "socket.io": "^4.8.1",
     "tslib": "^2.3.0"
   },
   "devDependencies": {
     "@nestjs/testing": "^11.0.0",
     "@types/cookie-parser": "^1.4.6",
-    "@types/passport-jwt": "^4.0.1"
+    "@types/nodemailer": "^7.0.11",
+    "@types/passport-jwt": "^4.0.1",
+    "concurrently": "^8.2.0",
+    "nodemon": "^3.0.1",
+    "openapi3-ts": "^2.0.0"
   }
 }
