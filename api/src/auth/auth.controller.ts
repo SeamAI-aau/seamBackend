@@ -88,152 +88,225 @@ export class AuthController {
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
+//temporarily changed by liya
+  // @Post('login')
+  // @ApiOperation({ summary: 'Log in and receive JWT + cookies' })
+  // @ApiOkResponse({
+  //   description:
+  //     'Login succeeded. Access and refresh tokens are set as HTTP-only cookies; response body contains a human message.',
+  //   schema: {
+  //     example: { message: 'Logged in successfully' },
+  //   },
+  //   headers: {
+  //     'set-cookie': {
+  //       description:
+  //         'HTTP-only cookies set for `accessToken` and `refreshToken`. May be returned multiple times (one per cookie).',
+  //       schema: { type: 'string' },
+  //     },
+  //   },
+  // })
+  // @ApiBadRequestResponse({
+  //   description: 'Validation error (e.g. invalid email format).',
+  //   schema: {
+  //     example: {
+  //       statusCode: 400,
+  //       message: ['email must be an email'],
+  //       error: 'Bad Request',
+  //     },
+  //   },
+  // })
+  // @ApiUnauthorizedResponse({
+  //   description: 'Invalid email or password.',
+  //   schema: {
+  //     example: {
+  //       code: ErrorCode.INVALID_CREDENTIALS,
+  //       message: 'Invalid email or password.',
+  //       details: {
+  //         hint: 'Check that your email and password are correct.',
+  //       },
+  //     },
+  //   },
+  // })
+  // @ApiBody({
+  //   type: LoginDto,
+  //   examples: {
+  //     default: {
+  //       summary: 'Login example',
+  //       value: {
+  //         email: 'scrum.master@example.com',
+  //         password: 'StrongP@ssw0rd',
+  //       },
+  //     },
+  //   },
+  // })
+  // async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
+  //   const { accessToken, refreshToken } = await this.authService.login(dto);
 
-  @Post('login')
-  @ApiOperation({ summary: 'Log in and receive JWT + cookies' })
-  @ApiOkResponse({
-    description:
-      'Login succeeded. Access and refresh tokens are set as HTTP-only cookies; response body contains a human message.',
-    schema: {
-      example: { message: 'Logged in successfully' },
-    },
-    headers: {
-      'set-cookie': {
-        description:
-          'HTTP-only cookies set for `accessToken` and `refreshToken`. May be returned multiple times (one per cookie).',
-        schema: { type: 'string' },
-      },
-    },
-  })
-  @ApiBadRequestResponse({
-    description: 'Validation error (e.g. invalid email format).',
-    schema: {
-      example: {
-        statusCode: 400,
-        message: ['email must be an email'],
-        error: 'Bad Request',
-      },
-    },
-  })
-  @ApiUnauthorizedResponse({
-    description: 'Invalid email or password.',
-    schema: {
-      example: {
-        code: ErrorCode.INVALID_CREDENTIALS,
-        message: 'Invalid email or password.',
-        details: {
-          hint: 'Check that your email and password are correct.',
-        },
-      },
-    },
-  })
-  @ApiBody({
-    type: LoginDto,
-    examples: {
-      default: {
-        summary: 'Login example',
-        value: {
-          email: 'scrum.master@example.com',
-          password: 'StrongP@ssw0rd',
-        },
-      },
-    },
-  })
-  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
-    const { accessToken, refreshToken } = await this.authService.login(dto);
+  //   // Set cookies
+  //   res.cookie('accessToken', accessToken, {
+  //     httpOnly: true,
+  //     secure: process.env.NODE_ENV === 'production',
+  //     maxAge: 15 * 60 * 1000,
+  //   });
 
-    // Set cookies
-    res.cookie('accessToken', accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 15 * 60 * 1000,
+  //   res.cookie('refreshToken', refreshToken, {
+  //     httpOnly: true,
+  //     secure: process.env.NODE_ENV === 'production',
+  //     maxAge: 7 * 24 * 60 * 60 * 1000,
+  //   });
+
+  //   return { message: 'Logged in successfully' };
+  // }
+
+  // @Post('refresh')
+  // @ApiOperation({ summary: 'Refresh access and refresh tokens using refresh token' })
+  // @ApiCookieAuth('access-cookie')
+  // @ApiOkResponse({
+  //   description:
+  //     'Tokens refreshed. New access and refresh tokens are set as HTTP-only cookies; body contains a message.',
+  //   schema: {
+  //     example: { message: 'Tokens refreshed' },
+  //   },
+  //   headers: {
+  //     'set-cookie': {
+  //       description:
+  //         'HTTP-only cookies updated for `accessToken` and `refreshToken`. May be returned multiple times (one per cookie).',
+  //       schema: { type: 'string' },
+  //     },
+  //   },
+  // })
+  // @ApiBadRequestResponse({
+  //   description: 'Missing refresh token (no cookie or body value).',
+  //   schema: {
+  //     example: {
+  //       code: ErrorCode.VALIDATION_ERROR,
+  //       message: 'Refresh token is required',
+  //       details: {
+  //         field: 'refreshToken',
+  //         sources: ['body', 'cookie'],
+  //       },
+  //     },
+  //   },
+  // })
+  // @ApiUnauthorizedResponse({
+  //   description: 'Refresh token is invalid, expired, or has already been used.',
+  //   schema: {
+  //     example: {
+  //       code: ErrorCode.UNAUTHORIZED,
+  //       message:
+  //         'The provided refresh token is invalid, expired, or has already been used. Please log in again.',
+  //       details: {
+  //         reason: 'verification_failed',
+  //       },
+  //     },
+  //   },
+  // })
+  // async refresh(
+  //   @Body('refreshToken') oldToken: string,
+  //   @Req() req: Request,
+  //   @Res({ passthrough: true }) res: Response,
+  // ) {
+  //   const token = oldToken ?? req.cookies?.refreshToken;
+  //   if (!token) {
+  //     throw new BadRequestException({
+  //       code: ErrorCode.VALIDATION_ERROR,
+  //       message: 'Refresh token is required',
+  //       details: {
+  //         field: 'refreshToken',
+  //         sources: ['body', 'cookie'],
+  //       },
+  //     });
+  //   }
+  //   const { accessToken, refreshToken } = await this.authService.refreshToken(token);
+
+  //   // Update cookies
+  //   res.cookie('accessToken', accessToken, {
+  //     httpOnly: true,
+  //     secure: process.env.NODE_ENV === 'production',
+  //     maxAge: 15 * 60 * 1000,
+  //   });
+
+  //   res.cookie('refreshToken', refreshToken, {
+  //     httpOnly: true,
+  //     secure: process.env.NODE_ENV === 'production',
+  //     maxAge: 7 * 24 * 60 * 60 * 1000,
+  //   });
+
+  //   return { message: 'Tokens refreshed' };
+  // }
+
+@Post('login')
+@ApiOperation({ summary: 'Log in and receive JWT + cookies' })
+@ApiOkResponse({
+  description: 'Login succeeded. Access and refresh tokens are set as HTTP-only cookies.',
+  schema: { example: { message: 'Logged in successfully' } },
+})
+async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
+  const { accessToken, refreshToken } = await this.authService.login(dto);
+
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  // Set accessToken cookie
+  res.cookie('accessToken', accessToken, {
+    httpOnly: true,
+    secure: isProduction,                    // true on Render (HTTPS)
+    sameSite: isProduction ? 'none' : 'lax', // 'none' required for cross-origin
+    maxAge: 15 * 60 * 1000,                  // 15 minutes
+    path: '/',                               // important
+  });
+
+  // Set refreshToken cookie
+  res.cookie('refreshToken', refreshToken, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000,         // 7 days
+    path: '/',
+  });
+
+  return { message: 'Logged in successfully' };
+}
+
+@Post('refresh')
+@ApiOperation({ summary: 'Refresh access and refresh tokens using refresh token' })
+async refresh(
+  @Body('refreshToken') oldToken: string,
+  @Req() req: Request,
+  @Res({ passthrough: true }) res: Response,
+) {
+  const token = oldToken ?? req.cookies?.refreshToken;
+  if (!token) {
+    throw new BadRequestException({
+      code: ErrorCode.VALIDATION_ERROR,
+      message: 'Refresh token is required',
+      details: { field: 'refreshToken', sources: ['body', 'cookie'] },
     });
-
-    res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
-
-    return { message: 'Logged in successfully' };
   }
 
-  @Post('refresh')
-  @ApiOperation({ summary: 'Refresh access and refresh tokens using refresh token' })
-  @ApiCookieAuth('access-cookie')
-  @ApiOkResponse({
-    description:
-      'Tokens refreshed. New access and refresh tokens are set as HTTP-only cookies; body contains a message.',
-    schema: {
-      example: { message: 'Tokens refreshed' },
-    },
-    headers: {
-      'set-cookie': {
-        description:
-          'HTTP-only cookies updated for `accessToken` and `refreshToken`. May be returned multiple times (one per cookie).',
-        schema: { type: 'string' },
-      },
-    },
-  })
-  @ApiBadRequestResponse({
-    description: 'Missing refresh token (no cookie or body value).',
-    schema: {
-      example: {
-        code: ErrorCode.VALIDATION_ERROR,
-        message: 'Refresh token is required',
-        details: {
-          field: 'refreshToken',
-          sources: ['body', 'cookie'],
-        },
-      },
-    },
-  })
-  @ApiUnauthorizedResponse({
-    description: 'Refresh token is invalid, expired, or has already been used.',
-    schema: {
-      example: {
-        code: ErrorCode.UNAUTHORIZED,
-        message:
-          'The provided refresh token is invalid, expired, or has already been used. Please log in again.',
-        details: {
-          reason: 'verification_failed',
-        },
-      },
-    },
-  })
-  async refresh(
-    @Body('refreshToken') oldToken: string,
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const token = oldToken ?? req.cookies?.refreshToken;
-    if (!token) {
-      throw new BadRequestException({
-        code: ErrorCode.VALIDATION_ERROR,
-        message: 'Refresh token is required',
-        details: {
-          field: 'refreshToken',
-          sources: ['body', 'cookie'],
-        },
-      });
-    }
-    const { accessToken, refreshToken } = await this.authService.refreshToken(token);
+  const { accessToken, refreshToken } = await this.authService.refreshToken(token);
 
-    // Update cookies
-    res.cookie('accessToken', accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 15 * 60 * 1000,
-    });
+  const isProduction = process.env.NODE_ENV === 'production';
 
-    res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+  // Update accessToken cookie
+  res.cookie('accessToken', accessToken, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
+    maxAge: 15 * 60 * 1000,
+    path: '/',
+  });
 
-    return { message: 'Tokens refreshed' };
-  }
+  // Update refreshToken cookie
+  res.cookie('refreshToken', refreshToken, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: '/',
+  });
+
+  return { message: 'Tokens refreshed' };
+}
 
   @Post('logout')
   @ApiOperation({ summary: 'Log out current user (clear JWT cookies)' })
