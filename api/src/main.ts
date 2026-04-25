@@ -12,9 +12,45 @@ async function bootstrap() {
   // Allow all origins by echoing the request origin and allow credentials.
   // WARNING: This effectively allows requests from any origin and is
   // insecure for production. Use only for local development/testing.
-  app.enableCors({ origin: true, credentials: true });
+
+  // enezi two lines only 
+  // app.enableCors({ origin: true, credentials: true });
+
+  // app.use(cookieParser());
+
+  // just added now
+  // === ADD THESE LINES ===
+  app.set('trust proxy', 1);   // Important for Render / proxies
+
+  const allowedOrigins = [
+    'http://localhost:5173',                    // Vite development
+    'http://localhost:3000',                    // Alternative dev port
+    'https://seam-frontend-domain.vercel.app',  // ← CHANGE THIS to your actual frontend URL
+    // Add more production/staging URLs here if needed
+  ];
+
+  app.enableCors({
+    origin: (origin, callback) => {
+      const allowed = [...allowedOrigins, undefined]; // allow Postman etc.
+      if (allowed.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'Accept',
+    ],
+    exposedHeaders: ['Set-Cookie'],
+  });
 
   app.use(cookieParser());
+  
 
   app.useGlobalPipes(
     new ValidationPipe({
