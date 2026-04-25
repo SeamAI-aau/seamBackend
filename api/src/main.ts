@@ -23,33 +23,18 @@ async function bootstrap() {
   app.set('trust proxy', 1);   // Important for Render / proxies
 
   const allowedOrigins = [
-    'http://localhost:5173',                    // Vite development
-    'http://localhost:3000',                    // Alternative dev port
-    'http://localhost:8080',           // ← This is your current frontend URL
-    'http://192.168.1.3:8080',  // ← CHANGE THIS to your actual frontend URL
-    // Add more production/staging URLs here if needed
-  ];
-
+    'http://localhost:8080',
+    'http://192.168.1.3:8080',
+    ];
+  
   app.enableCors({
-    origin: (origin, callback) => {
-      const allowed = [...allowedOrigins, undefined]; // allow Postman etc.
-      if (allowed.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
+    origin: allowedOrigins,           // ← Use array instead of function for now
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'X-Requested-With',
-      'Accept',
-    ],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
     exposedHeaders: ['Set-Cookie'],
   });
-
+    
   app.use(cookieParser());
   
 
