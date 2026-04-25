@@ -249,18 +249,18 @@ async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
   // Set accessToken cookie
   res.cookie('accessToken', accessToken, {
     httpOnly: true,
-    secure: isProduction,                    // true on Render (HTTPS)
-    sameSite: isProduction ? 'none' : 'lax', // 'none' required for cross-origin
-    maxAge: 15 * 60 * 1000,                  // 15 minutes
-    path: '/',                               // important
+    secure: true,                    // ← Force true (Render uses HTTPS)
+    sameSite: 'none',                // ← Force 'none' for cross-origin
+    maxAge: 15 * 60 * 1000,
+    path: '/',                             // important
   });
 
   // Set refreshToken cookie
   res.cookie('refreshToken', refreshToken, {
     httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? 'none' : 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000,         // 7 days
+    secure: true,                    // ← Force true
+    sameSite: 'none',                // ← Force 'none'
+    maxAge: 7 * 24 * 60 * 60 * 1000,
     path: '/',
   });
 
@@ -290,8 +290,8 @@ async refresh(
   // Update accessToken cookie
   res.cookie('accessToken', accessToken, {
     httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? 'none' : 'lax',
+    secure: true,                    // ← Force true (Render uses HTTPS)
+    sameSite: 'none',                // ← Force 'none' for cross-origin
     maxAge: 15 * 60 * 1000,
     path: '/',
   });
@@ -299,8 +299,8 @@ async refresh(
   // Update refreshToken cookie
   res.cookie('refreshToken', refreshToken, {
     httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? 'none' : 'lax',
+    secure: true,                    // ← Force true
+    sameSite: 'none',                // ← Force 'none'
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: '/',
   });
