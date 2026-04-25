@@ -25,7 +25,8 @@ async function bootstrap() {
   const allowedOrigins = [
     'http://localhost:5173',                    // Vite development
     'http://localhost:3000',                    // Alternative dev port
-    'https://seam-frontend-domain.vercel.app',  // ← CHANGE THIS to your actual frontend URL
+    'http://localhost:8080',           // ← This is your current frontend URL
+    'http://192.168.1.3:8080',  // ← CHANGE THIS to your actual frontend URL
     // Add more production/staging URLs here if needed
   ];
 
