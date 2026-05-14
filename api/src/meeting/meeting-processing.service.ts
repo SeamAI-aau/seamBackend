@@ -1,18 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Logger } from 'nestjs-pino';
-import { MeetingStatus, TaskStatus } from '@prisma/client';
+import { MeetingStatus, ProjectMemberStatus, Role, TaskStatus, type Prisma } from '@prisma/client';
 import { CloudinaryService } from '../infrastracture/cloudinary/cloudinary.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { NotificationService } from '../notification/notification.service';
 import type { WorkerResultPayload } from './dto/worker-result.dto';
 import { WORKER_RESULT_STATUS_SUCCESS } from './constants/meeting.constants';
+import { NOTIFICATION_TYPES } from '../notification/constants/notification-types';
 
 /**
- * Handles persistence of worker results: transcript + extracted tasks,
- * or marks meeting as FAILED when the worker reports an error.
- * Tasks with assigneeId from NLP worker are auto-assigned (status SENT_TO_DEVELOPER)
- * so developers can approve/decline immediately.
+ * Persists callback results from ai-engine-2 (or bridge): transcript + extracted tasks,
+ * or marks meeting as FAILED when processing reports an error.
+ * Tasks with assigneeId from NLP are auto-assigned (status SENT_TO_DEVELOPER)
+ * so developers can approve/decline immediately. Tasks without assignee stay EXTRACTED;
+ * project owner and Scrum Master members are notified to assign someone.
  * After successful transcription, deletes the meeting recording from Cloudinary
  * for security and storage (the Meeting record is kept).
  */
@@ -57,17 +59,29 @@ export class MeetingProcessingService {
       return;
     }
 
-    if (typeof payload.transcript !== 'string' || !Array.isArray(payload.tasks)) {
+    if (typeof payload.transcript !== 'string') {
       await this.prisma.meeting.update({
         where: { id: meetingId },
         data: { status: MeetingStatus.FAILED },
       });
-      this.logger.warn({ meetingId }, 'Invalid worker payload: missing transcript or tasks array');
+      this.logger.warn({ meetingId }, 'Invalid worker payload: missing transcript string');
       return;
     }
 
-    const projectId = await this.persistTranscriptAndTasks(meetingId, payload);
+    const tasks = Array.isArray(payload.tasks) ? payload.tasks : [];
+    const projectId = await this.persistTranscriptAndTasks(meetingId, { ...payload, tasks });
     this.logger.log({ meetingId }, 'Transcript and tasks saved');
+
+    const unassignedTaskCount = tasks.filter(
+      (t) => !(typeof t.assigneeId === 'string' && t.assigneeId.trim()),
+    ).length;
+    if (unassignedTaskCount > 0) {
+      await this.notifyScrumMastersOfUnassignedTasks(
+        projectId,
+        meetingId,
+        unassignedTaskCount,
+      );
+    }
 
     const autoAssignedTasks = await this.prisma.task.findMany({
       where: { meetingId, assigneeId: { not: null } },
@@ -103,6 +117,72 @@ export class MeetingProcessingService {
     }
 
     await this.deleteRecordingFromCloudinary(meetingId, meeting.audioPublicId);
+  }
+
+  /**
+   * Notifies project owner and active project members with role Scrum Master when
+   * extracted tasks have no assignee (EXTRACTED — assignee required before approve/decline).
+   */
+  private async notifyScrumMastersOfUnassignedTasks(
+    projectId: string,
+    meetingId: string,
+    pendingCount: number,
+  ): Promise<void> {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { ownerId: true },
+    });
+    if (!project) {
+      this.logger.warn({ projectId, meetingId }, 'Project not found for SM pending-task notify');
+      return;
+    }
+
+    const recipientIds = new Set<string>();
+    recipientIds.add(project.ownerId);
+
+    const members = await this.prisma.projectMember.findMany({
+      where: { projectId, status: ProjectMemberStatus.ACTIVE, userId: { not: null } },
+      include: { user: { select: { id: true, role: true } } },
+    });
+    for (const m of members) {
+      if (m.userId && m.user?.role === Role.SCRUM_MASTER) {
+        recipientIds.add(m.userId);
+      }
+    }
+
+    const title =
+      pendingCount === 1 ? 'Task needs assignee' : `${pendingCount} tasks need assignees`;
+    const body =
+      pendingCount === 1
+        ? 'A task from a processed meeting has no assignee. Assign a developer so they can review and approve or reject.'
+        : `${pendingCount} tasks from a processed meeting have no assignees. Assign developers so they can review and approve or reject.`;
+
+    this.activityLog
+      .log({
+        projectId,
+        userId: undefined,
+        action: 'meeting.tasks_pending_assignment',
+        entityType: 'Meeting',
+        entityId: meetingId,
+        metadata: { pendingTaskCount: pendingCount },
+      })
+      .catch(() => {
+        // ignore activity log errors
+      });
+
+    for (const userId of recipientIds) {
+      this.notification
+        .notify({
+          userId,
+          type: NOTIFICATION_TYPES.TASKS_PENDING_ASSIGNMENT,
+          title,
+          body,
+          metadata: { meetingId, projectId, pendingTaskCount: pendingCount },
+        })
+        .catch(() => {
+          // ignore notification errors
+        });
+    }
   }
 
   /**
@@ -155,7 +235,7 @@ export class MeetingProcessingService {
           meetingId,
           version: nextVersion,
           content: transcriptContent,
-          diarization: payload.diarization ?? {},
+          diarization: (payload.diarization ?? {}) as Prisma.InputJsonValue,
         },
       });
 
