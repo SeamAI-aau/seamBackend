@@ -2,8 +2,10 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigModule } from '@nestjs/config';
 import { GithubController } from './github.controller';
+import { GithubWebhookController } from './github-webhook.controller';
 import { GithubService } from './github.service';
 import { GithubSyncService } from './github-sync.service';
+import { GithubWebhookService } from './github-webhook.service';
 import { BlockerDetectionService } from './blocker-detection.service';
 import { GithubSyncQueue } from './queue/github-sync.queue';
 import { GithubSyncProcessor } from './queue/github-sync.processor';
@@ -48,10 +50,11 @@ class NoopGithubSyncQueue {
         ]
       : []),
   ],
-  controllers: [GithubController],
+  controllers: [GithubController, GithubWebhookController],
   providers: [
     GithubService,
     GithubSyncService,
+    GithubWebhookService,
     BlockerDetectionService,
     ...(queuesEnabled
       ? [GithubSyncQueue, GithubSyncProcessor, GithubSyncScheduler]

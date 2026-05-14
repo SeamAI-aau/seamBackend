@@ -8,6 +8,8 @@ import type { ComponentsObject, SecuritySchemeObject } from 'openapi3-ts';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
+    /** Required for `POST /integrations/github/webhook` HMAC (`X-Hub-Signature-256`) verification. */
+    rawBody: true,
   });
   // Allow all origins by echoing the request origin and allow credentials.
   // WARNING: This effectively allows requests from any origin and is
@@ -35,6 +37,7 @@ async function bootstrap() {
         '- **Upload** (`POST /projects/{projectId}/meetings`): stores audio, then Nest dispatches to **ai-engine-2** `POST /api/v1/meetings/process-audio` (multipart). The engine returns **HTTP 202** with a **`job_id`**; Nest sets the meeting to **PROCESSING** and stores **`externalJobId`**. Transcription runs on the engine in the background, not on this long-lived HTTP call.',
         '- **Callback** (`POST /internal/meetings/{id}/result`): the engine posts transcript/tasks with header **`x-worker-secret`** (same value as env **`WORKER_SECRET`**). In Swagger, authorize the **worker-secret** scheme for that route.',
         '- **Tasks**: developers approve/decline via `PATCH /tasks/{id}`; Scrum Master assigns with **`PATCH /tasks/{id}/assign`**. Unassigned extracted tasks notify the project owner + Scrum Master members (`tasks_pending_assignment`).',
+        '- **GitHub webhooks**: `POST /integrations/github/webhook` (no JWT) — verify `GITHUB_WEBHOOK_SECRET` matches GitHub; optional push-driven PR sync when `DISABLE_QUEUES` is false.',
       ].join('\n'),
     )
     .setVersion(process.env.npm_package_version ?? '1.0.0')

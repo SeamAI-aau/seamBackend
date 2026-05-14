@@ -7,6 +7,7 @@ import type {
 } from '../../project/types/project.repository';
 import type { Project } from '@prisma/client';
 import { ProjectMemberStatus } from '@prisma/client';
+import { parseGitHubRepoUrl } from '../../integrations/github/utils/parse-repo-url';
 
 @Injectable()
 export class PrismaProjectRepository implements IProjectRepository {
@@ -178,5 +179,29 @@ export class PrismaProjectRepository implements IProjectRepository {
       select: { id: true },
     });
     return projects.map((p) => p.id);
+  }
+
+  async findProjectIdsByGithubRepoFullName(fullName: string): Promise<string[]> {
+    const target = fullName.trim().toLowerCase();
+    if (!target.includes('/')) {
+      return [];
+    }
+    const projects = await this.prisma.project.findMany({
+      where: { githubRepoUrl: { not: null } },
+      select: { id: true, githubRepoUrl: true },
+    });
+    const ids: string[] = [];
+    for (const p of projects) {
+      if (!p.githubRepoUrl) continue;
+      try {
+        const { owner, repo } = parseGitHubRepoUrl(p.githubRepoUrl);
+        if (`${owner}/${repo}`.toLowerCase() === target) {
+          ids.push(p.id);
+        }
+      } catch {
+        continue;
+      }
+    }
+    return ids;
   }
 }

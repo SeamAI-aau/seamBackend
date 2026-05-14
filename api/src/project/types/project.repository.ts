@@ -72,4 +72,7 @@ export interface IProjectRepository {
   isMember(projectId: string, userId: string): Promise<boolean>;
 
   findProjectIdsWithGithubRepo(): Promise<string[]>;
+
+  /** Projects whose linked `githubRepoUrl` matches `owner/repo` (case-insensitive), e.g. from GitHub `repository.full_name`. */
+  findProjectIdsByGithubRepoFullName(fullName: string): Promise<string[]>;
 }

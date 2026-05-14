@@ -59,6 +59,8 @@ function resolveApiEnvFilePaths(): string[] {
         GITHUB_CLIENT_SECRET: Joi.string().optional(),
         GITHUB_REDIRECT_URI: Joi.string().uri().optional(),
         GITHUB_OAUTH_SUCCESS_REDIRECT_URL: Joi.string().uri().optional(),
+        /** Secret for `POST /integrations/github/webhook` (`X-Hub-Signature-256`). Must match GitHub webhook configuration. */
+        GITHUB_WEBHOOK_SECRET: Joi.string().optional().allow(''),
 
         SMTP_HOST: Joi.string().optional(),
         SMTP_PORT: Joi.number().optional(),
