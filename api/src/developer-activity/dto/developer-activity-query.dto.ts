@@ -61,8 +61,7 @@ export class DeveloperActivityQueryDto {
 
 export class DeveloperActivityChartQueryDto {
   @ApiPropertyOptional({
-    description:
-      'Start of chart range (ISO 8601). Defaults to 30 days before toDate when omitted.',
+    description: 'Start of chart range (ISO 8601). Defaults to 30 days before toDate when omitted.',
     example: '2026-04-01T00:00:00.000Z',
   })
   @IsOptional()
@@ -79,8 +78,7 @@ export class DeveloperActivityChartQueryDto {
 
   @ApiPropertyOptional({
     enum: ['day', 'week'],
-    description:
-      'Bucket size for aggregating activity counts. Week buckets start on Sunday (UTC).',
+    description: 'Bucket size for aggregating activity counts. Week buckets start on Sunday (UTC).',
     example: 'day',
     default: 'day',
   })

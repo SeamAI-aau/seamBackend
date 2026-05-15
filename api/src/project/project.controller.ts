@@ -303,7 +303,10 @@ export class ProjectController {
       'sprintProgressPercent is project-wide (completed vs total tasks). blockers merges GitHub and transcript sources.',
     schema: {
       example: {
-        project: { id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', name: 'Payments Squad — Q2 Standups' },
+        project: {
+          id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+          name: 'Payments Squad — Q2 Standups',
+        },
         kpis: {
           myTasksCount: 8,
           sprintProgressPercent: 70,
