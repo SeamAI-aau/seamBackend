@@ -83,27 +83,41 @@ export class TaskController {
   @ApiOperation({
     summary: 'Get my tasks grouped (active vs completed)',
     description:
-      'Tasks assigned to the current user, grouped into active (EXTRACTED, SENT_TO_DEVELOPER) and completed (APPROVED, REJECTED, SYNCED). Has dedicated logic; use this instead of list when you need the grouped view.',
+      'Tasks assigned to the current user, grouped into active (EXTRACTED, SENT_TO_DEVELOPER) and completed (APPROVED, REJECTED, SYNCED). ' +
+      'Active tasks are sorted by createdAt descending; completed by updatedAt descending. ' +
+      'No request body or query params. Use GET /tasks with assigneeId=me when you need pagination or project filters.',
   })
   @ApiOkResponse({
+    description:
+      'Two arrays of task objects with meeting and assignee relations. Not paginated (up to 200 tasks per group).',
     schema: {
       example: {
         active: [
           {
-            id: 'task-1',
-            title: 'Active task',
+            id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+            title: 'Implement retry backoff for Stripe webhooks',
+            description: 'Add exponential backoff with jitter.',
             status: 'SENT_TO_DEVELOPER',
-            meeting: { id: 'm1', title: 'Meeting' },
-            assignee: { id: 'u1', email: 'd@e.com', name: 'Dev' },
+            meetingId: 'meeting-uuid',
+            assigneeId: 'user-uuid',
+            createdAt: '2026-04-10T08:00:00.000Z',
+            updatedAt: '2026-04-12T14:00:00.000Z',
+            meeting: { id: 'meeting-uuid', title: 'Sprint planning', projectId: 'project-uuid' },
+            assignee: { id: 'user-uuid', email: 'dev@example.com', name: 'Dev User' },
           },
         ],
         completed: [
           {
-            id: 'task-2',
-            title: 'Done task',
+            id: 'b2c3d4e5-f6a7-8901-bcde-f12345678901',
+            title: 'Add unit tests for payment service',
+            description: null,
             status: 'APPROVED',
-            meeting: { id: 'm2', title: 'Meeting' },
-            assignee: { id: 'u1', email: 'd@e.com', name: 'Dev' },
+            meetingId: 'meeting-uuid-2',
+            assigneeId: 'user-uuid',
+            createdAt: '2026-04-01T08:00:00.000Z',
+            updatedAt: '2026-04-05T16:00:00.000Z',
+            meeting: { id: 'meeting-uuid-2', title: 'Daily standup', projectId: 'project-uuid' },
+            assignee: { id: 'user-uuid', email: 'dev@example.com', name: 'Dev User' },
           },
         ],
       },
