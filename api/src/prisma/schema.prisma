@@ -35,10 +35,11 @@ model Project {
   name                String
   description         String?
   githubRepoUrl       String?
-  jiraProjectKey      String?
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
-  ownerId             String
+  jiraProjectKey           String?
+  jiraLastActivitySyncAt   DateTime?
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
+  ownerId                  String
   activityLogs        ActivityLog[]
   blockers            Blocker[]
   developerActivities DeveloperActivity[]
@@ -136,8 +137,15 @@ model JiraAccount {
   refreshToken String
   expiresAt    DateTime
   cloudId      String
+  /// Atlassian account id (from /rest/api/3/myself) for changelog author mapping.
+  accountId    String?
+  displayName  String?
+  emailAddress String?
   createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
   user         User     @relation(fields: [userId], references: [id])
+
+  @@index([accountId])
 }
 
 model GithubAccount {
@@ -210,7 +218,7 @@ model ActivityLog {
   @@index([createdAt])
 }
 
-/// Developer activity from GitHub and Jira. Selective storage: PRs (opened/merged), daily commit counts, Jira status transitions only.
+/// Developer activity from GitHub and Jira (commits, PRs, Jira status/assignee/comments/worklog, etc.).
 model DeveloperActivity {
   id         String   @id @default(uuid())
   projectId  String
