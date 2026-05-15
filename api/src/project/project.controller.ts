@@ -291,13 +291,19 @@ export class ProjectController {
   @ApiOperation({
     summary: 'Get developer dashboard for a project',
     description:
-      'Developer-focused dashboard showing my tasks, recent meetings, and blockers for the given project.',
+      'Personal dashboard for the authenticated user on a project: tasks assigned to you, ' +
+      'recent project meetings, merged GitHub/transcript blockers, and sprint KPIs. ' +
+      'Accessible to project owner or active member. No request body. ' +
+      'Supported query params: fromDate, toDate, recentTasksLimit, recentMeetingsLimit, blockersLimit ' +
+      '(assigneeId, status, and pagination fields on DashboardFilterDto are ignored on this route).',
   })
   @ApiOkResponse({
-    description: 'Developer dashboard data for the project.',
+    description:
+      'Developer dashboard. myTasks are filtered to the current user. ' +
+      'sprintProgressPercent is project-wide (completed vs total tasks). blockers merges GitHub and transcript sources.',
     schema: {
       example: {
-        project: { id: 'proj_123', name: 'Payments Squad — Q2 Standups' },
+        project: { id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', name: 'Payments Squad — Q2 Standups' },
         kpis: {
           myTasksCount: 8,
           sprintProgressPercent: 70,
@@ -305,10 +311,16 @@ export class ProjectController {
         myTasks: {
           items: [
             {
-              id: 'task_1',
+              id: 'task-uuid',
               title: 'Refactor payment service',
+              description: 'Extract shared retry logic.',
               status: 'SENT_TO_DEVELOPER',
-              meeting: { id: 'meeting_1', title: 'Daily standup' },
+              meetingId: 'meeting-uuid',
+              assigneeId: 'user-uuid',
+              createdAt: '2026-04-10T08:00:00.000Z',
+              updatedAt: '2026-04-12T14:00:00.000Z',
+              meeting: { id: 'meeting-uuid', title: 'Daily standup' },
+              assignee: { id: 'user-uuid', email: 'dev1@example.com', name: 'Dev One' },
             },
           ],
           total: 8,
@@ -316,10 +328,10 @@ export class ProjectController {
         recentMeetings: {
           items: [
             {
-              id: 'meeting_1',
+              id: 'meeting-uuid',
               title: 'Daily standup',
               status: 'COMPLETED',
-              createdAt: '2026-03-10T09:00:00.000Z',
+              createdAt: '2026-04-10T09:00:00.000Z',
               durationSeconds: 900,
               participants: ['dev1@example.com', 'dev2@example.com'],
             },
@@ -329,12 +341,23 @@ export class ProjectController {
         blockers: {
           items: [
             {
-              id: 'blocker_1',
+              id: 'blocker-uuid-1',
               source: 'github',
+              createdAt: '2026-04-09T12:00:00.000Z',
               message: 'CI failed on main branch',
+              type: 'CI_FAILURE',
+              pullRequest: { id: 'pr-uuid', title: 'Fix webhook handler', githubId: 123 },
+            },
+            {
+              id: 'blocker-uuid-2',
+              source: 'transcript',
+              createdAt: '2026-04-08T15:30:00.000Z',
+              message: 'Blocked on external API credentials',
+              category: 'dependency',
+              meeting: { id: 'meeting-uuid', title: 'Sprint planning' },
             },
           ],
-          total: 1,
+          total: 2,
         },
       },
     },
