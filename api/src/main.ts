@@ -4,6 +4,7 @@ import { AppModule } from './app.module';
 import cookieParser from 'cookie-parser';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import type { ComponentsObject, SecuritySchemeObject } from 'openapi3-ts';
+import { buildHttpCorsOptions } from './common/config/cors.config';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -11,10 +12,8 @@ async function bootstrap() {
     /** Required for `POST /integrations/github/webhook` HMAC (`X-Hub-Signature-256`) verification. */
     rawBody: true,
   });
-  // Allow all origins by echoing the request origin and allow credentials.
-  // WARNING: This effectively allows requests from any origin and is
-  // insecure for production. Use only for local development/testing.
-  app.enableCors({ origin: true, credentials: true });
+
+  app.enableCors(buildHttpCorsOptions(process.env.CORS_ORIGINS));
 
   app.use(cookieParser());
 
@@ -38,6 +37,12 @@ async function bootstrap() {
         '- **Callback** (`POST /internal/meetings/{id}/result`): the engine posts transcript/tasks with header **`x-worker-secret`** (same value as env **`WORKER_SECRET`**). In Swagger, authorize the **worker-secret** scheme for that route.',
         '- **Tasks**: developers approve/decline via `PATCH /tasks/{id}`; Scrum Master assigns with **`PATCH /tasks/{id}/assign`**. Unassigned extracted tasks notify the project owner + Scrum Master members (`tasks_pending_assignment`).',
         '- **GitHub webhooks**: `POST /integrations/github/webhook` (no JWT) — verify `GITHUB_WEBHOOK_SECRET` matches GitHub; optional push-driven PR sync when `DISABLE_QUEUES` is false.',
+        '',
+        '### Chrome extension (Phase 9)',
+        '',
+        '- Set **`CORS_ORIGINS`** to include your dashboard URL and `chrome-extension://<extension-id>`.',
+        '- Send optional header **`X-Seam-Client: extension`** for request logging.',
+        '- Meeting upload: **`POST /projects/{projectId}/meetings`** with Bearer JWT; see `api/docs/CHROME_EXTENSION_INTEGRATION.md`.',
       ].join('\n'),
     )
     .setVersion(process.env.npm_package_version ?? '1.0.0')

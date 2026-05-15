@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 
+import { meetingUploadMaxBytes } from '../common/config/upload.config';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserType } from '../auth/types/current-user.type';
@@ -34,7 +35,13 @@ const MEETING_UPLOAD_AI_ENGINE_DOC = [
   '- **HTTP 202** + `job_id`: engine accepts the file and processes **asynchronously**; Nest waits only for download + upload (see `AI_ENGINE_REQUEST_TIMEOUT_MS`).',
   '',
   'When finished, the engine calls **`POST /internal/meetings/{meeting_id}/result`** with `x-worker-secret` and a JSON body (see tag **Internal — AI engine callbacks**).',
+  '',
+  '**Chrome extension:** send `Authorization: Bearer` and optional `X-Seam-Client: extension`. Max upload size is `MEETING_UPLOAD_MAX_MB` (see `api/docs/CHROME_EXTENSION_INTEGRATION.md`).',
 ].join('\n');
+
+const meetingUploadInterceptor = FileInterceptor('file', {
+  limits: { fileSize: meetingUploadMaxBytes(process.env.MEETING_UPLOAD_MAX_MB) },
+});
 
 @ApiTags('Meetings')
 @ApiBearerAuth('access-token')
@@ -44,7 +51,7 @@ export class MeetingController {
   constructor(private readonly meetingService: MeetingService) {}
 
   @Post()
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(meetingUploadInterceptor)
   @ApiOperation({
     summary: 'Upload a meeting recording for a project',
     description: MEETING_UPLOAD_AI_ENGINE_DOC,

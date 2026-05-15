@@ -9,7 +9,6 @@ import { GithubWebhookService } from './github-webhook.service';
 import { BlockerDetectionService } from './blocker-detection.service';
 import { GithubSyncQueue } from './queue/github-sync.queue';
 import { GithubSyncProcessor } from './queue/github-sync.processor';
-import { GithubSyncScheduler } from './github-sync-scheduler';
 import { GITHUB_REPOSITORY } from './github.tokens';
 import { PrismaGithubRepository } from '../../prisma/repositories/prisma-github.repository';
 import { PrismaModule } from '../../prisma/prisma.module';
@@ -26,7 +25,7 @@ class NoopGithubSyncQueue {
   async enqueueSyncAll() {
     return;
   }
-  async registerRepeatableSyncAll() {
+  async registerRepeatableSyncAll(_repeatEveryMs: number) {
     return;
   }
 }
@@ -57,7 +56,7 @@ class NoopGithubSyncQueue {
     GithubWebhookService,
     BlockerDetectionService,
     ...(queuesEnabled
-      ? [GithubSyncQueue, GithubSyncProcessor, GithubSyncScheduler]
+      ? [GithubSyncQueue, GithubSyncProcessor]
       : [{ provide: GithubSyncQueue, useClass: NoopGithubSyncQueue }]),
     {
       provide: GITHUB_REPOSITORY,

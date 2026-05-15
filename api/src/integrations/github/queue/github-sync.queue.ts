@@ -8,9 +8,6 @@ export const GITHUB_SYNC_QUEUE_NAME = 'github-sync';
 export const JOB_SYNC_PROJECT = 'sync-project';
 export const JOB_SYNC_ALL = 'sync-all';
 
-/** 10 minutes in ms */
-const SYNC_ALL_REPEAT_MS = 10 * 60 * 1000;
-
 @Injectable()
 export class GithubSyncQueue {
   constructor(
@@ -32,12 +29,11 @@ export class GithubSyncQueue {
   }
 
   /**
-   * Register the repeatable job that runs every 10 minutes.
-   * Call once (e.g. on module init).
+   * Register the repeatable `sync-all` job. Called once from `SchedulingBootstrapService`.
    */
-  async registerRepeatableSyncAll(): Promise<void> {
+  async registerRepeatableSyncAll(repeatEveryMs: number): Promise<void> {
     await this.queue.add(JOB_SYNC_ALL, {} as GithubSyncAllJobData, {
-      repeat: { every: SYNC_ALL_REPEAT_MS },
+      repeat: { every: repeatEveryMs },
       attempts: 1,
     });
   }
