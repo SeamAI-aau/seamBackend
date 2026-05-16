@@ -1,9 +1,24 @@
-import { Body, Controller, Post, UseGuards, Res, Req, BadRequestException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+  UseGuards,
+  Res,
+  Req,
+  BadRequestException,
+} from '@nestjs/common';
 import type { Response, Request } from 'express';
 import { AuthService } from './auth.service';
+import { AuthMailService } from './auth-mail.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { AuthThrottleGuard } from './guards/auth-throttle.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserType } from './types/current-user.type';
 import { ErrorCode } from '../common/errors/error-codes';
@@ -31,10 +46,27 @@ const cookieBaseOptions = () => {
   };
 };
 
+function setAuthCookies(
+  res: Response,
+  tokens: {
+    accessToken: string;
+    refreshToken: string;
+    accessExpiresMs: number;
+    refreshExpiresMs: number;
+  },
+): void {
+  const base = cookieBaseOptions();
+  res.cookie('accessToken', tokens.accessToken, { ...base, maxAge: tokens.accessExpiresMs });
+  res.cookie('refreshToken', tokens.refreshToken, { ...base, maxAge: tokens.refreshExpiresMs });
+}
+
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly authMail: AuthMailService,
+  ) {}
 
   @Post('register')
   @ApiOperation({ summary: 'Register a new user' })
@@ -94,8 +126,12 @@ export class AuthController {
       },
     },
   })
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
+  @UseGuards(new AuthThrottleGuard(8, 60_000))
+  async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
+    const result = await this.authService.register(dto);
+    setAuthCookies(res, result);
+    const { accessToken, refreshToken, accessExpiresMs, refreshExpiresMs, ...body } = result;
+    return body;
   }
 
   @Post('login')
@@ -148,14 +184,10 @@ export class AuthController {
       },
     },
   })
+  @UseGuards(new AuthThrottleGuard(12, 60_000))
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
-    const { accessToken, refreshToken, accessExpiresMs, refreshExpiresMs } =
-      await this.authService.login(dto);
-
-    const base = cookieBaseOptions();
-    res.cookie('accessToken', accessToken, { ...base, maxAge: accessExpiresMs });
-    res.cookie('refreshToken', refreshToken, { ...base, maxAge: refreshExpiresMs });
-
+    const tokens = await this.authService.login(dto);
+    setAuthCookies(res, tokens);
     return { message: 'Logged in successfully' };
   }
 
@@ -219,14 +251,64 @@ export class AuthController {
       });
     }
 
-    const { accessToken, refreshToken, accessExpiresMs, refreshExpiresMs } =
-      await this.authService.refreshToken(token);
-
-    const base = cookieBaseOptions();
-    res.cookie('accessToken', accessToken, { ...base, maxAge: accessExpiresMs });
-    res.cookie('refreshToken', refreshToken, { ...base, maxAge: refreshExpiresMs });
-
+    const tokens = await this.authService.refreshToken(token);
+    setAuthCookies(res, tokens);
     return { message: 'Tokens refreshed' };
+  }
+
+  @Get('verify-email')
+  @ApiOperation({
+    summary: 'Verify email from link (redirects to dashboard)',
+    description:
+      'Validates the token from the verification email and redirects to the frontend dashboard.',
+  })
+  async verifyEmail(@Query('token') token: string | undefined, @Res() res: Response) {
+    const { redirectPath } = await this.authService.verifyEmail(token ?? '');
+    const base = this.authMail.getFrontendBaseUrl();
+    const url = new URL(`${base}${redirectPath}`);
+    url.searchParams.set('emailVerified', '1');
+    res.redirect(url.toString());
+  }
+
+  @Post('resend-verification')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Resend email verification link' })
+  async resendVerification(@CurrentUser() user: CurrentUserType) {
+    return this.authService.resendVerificationEmail(user.userId);
+  }
+
+  @Post('forgot-password')
+  @UseGuards(new AuthThrottleGuard(5, 60_000))
+  @ApiOperation({ summary: 'Request a password reset email' })
+  @ApiBody({ type: ForgotPasswordDto })
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Post('reset-password')
+  @UseGuards(new AuthThrottleGuard(8, 60_000))
+  @ApiOperation({ summary: 'Reset password using token from email' })
+  @ApiBody({ type: ResetPasswordDto })
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Change password for the current user' })
+  @ApiBody({ type: ChangePasswordDto })
+  async changePassword(
+    @CurrentUser() user: CurrentUserType,
+    @Body() dto: ChangePasswordDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.changePassword(user.userId, dto);
+    const clearOpts = cookieBaseOptions();
+    res.clearCookie('accessToken', clearOpts);
+    res.clearCookie('refreshToken', clearOpts);
+    return result;
   }
 
   @Post('logout')

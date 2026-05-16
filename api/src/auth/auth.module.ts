@@ -9,10 +9,15 @@ import { JwtStrategy } from './jwt.strategy';
 import { PrismaAuthRepository } from '../prisma/repositories/prisma-auth.repository';
 import { AUTH_REPOSITORY, JWT_SERVICE } from './auth.tokens';
 import { JwtServiceAdapter } from './jwt.service';
+import { MailModule } from '../infrastracture/mail/mail.module';
+import { AuthMailService } from './auth-mail.service';
+import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
   imports: [
     ConfigModule,
+    PrismaModule,
+    MailModule,
     PassportModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
@@ -25,6 +30,7 @@ import { JwtServiceAdapter } from './jwt.service';
   controllers: [AuthController],
   providers: [
     AuthService,
+    AuthMailService,
     PrismaService,
     JwtStrategy,
     { provide: AUTH_REPOSITORY, useClass: PrismaAuthRepository },

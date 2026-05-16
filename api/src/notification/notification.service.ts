@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { INotificationRepository } from './notification.repository';
 import { NOTIFICATION_REPOSITORY } from './notification.tokens';
 import { MailService } from '../infrastracture/mail/mail.service';
+import { buildBrandedEmailHtml } from '../infrastracture/mail/email-template';
 import { EMAIL_ENABLED_TYPES } from './constants/notification-types';
 import { ConfigService } from '@nestjs/config';
 import { RealtimeService } from '../infrastracture/realtime/realtime.service';
@@ -23,6 +24,9 @@ export interface NotifyEmailOnlyInput {
   type: string;
   title: string;
   body?: string;
+  /** Primary button in branded HTML (e.g. invitation accept) */
+  actionUrl?: string;
+  actionLabel?: string;
 }
 
 @Injectable()
@@ -84,11 +88,46 @@ export class NotificationService {
    */
   async notifyEmailOnly(input: NotifyEmailOnlyInput): Promise<boolean> {
     const { subject, text } = this.buildEmailContent({ ...input, userId: '' }, null);
+    const appName = this.config.get<string>('APP_NAME') ?? 'Seam AI';
+    const frontendUrl = (
+      this.config.get<string>('APP_URL') ??
+      this.config.get<string>('FRONTEND_URL') ??
+      'http://localhost:8080'
+    ).replace(/\/+$/, '');
+
+    const html =
+      input.actionUrl && input.actionLabel
+        ? buildBrandedEmailHtml({
+            appName,
+            logoUrl: `${frontendUrl}/images/logo_landscape.png`,
+            greeting: 'Hi,',
+            headline: input.title,
+            body:
+              input.body ??
+              'Sign in or create an account with this email address to accept the invitation.',
+            action: {
+              label: input.actionLabel,
+              href: input.actionUrl,
+            },
+            footerNote: 'Use the same email address that received this invitation.',
+          })
+        : undefined;
+
+    const plainText =
+      input.actionUrl && html
+        ? `${text}\n\n${input.actionUrl}`
+        : text;
+
     return this.mail.send({
       to: input.to,
       subject,
-      text,
+      text: plainText,
+      html,
     });
+  }
+
+  isEmailConfigured(): boolean {
+    return this.mail.isConfigured();
   }
 
   async getForUser(
