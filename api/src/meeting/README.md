@@ -15,7 +15,7 @@ Meeting upload → **ai-engine-2** over HTTP; results return via **`POST /intern
 
    - `POST /internal/meetings/:id/result`  
      Header: `x-worker-secret: <WORKER_SECRET>` (same value in ai-engine `WORKER_SECRET` and Nest `WORKER_SECRET`)  
-     Body: `WorkerResultPayload` (see `dto/worker-result.dto.ts`). Optional `blockers` → **TranscriptBlocker**.
+   Body: `WorkerResultPayload` (see `dto/worker-result.dto.ts`). Payload includes `new_tasks`, `transitioned_tasks`, `blockers`, and `summary`. Blockers are persisted to **TranscriptBlocker**.
 
 3. **Persistence** – `MeetingProcessingService` saves transcript + tasks (+ optional transcript blockers), sets status → `TASKS_EXTRACTED`, or `FAILED` on error/invalid payload. Tasks **with** NLP `assigneeId` → `task_assigned` to the developer; tasks **without** assignee → **`tasks_pending_assignment`** to project **owner** and **Scrum Master** members (so they can assign before approve/decline). Optional per-task Jira proposal fields (`task_id`, `suggested_status`, `jiraAction`) are stored for post-approve create/transition (no Jira writes on callback).
 

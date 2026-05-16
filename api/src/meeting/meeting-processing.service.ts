@@ -1,11 +1,22 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Logger } from 'nestjs-pino';
-import { MeetingStatus, ProjectMemberStatus, Role, TaskStatus, type Prisma } from '@prisma/client';
+import {
+  JiraProposalAction,
+  MeetingStatus,
+  ProjectMemberStatus,
+  Role,
+  TaskStatus,
+  type Prisma,
+} from '@prisma/client';
 import { CloudinaryService } from '../infrastracture/cloudinary/cloudinary.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { NotificationService } from '../notification/notification.service';
-import type { WorkerResultPayload } from './dto/worker-result.dto';
+import type {
+  WorkerResultPayload,
+  WorkerTaskPayload,
+  WorkerTransitionedTaskPayload,
+} from './dto/worker-result.dto';
 import { deriveJiraProposal } from './utils/derive-jira-proposal.util';
 import { WORKER_RESULT_STATUS_SUCCESS } from './constants/meeting.constants';
 import { NOTIFICATION_TYPES } from '../notification/constants/notification-types';
@@ -69,13 +80,12 @@ export class MeetingProcessingService {
       return;
     }
 
-    const tasks = Array.isArray(payload.tasks) ? payload.tasks : [];
-    const projectId = await this.persistTranscriptAndTasks(meetingId, { ...payload, tasks });
+    const incomingTasks = this.resolveIncomingTasks(payload);
+    const normalizedTasks = this.normalizeNewTasks(incomingTasks);
+    const projectId = await this.persistTranscriptAndTasks(meetingId, payload, normalizedTasks);
     this.logger.log({ meetingId }, 'Transcript and tasks saved');
 
-    const unassignedTaskCount = tasks.filter(
-      (t) => !(typeof t.assigneeId === 'string' && t.assigneeId.trim()),
-    ).length;
+    const unassignedTaskCount = normalizedTasks.filter((t) => !t.assigneeId).length;
     if (unassignedTaskCount > 0) {
       await this.notifyScrumMastersOfUnassignedTasks(
         projectId,
@@ -209,6 +219,17 @@ export class MeetingProcessingService {
   private async persistTranscriptAndTasks(
     meetingId: string,
     payload: WorkerResultPayload,
+    normalizedTasks: Array<{
+      title: string;
+      description: string | null;
+      assigneeId: string | null;
+      confidenceScore: number | null;
+      jiraIssueKey: string | null;
+      jiraProposalAction: JiraProposalAction | null;
+      jiraProposalIssueKey: string | null;
+      jiraProposalTransitionId: string | null;
+      jiraProposalTargetStatus: string | null;
+    }>,
   ): Promise<string> {
     let projectId = '';
     await this.prisma.$transaction(async (tx) => {
@@ -236,59 +257,46 @@ export class MeetingProcessingService {
           meetingId,
           version: nextVersion,
           content: transcriptContent,
-          diarization: (payload.diarization ?? {}) as Prisma.InputJsonValue,
+          diarization: {} as Prisma.InputJsonValue,
         },
       });
 
-      if (Array.isArray(payload.tasks) && payload.tasks.length > 0) {
+      if (normalizedTasks.length > 0) {
         await tx.task.createMany({
-          data: payload.tasks.map((task) => {
-            const proposal = deriveJiraProposal(task);
-            return {
-              meetingId,
-              transcriptId: transcript.id,
-              title: task.title,
-              description: task.description ?? null,
-              status: task.assigneeId ? TaskStatus.SENT_TO_DEVELOPER : TaskStatus.EXTRACTED,
-              assigneeId: task.assigneeId ?? null,
-              confidenceScore:
-                typeof task.confidence === 'number' && !Number.isNaN(task.confidence)
-                  ? task.confidence
-                  : null,
-              jiraProposalAction: proposal.jiraProposalAction,
-              jiraProposalIssueKey: proposal.jiraProposalIssueKey,
-              jiraProposalTransitionId: proposal.jiraProposalTransitionId,
-              jiraProposalTargetStatus: proposal.jiraProposalTargetStatus,
-            };
-          }),
+          data: normalizedTasks.map((task) => ({
+            meetingId,
+            transcriptId: transcript.id,
+            title: task.title,
+            description: task.description ?? null,
+            status: task.assigneeId ? TaskStatus.SENT_TO_DEVELOPER : TaskStatus.EXTRACTED,
+            assigneeId: task.assigneeId ?? null,
+            confidenceScore: task.confidenceScore ?? null,
+            jiraIssueKey: task.jiraIssueKey ?? null,
+            jiraProposalAction: task.jiraProposalAction ?? null,
+            jiraProposalIssueKey: task.jiraProposalIssueKey ?? null,
+            jiraProposalTransitionId: task.jiraProposalTransitionId ?? null,
+            jiraProposalTargetStatus: task.jiraProposalTargetStatus ?? null,
+          })),
         });
       }
 
-      const blockers = payload.blockers ?? [];
+      const blockers = Array.isArray(payload.blockers) ? payload.blockers : [];
       if (blockers.length > 0) {
         await tx.transcriptBlocker.createMany({
           data: blockers.map((b) => ({
             meetingId,
             projectId: meeting.projectId,
-            category: b.category ?? null,
-            message: b.message,
+            category: b.severity ?? null,
+            message: b.description,
           })),
         });
       }
 
       const meetingUpdate: {
         status: MeetingStatus;
-        durationSeconds?: number;
-        participants?: object;
       } = {
         status: MeetingStatus.TASKS_EXTRACTED,
       };
-      if (payload.meeting?.durationSeconds != null && payload.meeting.durationSeconds > 0) {
-        meetingUpdate.durationSeconds = payload.meeting.durationSeconds;
-      }
-      if (Array.isArray(payload.meeting?.participants) && payload.meeting.participants.length > 0) {
-        meetingUpdate.participants = payload.meeting.participants as object;
-      }
 
       await tx.meeting.update({
         where: { id: meetingId },
@@ -296,5 +304,109 @@ export class MeetingProcessingService {
       });
     });
     return projectId;
+  }
+
+  private normalizeNewTasks(
+    tasks: Array<WorkerTaskPayload | WorkerTransitionedTaskPayload>,
+  ): Array<{
+    title: string;
+    description: string | null;
+    assigneeId: string | null;
+    confidenceScore: number | null;
+    jiraIssueKey: string | null;
+    jiraProposalAction: JiraProposalAction | null;
+    jiraProposalIssueKey: string | null;
+    jiraProposalTransitionId: string | null;
+    jiraProposalTargetStatus: string | null;
+  }> {
+    if (!Array.isArray(tasks)) {
+      return [];
+    }
+
+    return tasks
+      .map((task) => {
+        if (!task || typeof task !== 'object') {
+          return null;
+        }
+
+        const taskPayload = task as WorkerTaskPayload;
+        const title = (taskPayload.title ?? '').trim();
+        const description = (taskPayload.description ?? '').trim();
+        const assigneeId = this.resolveAssigneeId(taskPayload.assigneeId, taskPayload.assignee);
+        const confidenceScore = this.normalizeConfidence(taskPayload.confidence);
+        const jiraIssueKey = typeof taskPayload.jiraIssueKey === 'string' && taskPayload.jiraIssueKey.trim()
+          ? taskPayload.jiraIssueKey.trim()
+          : typeof taskPayload.task_id === 'string' && taskPayload.task_id.trim()
+            ? taskPayload.task_id.trim()
+            : null;
+        const jiraProposal = deriveJiraProposal(taskPayload);
+
+        return {
+          title: title || description || 'Extracted task',
+          description: description || null,
+          assigneeId,
+          confidenceScore,
+          jiraIssueKey,
+          jiraProposalAction: jiraProposal.jiraProposalAction,
+          jiraProposalIssueKey: jiraProposal.jiraProposalIssueKey,
+          jiraProposalTransitionId: jiraProposal.jiraProposalTransitionId,
+          jiraProposalTargetStatus: jiraProposal.jiraProposalTargetStatus,
+        };
+      })
+      .filter((task): task is {
+        title: string;
+        description: string | null;
+        assigneeId: string | null;
+        confidenceScore: number | null;
+        jiraIssueKey: string | null;
+        jiraProposalAction: JiraProposalAction | null;
+        jiraProposalIssueKey: string | null;
+        jiraProposalTransitionId: string | null;
+        jiraProposalTargetStatus: string | null;
+      } => Boolean(task && task.title.trim().length > 0));
+  }
+
+  private resolveIncomingTasks(
+    payload: WorkerResultPayload,
+  ): Array<WorkerTaskPayload | WorkerTransitionedTaskPayload> {
+    if (Array.isArray(payload.tasks)) {
+      return payload.tasks;
+    }
+    const merged: Array<WorkerTaskPayload | WorkerTransitionedTaskPayload> = [];
+    if (Array.isArray(payload.transitioned_tasks)) {
+      merged.push(...payload.transitioned_tasks);
+    }
+    if (Array.isArray(payload.new_tasks)) {
+      merged.push(...payload.new_tasks);
+    }
+    return merged;
+  }
+
+  private resolveAssigneeId(
+    assigneeId?: string,
+    assignee?: string,
+  ): string | null {
+    if (this.isUuid(assigneeId)) {
+      return assigneeId!.trim();
+    }
+    if (this.isUuid(assignee)) {
+      return assignee!.trim();
+    }
+    return null;
+  }
+
+  private normalizeConfidence(confidence: unknown): number | null {
+    if (typeof confidence === 'number' && Number.isFinite(confidence)) {
+      return confidence;
+    }
+    const parsed = Number(confidence);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private isUuid(value?: string): boolean {
+    if (!value) return false;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value.trim(),
+    );
   }
 }
