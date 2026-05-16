@@ -5,7 +5,9 @@ import { encrypt, decrypt } from '../../common/utils/encryption.util';
 import type { IGithubRepository } from './github.repository';
 import { GITHUB_REPOSITORY } from './github.tokens';
 import type { GitHubTokenResponse, GitHubUser } from './types/github-api.types';
+import type { GitHubAvailableReposResult } from './types/github-repo.types';
 import { GITHUB_AUTH_URL, GITHUB_TOKEN_URL, GITHUB_SCOPES } from './constants/github.constants';
+import { GithubApiClient } from './github.client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
@@ -82,6 +84,48 @@ export class GithubService {
   async getConnectionStatus(userId: string): Promise<{ connected: boolean }> {
     const account = await this.githubRepo.findAccountByUserId(userId);
     return { connected: !!account };
+  }
+
+  /**
+   * Lists repositories the user can access (for linking to a Seam project).
+   */
+  async listAvailableRepositories(
+    userId: string,
+    options?: { query?: string; perPage?: number; page?: number },
+  ): Promise<GitHubAvailableReposResult> {
+    const accessToken = await this.getValidAccessToken(userId);
+    const perPage = Math.min(Math.max(options?.perPage ?? 50, 1), 100);
+    const page = Math.max(options?.page ?? 1, 1);
+
+    const client = new GithubApiClient(accessToken);
+    const { items: raw, hasNext } = await client.listUserRepositories({ perPage, page });
+
+    const trimmedQuery = options?.query?.trim().toLowerCase();
+    let items = raw.map((r) => ({
+      id: r.id,
+      fullName: r.full_name,
+      name: r.name,
+      htmlUrl: r.html_url.replace(/\/$/, ''),
+      private: r.private,
+      ownerLogin: r.owner.login,
+      description: r.description ?? null,
+    }));
+
+    if (trimmedQuery) {
+      items = items.filter(
+        (r) =>
+          r.fullName.toLowerCase().includes(trimmedQuery) ||
+          r.name.toLowerCase().includes(trimmedQuery),
+      );
+    }
+
+    return {
+      items,
+      page,
+      perPage,
+      total: items.length,
+      isLast: !hasNext,
+    };
   }
 
   async disconnect(userId: string): Promise<void> {

@@ -6,6 +6,7 @@ import {
   Headers,
   HttpCode,
   UnauthorizedException,
+  Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -43,6 +44,8 @@ const AI_ENGINE_PROCESS_AUDIO_DOC = [
 @ApiSecurity('worker-secret')
 @Controller('internal/meetings')
 export class InternalMeetingController {
+  private readonly logger = new Logger(InternalMeetingController.name);
+
   constructor(
     private readonly config: ConfigService,
     private readonly meetingProcessingService: MeetingProcessingService,
@@ -57,7 +60,7 @@ export class InternalMeetingController {
       '',
       'Send header **`x-worker-secret`** with the same value as Nest env **`WORKER_SECRET`**.',
       '',
-      '**Success body:** `status: "success"` with `transcript` (string), `tasks` (array of `{ title, description?, assigneeId? }`), optional `diarization`, `blockers`, `meeting`. Meeting becomes **`TASKS_EXTRACTED`**; developers with `assigneeId` get `task_assigned`; unassigned tasks notify owner + Scrum Masters (`tasks_pending_assignment`).',
+      '**Success body:** `status: "success"` with `transcript`, `new_tasks` (full payload), `transitioned_tasks` (reconciled status suggestions), `blockers`, and `summary`. Meeting becomes **`TASKS_EXTRACTED`**; developers with resolved assignee IDs get `task_assigned`; unassigned tasks notify owner + Scrum Masters (`tasks_pending_assignment`).',
       '',
       '**Failure body:** `status: "failed"` with `error` (string). Meeting becomes **`FAILED`**.',
       '',
@@ -90,7 +93,11 @@ export class InternalMeetingController {
       throw new UnauthorizedException('Invalid worker secret');
     }
 
+    this.logger.log({ meetingId, payload }, 'Received worker callback payload');
+
     await this.meetingProcessingService.handleWorkerResult(meetingId, payload);
-    return { message: 'Received' };
+    const result = { message: 'Received' };
+    this.logger.log({ meetingId, result }, 'Worker callback processed');
+    return result;
   }
 }

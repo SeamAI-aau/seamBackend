@@ -88,7 +88,7 @@ function mapGitHubPrToUpsert(pr: GitHubPullRequest): PullRequestUpsertData {
       : undefined;
 
   return {
-    githubId: pr.id,
+    githubId: BigInt(pr.id),
     title: pr.title,
     author,
     state,

@@ -8,6 +8,10 @@ import { JiraService } from './jira.service';
 import { JiraIssueService } from './jira-issue.service';
 import { LinkJiraProjectDto } from './dto/link-jira-project.dto';
 import { JiraTransitionIssueDto } from './dto/jira-transition.dto';
+import { JiraAvailableProjectsQueryDto } from './dto/jira-available-projects-query.dto';
+import {
+  JiraAvailableProjectsResponseDto,
+} from './dto/jira-available-project-response.dto';
 import { PROJECT_REPOSITORY } from '../../project/types/project.tokens';
 import type { IProjectRepository } from '../../project/types/project.repository';
 import { AppException } from '../../common/errors/app.exception';
@@ -21,6 +25,7 @@ import {
   ApiBadRequestResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
+  ApiUnauthorizedResponse,
   ApiBody,
   ApiParam,
   ApiQuery,
@@ -73,7 +78,7 @@ export class JiraController {
   @ApiResponse({
     status: 302,
     description:
-      'Redirect to JIRA_OAUTH_SUCCESS_REDIRECT_URL or http://localhost:5173/oauth-success.',
+      'Redirect to JIRA_OAUTH_SUCCESS_REDIRECT_URL or http://localhost:8080/oauth-success?provider=jira.',
   })
   @ApiBadRequestResponse({ description: 'Invalid or missing code; OAuth exchange failed.' })
   async callback(
@@ -84,7 +89,7 @@ export class JiraController {
     await this.jiraService.handleCallback(code ?? '', state ?? '');
     const redirectUrl =
       this.config.get<string>('JIRA_OAUTH_SUCCESS_REDIRECT_URL') ??
-      'http://localhost:5173/oauth-success';
+      'http://localhost:8080/oauth-success?provider=jira';
     res.redirect(redirectUrl);
   }
 
@@ -124,11 +129,54 @@ export class JiraController {
     return { success: true };
   }
 
+  @Get('available-projects')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'List Jira projects available to the current user',
+    description:
+      'Calls Jira Cloud `GET /rest/api/3/project/search` using the **authenticated user’s** OAuth token and linked site (cloudId). ' +
+      'Use this after `GET /integrations/jira/connect` so Scrum Masters can pick a project by name instead of typing the key manually. ' +
+      'Pass the selected `key` to `POST /integrations/jira/link/:projectId`. ' +
+      'Only returns projects the user can browse in Jira.',
+  })
+  @ApiOkResponse({
+    description: 'Paginated list of Jira projects on the connected site.',
+    type: JiraAvailableProjectsResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Jira is not connected for this user, or Jira API returned an error.',
+  })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  async listAvailableProjects(
+    @CurrentUser() user: CurrentUserType,
+    @Query() query: JiraAvailableProjectsQueryDto,
+  ): Promise<JiraAvailableProjectsResponseDto> {
+    try {
+      return await this.jiraService.listAvailableProjects(user.userId, {
+        query: query.query,
+        maxResults: query.maxResults,
+        startAt: query.startAt,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to list Jira projects';
+      if (message.includes('Jira not connected')) {
+        throw new AppException(
+          ErrorCode.VALIDATION_ERROR,
+          'Connect Jira first via GET /integrations/jira/connect',
+          400,
+        );
+      }
+      throw new AppException(ErrorCode.VALIDATION_ERROR, message, 400);
+    }
+  }
+
   @Post('link/:projectId')
   @ApiOperation({
     summary: 'Link a Jira project to a Seam project',
     description:
-      'Stores the Jira project key on the Seam project. When tasks are approved, they are synced to this Jira project. Only the project owner can link. The project owner must have Jira connected (OAuth) for sync to work.',
+      'Stores the Jira project **key** (e.g. PROJ) on the Seam project. When tasks are approved, they are synced to this Jira project. ' +
+      'Only the project owner can link. The owner must have Jira connected (OAuth). ' +
+      'Use `GET /integrations/jira/available-projects` to list keys after OAuth, or pass a key you already know.',
   })
   @ApiParam({
     name: 'projectId',

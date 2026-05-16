@@ -12,25 +12,51 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import type { Prisma } from '@prisma/client';
 
 /**
  * Payload for a single extracted task from the AI pipeline.
  */
-export interface WorkerTaskPayload {
-  title: string;
+export interface WorkerNewTaskPayload {
+  title?: string;
   description?: string;
+  assignee?: string;
   assigneeId?: string;
+  priority?: string;
   confidence?: number;
-  /** Existing Jira issue key from reconciliation (alias: task_id). */
+  transcript_reference?: string;
+  deadline?: string;
   task_id?: string;
   jiraIssueKey?: string;
-  /** `create` | `transition` — engine hint for post-approve Jira action. */
   jiraAction?: string;
   current_status?: string;
   suggested_status?: string;
-  jiraProposalTargetStatus?: string;
   jiraProposalTransitionId?: string;
+  jiraProposalTargetStatus?: string;
+}
+
+export interface WorkerTaskPayload extends WorkerNewTaskPayload {
+  jiraIssueKey?: string;
+  jiraAction?: string;
+  current_status?: string;
+  suggested_status?: string;
+  jiraProposalTransitionId?: string;
+  jiraProposalTargetStatus?: string;
+}
+
+/**
+ * Payload for a transitioned (reconciled) Jira task.
+ */
+export interface WorkerTransitionedTaskPayload {
+  title: string;
+  description: string;
+  assignee: string;
+  confidence: number;
+  transcript_reference: string;
+  deadline?: string;
+  task_id?: string;
+  priority: string;
+  current_status?: string;
+  suggested_status?: string;
 }
 
 /**
@@ -38,18 +64,24 @@ export interface WorkerTaskPayload {
  * Persisted as TranscriptBlocker and shown next to GitHub blockers on dashboard.
  */
 export interface WorkerBlockerPayload {
-  /** Optional category for filtering/display (e.g. "risk", "dependency", "resource"). */
-  category?: string;
-  /** Human-readable blocker description from NLP. */
-  message: string;
+  description: string;
+  affected_person?: string;
+  severity?: string;
+  confidence?: number;
+  transcript_reference?: string;
+  suggested_action?: string;
+  affected_task_id?: string;
+  blocker_id?: string;
 }
 
 /**
  * Optional meeting metadata from the AI pipeline (audio analysis).
  */
-export interface WorkerMeetingMetadata {
-  durationSeconds?: number;
-  participants?: Array<{ userId?: string; email?: string; name?: string }>;
+export interface WorkerSummaryPayload {
+  summary: string;
+  key_decisions?: string[];
+  meeting_sentiment?: string;
+  main_topic?: string;
 }
 
 /**
@@ -60,27 +92,31 @@ export interface WorkerMeetingMetadata {
 export interface WorkerResultPayload {
   status: 'success' | 'failed';
   transcript?: string;
-  /** Engine JSON object; `WorkerResultBodyDto` uses `Record<string, unknown>` for validation. */
-  diarization?: typeof Prisma.JsonNull | Prisma.InputJsonValue | Record<string, unknown>;
   tasks?: WorkerTaskPayload[];
+  new_tasks?: WorkerTaskPayload[];
+  transitioned_tasks?: WorkerTransitionedTaskPayload[];
   /** Blockers extracted from transcript by NLP; persisted and exposed next to GitHub blockers. */
   blockers?: WorkerBlockerPayload[];
-  /** Optional meeting metadata (duration, participants from diarization/audio). */
-  meeting?: WorkerMeetingMetadata;
+  summary?: WorkerSummaryPayload;
   error?: string;
 }
 
 /** Request body for `POST /internal/meetings/:id/result` (Swagger + validation). */
-export class WorkerTaskBodyDto {
-  @ApiProperty({ example: 'Ship OAuth refresh fix', description: 'Task title shown in the dashboard.' })
+export class WorkerNewTaskBodyDto {
+  @ApiPropertyOptional({ example: 'Ship OAuth refresh fix', description: 'Task title shown in the dashboard.' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  title!: string;
+  title?: string;
 
   @ApiPropertyOptional({ description: 'Optional longer description from NLP.' })
   @IsOptional()
   @IsString()
   description?: string;
+
+  @ApiPropertyOptional({ description: 'Assignee name from transcript, when available.' })
+  @IsOptional()
+  @IsString()
+  assignee?: string;
 
   @ApiPropertyOptional({
     format: 'uuid',
@@ -90,96 +126,179 @@ export class WorkerTaskBodyDto {
   @IsUUID()
   assigneeId?: string;
 
-  @ApiPropertyOptional({ example: 0.92, description: 'NLP confidence score (0–1).' })
+  @ApiPropertyOptional({ example: 'High', description: 'Priority from NLP, if provided.' })
+  @IsOptional()
+  @IsString()
+  priority?: string;
+
+  @ApiPropertyOptional({ example: 0.82, description: 'Confidence score from NLP.' })
   @IsOptional()
   @IsNumber()
   @Type(() => Number)
   confidence?: number;
 
-  @ApiPropertyOptional({
-    example: 'SEAM-10',
-    description: 'Linked Jira issue key when reconciliation matches an existing ticket.',
-  })
+  @ApiPropertyOptional({ description: 'Exact quote from transcript.' })
+  @IsOptional()
+  @IsString()
+  transcript_reference?: string;
+
+  @ApiPropertyOptional({ description: 'Natural language or ISO date deadline, if provided.' })
+  @IsOptional()
+  @IsString()
+  deadline?: string;
+
+  @ApiPropertyOptional({ description: 'Optional external task id (e.g., Jira key).'})
   @IsOptional()
   @IsString()
   task_id?: string;
 
-  @ApiPropertyOptional({ example: 'SEAM-10', description: 'Alias for task_id.' })
+  @ApiPropertyOptional({ description: 'Optional Jira issue key from the AI engine.' })
   @IsOptional()
   @IsString()
   jiraIssueKey?: string;
 
-  @ApiPropertyOptional({ enum: ['create', 'transition'] })
+  @ApiPropertyOptional({ description: 'Optional Jira action hint (create or transition).' })
   @IsOptional()
-  @IsIn(['create', 'transition', 'CREATE', 'TRANSITION'])
+  @IsString()
   jiraAction?: string;
 
-  @ApiPropertyOptional({ example: 'In Progress' })
+  @ApiPropertyOptional({ description: 'Current Jira status, if provided.' })
   @IsOptional()
   @IsString()
   current_status?: string;
 
-  @ApiPropertyOptional({ example: 'Done', description: 'AI-suggested Jira status after standup.' })
+  @ApiPropertyOptional({ description: 'Suggested Jira status, if provided.' })
   @IsOptional()
   @IsString()
   suggested_status?: string;
 
-  @ApiPropertyOptional({ example: 'Done' })
-  @IsOptional()
-  @IsString()
-  jiraProposalTargetStatus?: string;
-
-  @ApiPropertyOptional({
-    example: '31',
-    description: 'Optional Jira workflow transition id when engine resolves it.',
-  })
+  @ApiPropertyOptional({ description: 'Proposed Jira transition id.' })
   @IsOptional()
   @IsString()
   jiraProposalTransitionId?: string;
+
+  @ApiPropertyOptional({ description: 'Proposed Jira target status.' })
+  @IsOptional()
+  @IsString()
+  jiraProposalTargetStatus?: string;
+}
+
+export class WorkerTransitionedTaskBodyDto {
+  @ApiProperty({ example: 'SEAM-10 onboarding updates' })
+  @IsString()
+  @IsNotEmpty()
+  title!: string;
+
+  @ApiProperty({ description: 'Task description or action details.' })
+  @IsString()
+  @IsNotEmpty()
+  description!: string;
+
+  @ApiProperty({ description: 'Assignee label from transcript.' })
+  @IsString()
+  @IsNotEmpty()
+  assignee!: string;
+
+  @ApiProperty({ example: 0.9 })
+  @IsNumber()
+  @Type(() => Number)
+  confidence!: number;
+
+  @ApiProperty({ description: 'Exact quote from transcript.' })
+  @IsString()
+  @IsNotEmpty()
+  transcript_reference!: string;
+
+  @ApiPropertyOptional({ description: 'Natural language or ISO date deadline, if provided.' })
+  @IsOptional()
+  @IsString()
+  deadline?: string;
+
+  @ApiPropertyOptional({ description: 'External task id (e.g., Jira key).' })
+  @IsOptional()
+  @IsString()
+  task_id?: string;
+
+  @ApiProperty({ example: 'High' })
+  @IsString()
+  @IsNotEmpty()
+  priority!: string;
+
+  @ApiPropertyOptional({ description: 'Current Jira status, if provided.' })
+  @IsOptional()
+  @IsString()
+  current_status?: string;
+
+  @ApiPropertyOptional({ description: 'Suggested Jira status, if provided.' })
+  @IsOptional()
+  @IsString()
+  suggested_status?: string;
 }
 
 export class WorkerBlockerBodyDto {
-  @ApiPropertyOptional({ example: 'dependency', description: 'Optional category (e.g. severity bucket from engine).' })
-  @IsOptional()
-  @IsString()
-  category?: string;
-
   @ApiProperty({ example: 'Blocked on API contract from partner team.' })
   @IsString()
   @IsNotEmpty()
-  message!: string;
-}
+  description!: string;
 
-export class WorkerMeetingParticipantBodyDto {
-  @ApiPropertyOptional({ format: 'uuid' })
-  @IsOptional()
-  @IsUUID()
-  userId?: string;
-
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Person affected by the blocker.' })
   @IsOptional()
   @IsString()
-  email?: string;
+  affected_person?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ example: 'High' })
   @IsOptional()
   @IsString()
-  name?: string;
-}
+  severity?: string;
 
-export class WorkerMeetingBodyDto {
-  @ApiPropertyOptional({ example: 3600, description: 'Recording duration in seconds.' })
+  @ApiPropertyOptional({ example: 0.72 })
   @IsOptional()
   @IsNumber()
   @Type(() => Number)
-  durationSeconds?: number;
+  confidence?: number;
 
-  @ApiPropertyOptional({ type: [WorkerMeetingParticipantBodyDto] })
+  @ApiPropertyOptional({ description: 'Exact quote from transcript.' })
+  @IsOptional()
+  @IsString()
+  transcript_reference?: string;
+
+  @ApiPropertyOptional({ description: 'Suggested remediation, if provided.' })
+  @IsOptional()
+  @IsString()
+  suggested_action?: string;
+
+  @ApiPropertyOptional({ description: 'Related task id, if provided.' })
+  @IsOptional()
+  @IsString()
+  affected_task_id?: string;
+
+  @ApiPropertyOptional({ description: 'Optional blocker id.' })
+  @IsOptional()
+  @IsString()
+  blocker_id?: string;
+}
+
+export class WorkerSummaryBodyDto {
+  @ApiProperty({ description: 'Overall meeting narrative.' })
+  @IsString()
+  @IsNotEmpty()
+  summary!: string;
+
+  @ApiPropertyOptional({ type: [String], description: 'Key decisions captured from the meeting.' })
   @IsOptional()
   @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => WorkerMeetingParticipantBodyDto)
-  participants?: WorkerMeetingParticipantBodyDto[];
+  @IsString({ each: true })
+  key_decisions?: string[];
+
+  @ApiPropertyOptional({ description: 'Dominant emotional tone.' })
+  @IsOptional()
+  @IsString()
+  meeting_sentiment?: string;
+
+  @ApiPropertyOptional({ description: 'Primary focus of the session.' })
+  @IsOptional()
+  @IsString()
+  main_topic?: string;
 }
 
 /**
@@ -199,20 +318,34 @@ export class WorkerResultBodyDto {
   transcript?: string;
 
   @ApiPropertyOptional({
-    type: 'object',
-    additionalProperties: true,
-    description: 'Diarization JSON (object). Empty object if none.',
+    type: [WorkerNewTaskBodyDto],
+    description: 'Newly extracted tasks (full payload). Omit or use [] when none.',
   })
-  @IsOptional()
-  @IsObject()
-  diarization?: Record<string, unknown>;
-
-  @ApiPropertyOptional({ type: [WorkerTaskBodyDto], description: 'Extracted tasks; omit or use [] when none.' })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => WorkerTaskBodyDto)
-  tasks?: WorkerTaskBodyDto[];
+  @Type(() => WorkerNewTaskBodyDto)
+  new_tasks?: WorkerNewTaskBodyDto[];
+
+  @ApiPropertyOptional({
+    type: [WorkerNewTaskBodyDto],
+    description: 'Merged tasks list (new + transitioned). Preferred over new_tasks/transitioned_tasks.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => WorkerNewTaskBodyDto)
+  tasks?: WorkerNewTaskBodyDto[];
+
+  @ApiPropertyOptional({
+    type: [WorkerTransitionedTaskBodyDto],
+    description: 'Transitioned (reconciled) tasks with status suggestions.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => WorkerTransitionedTaskBodyDto)
+  transitioned_tasks?: WorkerTransitionedTaskBodyDto[];
 
   @ApiPropertyOptional({ type: [WorkerBlockerBodyDto] })
   @IsOptional()
@@ -221,11 +354,12 @@ export class WorkerResultBodyDto {
   @Type(() => WorkerBlockerBodyDto)
   blockers?: WorkerBlockerBodyDto[];
 
-  @ApiPropertyOptional({ type: WorkerMeetingBodyDto })
+  @ApiPropertyOptional({ type: WorkerSummaryBodyDto })
   @IsOptional()
+  @IsObject()
   @ValidateNested()
-  @Type(() => WorkerMeetingBodyDto)
-  meeting?: WorkerMeetingBodyDto;
+  @Type(() => WorkerSummaryBodyDto)
+  summary?: WorkerSummaryBodyDto;
 
   @ApiPropertyOptional({ description: 'Human-readable failure reason when status is failed.' })
   @ValidateIf((o: WorkerResultBodyDto) => o.status === 'failed')
