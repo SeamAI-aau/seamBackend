@@ -57,7 +57,7 @@ export class InternalMeetingController {
       '',
       'Send header **`x-worker-secret`** with the same value as Nest env **`WORKER_SECRET`**.',
       '',
-      '**Success body:** `status: "success"` with `transcript` (string), `tasks` (array of `{ title, description?, assigneeId? }`), optional `diarization`, `blockers`, `meeting`. Meeting becomes **`TASKS_EXTRACTED`**; developers with `assigneeId` get `task_assigned`; unassigned tasks notify owner + Scrum Masters (`tasks_pending_assignment`).',
+      '**Success body:** `status: "success"` with `transcript`, `new_tasks` (full payload), `transitioned_tasks` (reconciled status suggestions), `blockers`, and `summary`. Meeting becomes **`TASKS_EXTRACTED`**; developers with resolved assignee IDs get `task_assigned`; unassigned tasks notify owner + Scrum Masters (`tasks_pending_assignment`).',
       '',
       '**Failure body:** `status: "failed"` with `error` (string). Meeting becomes **`FAILED`**.',
       '',
