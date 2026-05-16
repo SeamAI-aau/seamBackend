@@ -12,7 +12,25 @@ async function bootstrap() {
   // Allow all origins by echoing the request origin and allow credentials.
   // WARNING: This effectively allows requests from any origin and is
   // insecure for production. Use only for local development/testing.
-  app.enableCors({ origin: true, credentials: true });
+
+  // enezi two lines only
+  // app.enableCors({ origin: true, credentials: true });
+
+  // app.use(cookieParser());
+
+  // just added now
+  // === ADD THESE LINES ===
+  app.set('trust proxy', 1); // Important for Render / proxies
+
+  const allowedOrigins = ['http://localhost:8080', 'http://192.168.1.3:8080'];
+
+  app.enableCors({
+    origin: allowedOrigins, // ← Use array instead of function for now
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+    exposedHeaders: ['Set-Cookie'],
+  });
 
   app.use(cookieParser());
 
