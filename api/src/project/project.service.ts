@@ -124,21 +124,25 @@ export class ProjectService {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    const existing = await this.projectRepo.findPendingInvite(projectId, normalizedEmail);
-    if (existing) {
+    const existingByEmail = await this.projectRepo.findMemberByProjectAndEmail(
+      projectId,
+      normalizedEmail,
+    );
+    if (existingByEmail) {
+      if (existingByEmail.status === 'PENDING') {
+        throw new AppException(
+          ErrorCode.CONFLICT,
+          'An invitation for this email is already pending',
+          409,
+          { memberId: existingByEmail.id, email: normalizedEmail },
+        );
+      }
       throw new AppException(
         ErrorCode.CONFLICT,
-        'An invitation for this email is already pending',
+        'User is already a member of this project',
         409,
+        { memberId: existingByEmail.id, email: normalizedEmail },
       );
-    }
-
-    const userByEmail = await this.userRepo.findByEmail(normalizedEmail);
-    if (userByEmail) {
-      const isAlreadyMember = await this.projectRepo.isMember(projectId, userByEmail.id);
-      if (isAlreadyMember) {
-        throw new AppException(ErrorCode.CONFLICT, 'User is already a member of this project', 409);
-      }
     }
 
     // Always create a pending invitation first; membership becomes ACTIVE only
@@ -296,28 +300,99 @@ export class ProjectService {
       );
     }
 
-    const member = await this.projectRepo.findMemberById(memberId);
-    if (!member || member.projectId !== projectId) {
+    const project = await this.projectRepo.findById(projectId);
+    if (!project) {
+      throw new AppException(ErrorCode.PROJECT_NOT_FOUND, 'Project not found', 404);
+    }
+
+    const member = await this.resolveMemberForRemoval(projectId, memberId);
+    if (!member) {
       throw new AppException(ErrorCode.NOT_FOUND, 'Member or invite not found', 404);
     }
 
-    const result = await this.projectRepo.deleteMember(memberId);
+    if (member.userId && member.userId === project.ownerId) {
+      throw new AppException(ErrorCode.FORBIDDEN, 'Cannot remove the project owner', 403);
+    }
+
+    const wasActive = member.status === 'ACTIVE';
+
+    const result = await this.projectRepo.deleteMember(member.id);
     this.activityLog
       .log({
         projectId,
         userId: requesterId,
-        action: member.status === 'PENDING' ? 'invitation.cancelled' : 'member.removed',
+        action: wasActive ? 'member.removed' : 'invitation.cancelled',
         entityType: 'ProjectMember',
-        entityId: memberId,
-        metadata: { email: member.email },
+        entityId: member.id,
+        metadata: { email: member.email, status: member.status },
       })
       .catch((error) => {
         this.logger.warn(
-          { projectId, requesterId, memberId, err: error },
+          { projectId, requesterId, memberId: member.id, err: error },
           'Failed to write activity log for removeMember',
         );
       });
+
+    if (wasActive && member.userId) {
+      this.notification
+        .notify({
+          userId: member.userId,
+          type: 'member_removed',
+          title: `Removed from ${project.name}`,
+          body: `You no longer have access to the project "${project.name}".`,
+          metadata: { projectId },
+        })
+        .catch((error) => {
+          this.logger.warn(
+            { projectId, removedUserId: member.userId, err: error },
+            'Failed to notify removed member',
+          );
+        });
+    }
+
     return result;
+  }
+
+  /**
+   * Resolves a project member row by `ProjectMember.id` (preferred) or active member `userId`.
+   */
+  private async resolveMemberForRemoval(projectId: string, memberIdOrUserId: string) {
+    const byId = await this.projectRepo.findMemberById(memberIdOrUserId);
+    if (byId?.projectId === projectId) {
+      return byId;
+    }
+    return this.projectRepo.findMemberByProjectAndUserId(projectId, memberIdOrUserId);
+  }
+
+  async deleteProject(projectId: string, userId: string) {
+    const isOwner = await this.projectRepo.isOwner(projectId, userId);
+    if (!isOwner) {
+      throw new AppException(ErrorCode.FORBIDDEN, 'Only project owner can delete project', 403);
+    }
+
+    const project = await this.projectRepo.findById(projectId);
+    if (!project) {
+      throw new AppException(ErrorCode.PROJECT_NOT_FOUND, 'Project not found', 404);
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const meetings = await tx.meeting.findMany({
+        where: { projectId },
+        select: { id: true },
+      });
+      for (const meeting of meetings) {
+        await tx.task.deleteMany({ where: { meetingId: meeting.id } });
+        await tx.transcript.deleteMany({ where: { meetingId: meeting.id } });
+        await tx.transcriptBlocker.deleteMany({ where: { meetingId: meeting.id } });
+      }
+      await tx.transcriptBlocker.deleteMany({ where: { projectId } });
+      await tx.meeting.deleteMany({ where: { projectId } });
+      await tx.project.delete({ where: { id: projectId } });
+    });
+
+    this.logger.log({ projectId, userId }, 'Project deleted');
+
+    return { id: projectId, deleted: true };
   }
 
   async getProjectMembers(projectId: string, userId: string, page = 1, limit = 20) {
@@ -420,6 +495,7 @@ export class ProjectService {
       ...memberRows
         .filter((row) => row.userId !== project.ownerId)
         .map((row) => ({
+          memberId: row.id,
           userId: row.userId ?? null,
           name: row.user?.name ?? null,
           email: row.email,

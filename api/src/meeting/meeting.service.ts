@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { NotificationService } from '../notification/notification.service';
 import { Logger } from 'nestjs-pino';
@@ -24,6 +25,7 @@ export class MeetingService {
     private readonly logger: Logger,
     private readonly activityLog: ActivityLogService,
     private readonly notification: NotificationService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async uploadMeeting(
@@ -114,6 +116,57 @@ export class MeetingService {
     }
 
     return meeting;
+  }
+
+  async deleteMeeting(projectId: string, meetingId: string, userId: string) {
+    await this.ensureProjectAccess(projectId, userId);
+
+    const meeting = await this.meetingRepo.findById(meetingId);
+    if (!meeting || meeting.projectId !== projectId) {
+      throw new AppException(ErrorCode.MEETING_NOT_FOUND, 'Meeting not found', 404);
+    }
+
+    const isOwner = await this.projectRepo.isOwner(projectId, userId);
+    if (!isOwner && meeting.createdById !== userId) {
+      throw new AppException(
+        ErrorCode.FORBIDDEN,
+        'Only project owner or meeting uploader can delete this meeting',
+        403,
+      );
+    }
+
+    if (meeting.audioPublicId?.trim()) {
+      try {
+        await this.cloudinaryService.deleteByPublicId(meeting.audioPublicId);
+      } catch (err) {
+        this.logger.warn(
+          { meetingId, publicId: meeting.audioPublicId, err },
+          'Failed to delete meeting audio from Cloudinary before DB delete',
+        );
+      }
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.task.deleteMany({ where: { meetingId } });
+      await tx.transcript.deleteMany({ where: { meetingId } });
+      await tx.transcriptBlocker.deleteMany({ where: { meetingId } });
+      await tx.meeting.delete({ where: { id: meetingId } });
+    });
+
+    this.activityLog
+      .log({
+        projectId,
+        userId,
+        action: 'meeting.deleted',
+        entityType: 'Meeting',
+        entityId: meetingId,
+        metadata: { title: meeting.title },
+      })
+      .catch(() => undefined);
+
+    this.logger.log({ meetingId, projectId, userId }, 'Meeting deleted');
+
+    return { id: meetingId, deleted: true };
   }
 
   private async ensureProjectOwner(projectId: string, userId: string): Promise<void> {

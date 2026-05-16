@@ -6,6 +6,10 @@ import type { IJiraRepository } from './jira.repository';
 import { JIRA_REPOSITORY } from './jira.tokens';
 import type { AtlassianTokenResponse, AtlassianResource } from './types/jira-api.types';
 import type { JiraMyselfResponse } from './types/jira-myself.types';
+import type {
+  JiraAvailableProjectsResult,
+  JiraProjectSearchResponse,
+} from './types/jira-project.types';
 import {
   JIRA_SCOPES,
   ATLASSIAN_AUTH_URL,
@@ -134,6 +138,55 @@ export class JiraService {
 
   getApiBaseUrl(cloudId: string): string {
     return `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3`;
+  }
+
+  /**
+   * Lists Jira projects visible to the connected user (for linking to a Seam project).
+   * Requires OAuth with read:jira-work. Uses the user's stored cloud site.
+   */
+  async listAvailableProjects(
+    userId: string,
+    options?: { query?: string; maxResults?: number; startAt?: number },
+  ): Promise<JiraAvailableProjectsResult> {
+    const { accessToken, cloudId } = await this.getValidAccessToken(userId);
+    const maxResults = Math.min(Math.max(options?.maxResults ?? 50, 1), 100);
+    const startAt = Math.max(options?.startAt ?? 0, 0);
+
+    const params = new URLSearchParams({
+      maxResults: String(maxResults),
+      startAt: String(startAt),
+      orderBy: 'name',
+    });
+    const trimmedQuery = options?.query?.trim();
+    if (trimmedQuery) {
+      params.set('query', trimmedQuery);
+    }
+
+    const res = await axios.get<JiraProjectSearchResponse>(
+      `${this.getApiBaseUrl(cloudId)}/project/search?${params.toString()}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+        },
+      },
+    );
+
+    const items = (res.data.values ?? []).map((p) => ({
+      id: p.id,
+      key: p.key,
+      name: p.name,
+      projectTypeKey: p.projectTypeKey ?? null,
+      avatarUrl: p.avatarUrls?.['24x24'] ?? p.avatarUrls?.['16x16'] ?? null,
+    }));
+
+    return {
+      items,
+      startAt: res.data.startAt ?? startAt,
+      maxResults: res.data.maxResults ?? maxResults,
+      total: res.data.total ?? items.length,
+      isLast: res.data.isLast ?? true,
+    };
   }
 
   /**

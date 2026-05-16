@@ -49,4 +49,6 @@ export interface ITaskRepository {
   ): Promise<TaskWithMeetingAndAssignee[]>;
 
   count(filters: TaskFilters): Promise<number>;
+
+  delete(id: string): Promise<void>;
 }

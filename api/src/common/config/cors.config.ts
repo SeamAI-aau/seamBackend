@@ -5,13 +5,21 @@ import type { CorsOptions } from '@nestjs/common/interfaces/external/cors-option
  * `https://app.example.com,http://localhost:5173,chrome-extension://abcdef123456`
  */
 export function parseCorsOrigins(raw: string | undefined): string[] {
-  if (!raw?.trim()) {
-    return [];
+  const origins = new Set<string>();
+
+  if (raw?.trim()) {
+    for (const part of raw.split(',')) {
+      const trimmed = part.trim();
+      if (trimmed) origins.add(trimmed);
+    }
   }
-  return raw
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
+
+  const frontendUrl = process.env.FRONTEND_URL?.trim();
+  if (frontendUrl) {
+    origins.add(frontendUrl.replace(/\/$/, ''));
+  }
+
+  return [...origins];
 }
 
 function isDevOpenCors(allowlist: string[]): boolean {

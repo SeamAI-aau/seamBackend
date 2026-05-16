@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Delete, Get, Patch, Param, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserType } from '../auth/types/current-user.type';
@@ -11,6 +11,7 @@ import {
   ApiOkResponse,
   ApiQuery,
   ApiParam,
+  ApiNotFoundResponse,
 } from '@nestjs/swagger';
 import { NOTIFICATION_TYPES } from './constants/notification-types';
 
@@ -180,6 +181,34 @@ export class NotificationController {
     return this.notificationService
       .getUnreadCount(user.userId, toCountFilters(query))
       .then((count) => ({ count }));
+  }
+
+  @Delete(':id')
+  @ApiOperation({
+    summary: 'Delete a notification',
+    description: 'Removes a single in-app notification for the authenticated user only.',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Notification UUID.',
+    example: 'e5f6a7b8-c9d0-1234-ef01-345678901234',
+  })
+  @ApiOkResponse({
+    description: 'Notification deleted for the current user.',
+    schema: { example: { success: true } },
+  })
+  @ApiNotFoundResponse({
+    description: 'Notification not found or not owned by the user.',
+    schema: {
+      example: {
+        statusCode: 404,
+        message: 'Notification not found',
+        error: 'NOT_FOUND',
+      },
+    },
+  })
+  deleteNotification(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
+    return this.notificationService.deleteForUser(id, user.userId);
   }
 
   @Patch(':id/read')

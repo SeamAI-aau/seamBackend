@@ -11,7 +11,7 @@ Checklist for the Seam MV3 extension calling this backend.
 Set on the API (not per project):
 
 ```env
-CORS_ORIGINS=https://app.example.com,http://localhost:5173,chrome-extension://YOUR_EXTENSION_ID
+CORS_ORIGINS=https://app.example.com,http://localhost:8080,chrome-extension://YOUR_EXTENSION_ID
 ```
 
 - **Production:** `CORS_ORIGINS` is required for browser clients; include the exact `chrome-extension://` origin from `chrome://extensions`.

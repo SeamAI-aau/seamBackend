@@ -11,19 +11,10 @@ export interface ActivityLogFilters {
   projectId?: string;
   userId?: string;
   action?: string;
+  entityType?: string;
+  entityId?: string;
   fromDate?: Date;
   toDate?: Date;
-}
-
-export interface IActivityLogRepository {
-  create(data: CreateActivityLogInput): Promise<{ id: string; createdAt: Date }>;
-
-  findMany(
-    filters: ActivityLogFilters,
-    options?: { skip?: number; take?: number },
-  ): Promise<ActivityLogWithRelations[]>;
-
-  count(filters: ActivityLogFilters): Promise<number>;
 }
 
 export interface ActivityLogWithRelations {
@@ -37,4 +28,15 @@ export interface ActivityLogWithRelations {
   createdAt: Date;
   project: { id: string; name: string } | null;
   user: { id: string; name: string | null; email: string } | null;
+}
+
+export interface IActivityLogRepository {
+  create(data: CreateActivityLogInput): Promise<{ id: string; createdAt: Date }>;
+
+  findMany(
+    filters: ActivityLogFilters,
+    options?: { skip?: number; take?: number },
+  ): Promise<ActivityLogWithRelations[]>;
+
+  count(filters: ActivityLogFilters): Promise<number>;
 }

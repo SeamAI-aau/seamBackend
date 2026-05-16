@@ -116,6 +116,23 @@ export class PrismaProjectRepository implements IProjectRepository {
     });
   }
 
+  async findMemberByProjectAndEmail(projectId: string, email: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+    return this.prisma.projectMember.findUnique({
+      where: {
+        projectId_email: { projectId, email: normalizedEmail },
+      },
+    });
+  }
+
+  async findMemberByProjectAndUserId(projectId: string, userId: string) {
+    return this.prisma.projectMember.findUnique({
+      where: {
+        projectId_userId: { projectId, userId },
+      },
+    });
+  }
+
   async findMemberById(memberId: string): Promise<ProjectMemberWithUser | null> {
     const row = await this.prisma.projectMember.findUnique({
       where: { id: memberId },
