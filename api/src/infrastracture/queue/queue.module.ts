@@ -1,19 +1,11 @@
-import { Module, Injectable } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { MeetingProducer } from './meeting.producer';
-import { MEETING_TRANSCRIPTION_QUEUE_NAME } from '../../meeting/constants/meeting.constants';
-import { Logger } from 'nestjs-pino';
 
-@Injectable()
-class DummyMeetingProducer {
-  constructor(private readonly logger: Logger) {}
-
-  async enqueue(meetingId: string, audioUrl: string) {
-    this.logger.warn({ meetingId, audioUrl }, 'Queues are disabled; skipping enqueue');
-  }
-}
-
+/**
+ * Registers shared BullMQ Redis connection for Nest-owned queues (e.g. Jira/GitHub sync).
+ * Meeting transcription is handled by ai-engine-2 over HTTP, not Bull.
+ */
 const disableQueues = process.env.DISABLE_QUEUES === 'true';
 
 @Module({
@@ -33,28 +25,8 @@ const disableQueues = process.env.DISABLE_QUEUES === 'true';
             },
           }),
         }),
-
-        BullModule.registerQueue({
-          name: MEETING_TRANSCRIPTION_QUEUE_NAME,
-          defaultJobOptions: {
-            attempts: 5,
-            backoff: {
-              type: 'exponential',
-              delay: 3000,
-            },
-            removeOnComplete: true,
-            removeOnFail: false,
-          },
-        }),
       ],
-  providers: disableQueues
-    ? [
-        {
-          provide: MeetingProducer,
-          useClass: DummyMeetingProducer,
-        },
-      ]
-    : [MeetingProducer],
-  exports: [MeetingProducer],
+  providers: [],
+  exports: [],
 })
 export class QueueModule {}

@@ -4,8 +4,8 @@ Manages the task lifecycle for stand-up action items: extraction → assignment 
 
 ## Lifecycle
 
-- **EXTRACTED** – From meeting transcription; not yet assigned (or assignee unknown).
-- **SENT_TO_DEVELOPER** – Assigned to a developer (by NLP worker with `assigneeId` or by Scrum Master).
+- **EXTRACTED** – From meeting transcription; not yet assigned (or assignee unknown). When the meeting callback saves unassigned tasks, the **project owner** and **Scrum Master** project members receive a **`tasks_pending_assignment`** notification so they can assign developers (`reassignTask` / assign flow).
+- **SENT_TO_DEVELOPER** – Assigned to a developer (by NLP / ai-engine with `assigneeId` or by Scrum Master).
 - **APPROVED** / **REJECTED** – Developer accepts or declines.
 - **SYNCED** – Approved task created in Jira (handled by Jira integration).
 
@@ -15,14 +15,14 @@ Transitions are enforced by `TaskStateMachine` in `task-state-machine.ts`.
 
 | Method | Path                           | Description                                              |
 | ------ | ------------------------------ | -------------------------------------------------------- |
-| POST   | `/tasks/:id/approve`           | Developer approves task (assignee only).                 |
-| POST   | `/tasks/:id/decline`           | Developer declines task (assignee only).                 |
-| POST   | `/tasks/:id/send-to-developer` | Scrum Master assigns developer (body: `{ assigneeId }`). |
-| GET    | `/tasks/by-project/:projectId` | List tasks for project (query: `?status=&assigneeId=`).  |
-| GET    | `/tasks/by-meeting/:meetingId` | List tasks for meeting (query: `?status=&assigneeId=`).  |
-| GET    | `/tasks/my`                    | List tasks assigned to current user (query: `?status=`). |
+| `PATCH` | `/tasks/:id`                  | Assignee: approve / decline / edit draft (`UpdateTaskOutcomeDto`). |
+| `PATCH` | `/tasks/:id/assign`           | Scrum Master or assignee: set `assigneeId` (UUID) or `null` to unassign. |
+| `POST` | `/tasks`                       | Create task (testing / admin flows).                     |
+| `GET`  | `/tasks/grouped`               | Current user’s tasks grouped active vs completed.      |
+| `GET`  | `/tasks`                        | List tasks (filters: `projectId`, `meetingId`, `assigneeId`, …). |
+| `GET`  | `/tasks/:id`                    | Get one task.                                           |
 
-All routes require JWT. `send-to-developer` requires `SCRUM_MASTER` role.
+All routes require JWT. `PATCH .../assign` requires **Scrum Master** or current assignee.
 
 ## Structure
 

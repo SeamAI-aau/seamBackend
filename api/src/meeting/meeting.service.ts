@@ -6,7 +6,7 @@ import { Logger } from 'nestjs-pino';
 import { AppException } from '../common/errors/app.exception';
 import { ErrorCode } from '../common/errors/error-codes';
 import { CloudinaryService } from '../infrastracture/cloudinary/cloudinary.service';
-import { MeetingProducer } from '../infrastracture/queue/meeting.producer';
+import { MeetingAiDispatchService } from './meeting-ai-dispatch.service';
 import type { IMeetingRepository } from './types/meeting.repository';
 import { MEETING_REPOSITORY } from './types/meeting.token';
 import type { IProjectRepository } from '../project/types/project.repository';
@@ -20,7 +20,7 @@ export class MeetingService {
     @Inject(PROJECT_REPOSITORY)
     private readonly projectRepo: IProjectRepository,
     private readonly cloudinaryService: CloudinaryService,
-    private readonly meetingProducer: MeetingProducer,
+    private readonly meetingAiDispatch: MeetingAiDispatchService,
     private readonly logger: Logger,
     private readonly activityLog: ActivityLogService,
     private readonly notification: NotificationService,
@@ -46,7 +46,19 @@ export class MeetingService {
       createdById: userId,
     });
 
-    await this.meetingProducer.enqueue(meeting.id, meeting.audioUrl);
+    if (!this.meetingAiDispatch.isAiEngineEnabled()) {
+      throw new AppException(
+        ErrorCode.VALIDATION_ERROR,
+        'Meeting processing is not configured: set AI_ENGINE_BASE_URL to your ai-engine-2 base URL.',
+        400,
+      );
+    }
+
+    await this.meetingAiDispatch.dispatchMeetingAudio({
+      meetingId: meeting.id,
+      projectId,
+      audioUrl: meeting.audioUrl,
+    });
 
     this.activityLog
       .log({
@@ -66,14 +78,14 @@ export class MeetingService {
         userId,
         type: 'meeting_uploaded',
         title: 'Meeting uploaded',
-        body: `A meeting recording was uploaded for project and queued for processing.`,
+        body: `A meeting recording was uploaded and sent for processing.`,
         metadata: { meetingId: meeting.id, projectId },
       })
       .catch(() => {
         // ignore notification errors
       });
 
-    this.logger.log({ meetingId: meeting.id }, 'Meeting uploaded and enqueued');
+    this.logger.log({ meetingId: meeting.id }, 'Meeting uploaded and dispatched to AI engine');
 
     return { id: meeting.id };
   }

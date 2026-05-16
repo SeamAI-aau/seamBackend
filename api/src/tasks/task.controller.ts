@@ -229,7 +229,7 @@ export class TaskController {
   @ApiOperation({
     summary: 'Reassign or unassign task',
     description:
-      'Scrum Master or current assignee can reassign (set assigneeId to a user UUID) or unassign (omit assigneeId or send null). Unassign sets status to EXTRACTED; reassign sets status to SENT_TO_DEVELOPER and notifies the new assignee.',
+      '**Scrum Master** or **current assignee** can set `assigneeId` to a developer UUID, or unassign (`assigneeId: null`). Assigning from **EXTRACTED** (e.g. meeting tasks without NLP assignee) sets **SENT_TO_DEVELOPER** and notifies the developer (`task_assigned`). Unassign returns the task to **EXTRACTED**.',
   })
   @ApiParam({ name: 'id', description: 'Task UUID.' })
   @ApiOkResponse({

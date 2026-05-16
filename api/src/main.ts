@@ -44,7 +44,17 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle('SeamAi API')
-    .setDescription('Seam.ai Backend API — Authentication and core services')
+    .setDescription(
+      [
+        'Seam.ai backend — authentication, projects, meetings, tasks, integrations (Jira/GitHub), and notifications.',
+        '',
+        '### Meetings and ai-engine-2',
+        '',
+        '- **Upload** (`POST /projects/{projectId}/meetings`): stores audio, then Nest dispatches to **ai-engine-2** `POST /api/v1/meetings/process-audio` (multipart). The engine returns **HTTP 202** with a **`job_id`**; Nest sets the meeting to **PROCESSING** and stores **`externalJobId`**. Transcription runs on the engine in the background, not on this long-lived HTTP call.',
+        '- **Callback** (`POST /internal/meetings/{id}/result`): the engine posts transcript/tasks with header **`x-worker-secret`** (same value as env **`WORKER_SECRET`**). In Swagger, authorize the **worker-secret** scheme for that route.',
+        '- **Tasks**: developers approve/decline via `PATCH /tasks/{id}`; Scrum Master assigns with **`PATCH /tasks/{id}/assign`**. Unassigned extracted tasks notify the project owner + Scrum Master members (`tasks_pending_assignment`).',
+      ].join('\n'),
+    )
     .setVersion(process.env.npm_package_version ?? '1.0.0')
     // .setContact('Seam.ai Dev Team', 'https://seam.ai', 'dev@seam.ai')
     // .setLicense('MIT', 'https://opensource.org/licenses/MIT')
@@ -57,6 +67,16 @@ async function bootstrap() {
         description: 'Paste your JWT access token here.',
       },
       'access-token',
+    )
+    .addApiKey(
+      {
+        type: 'apiKey',
+        in: 'header',
+        name: 'x-worker-secret',
+        description:
+          'Shared secret for **internal** meeting callbacks from ai-engine-2. Must match `WORKER_SECRET` on this API and the engine\'s `WORKER_SECRET` / `INTERNAL_SECRET`. Used on `POST /internal/meetings/:id/result`, not on JWT routes.',
+      },
+      'worker-secret',
     )
     .build();
   const document = SwaggerModule.createDocument(app, config);
@@ -94,4 +114,5 @@ async function bootstrap() {
 
   await app.listen(process.env.PORT || 3000);
 }
+
 bootstrap();

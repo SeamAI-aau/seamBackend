@@ -75,6 +75,12 @@ model Meeting {
   createdById        String
   durationSeconds    Int?
   participants       Json?
+  /// External processor job id (e.g. ai-engine-2 `job_id` from POST /api/v1/meetings/process).
+  externalJobId      String?
+  /// Which engine is processing this meeting (e.g. `ai-engine-2`).
+  processingEngine   String?
+  processingStartedAt DateTime?
+  lastProcessingError String?
   createdBy          User                @relation(fields: [createdById], references: [id])
   project            Project             @relation(fields: [projectId], references: [id])
   tasks              Task[]
