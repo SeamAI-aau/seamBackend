@@ -26,6 +26,21 @@ export interface WorkerNewTaskPayload {
   transcript_reference?: string;
   deadline?: string;
   task_id?: string;
+  jiraIssueKey?: string;
+  jiraAction?: string;
+  current_status?: string;
+  suggested_status?: string;
+  jiraProposalTransitionId?: string;
+  jiraProposalTargetStatus?: string;
+}
+
+export interface WorkerTaskPayload extends WorkerNewTaskPayload {
+  jiraIssueKey?: string;
+  jiraAction?: string;
+  current_status?: string;
+  suggested_status?: string;
+  jiraProposalTransitionId?: string;
+  jiraProposalTargetStatus?: string;
 }
 
 /**
@@ -77,7 +92,7 @@ export interface WorkerSummaryPayload {
 export interface WorkerResultPayload {
   status: 'success' | 'failed';
   transcript?: string;
-  new_tasks?: WorkerNewTaskPayload[];
+  new_tasks?: WorkerTaskPayload[];
   transitioned_tasks?: WorkerTransitionedTaskPayload[];
   /** Blockers extracted from transcript by NLP; persisted and exposed next to GitHub blockers. */
   blockers?: WorkerBlockerPayload[];
@@ -135,6 +150,36 @@ export class WorkerNewTaskBodyDto {
   @IsOptional()
   @IsString()
   task_id?: string;
+
+  @ApiPropertyOptional({ description: 'Optional Jira issue key from the AI engine.' })
+  @IsOptional()
+  @IsString()
+  jiraIssueKey?: string;
+
+  @ApiPropertyOptional({ description: 'Optional Jira action hint (create or transition).' })
+  @IsOptional()
+  @IsString()
+  jiraAction?: string;
+
+  @ApiPropertyOptional({ description: 'Current Jira status, if provided.' })
+  @IsOptional()
+  @IsString()
+  current_status?: string;
+
+  @ApiPropertyOptional({ description: 'Suggested Jira status, if provided.' })
+  @IsOptional()
+  @IsString()
+  suggested_status?: string;
+
+  @ApiPropertyOptional({ description: 'Proposed Jira transition id.' })
+  @IsOptional()
+  @IsString()
+  jiraProposalTransitionId?: string;
+
+  @ApiPropertyOptional({ description: 'Proposed Jira target status.' })
+  @IsOptional()
+  @IsString()
+  jiraProposalTargetStatus?: string;
 }
 
 export class WorkerTransitionedTaskBodyDto {

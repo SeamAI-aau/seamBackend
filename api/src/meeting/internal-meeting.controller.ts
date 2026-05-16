@@ -6,6 +6,7 @@ import {
   Headers,
   HttpCode,
   UnauthorizedException,
+  Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -43,6 +44,8 @@ const AI_ENGINE_PROCESS_AUDIO_DOC = [
 @ApiSecurity('worker-secret')
 @Controller('internal/meetings')
 export class InternalMeetingController {
+  private readonly logger = new Logger(InternalMeetingController.name);
+
   constructor(
     private readonly config: ConfigService,
     private readonly meetingProcessingService: MeetingProcessingService,
@@ -90,7 +93,11 @@ export class InternalMeetingController {
       throw new UnauthorizedException('Invalid worker secret');
     }
 
+    this.logger.log({ meetingId, payload }, 'Received worker callback payload');
+
     await this.meetingProcessingService.handleWorkerResult(meetingId, payload);
-    return { message: 'Received' };
+    const result = { message: 'Received' };
+    this.logger.log({ meetingId, result }, 'Worker callback processed');
+    return result;
   }
 }

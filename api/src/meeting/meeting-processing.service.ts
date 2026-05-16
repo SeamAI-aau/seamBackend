@@ -1,7 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Logger } from 'nestjs-pino';
-import { MeetingStatus, ProjectMemberStatus, Role, TaskStatus, type Prisma } from '@prisma/client';
+import {
+  JiraProposalAction,
+  MeetingStatus,
+  ProjectMemberStatus,
+  Role,
+  TaskStatus,
+  type Prisma,
+} from '@prisma/client';
 import { CloudinaryService } from '../infrastracture/cloudinary/cloudinary.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { NotificationService } from '../notification/notification.service';
@@ -214,6 +221,10 @@ export class MeetingProcessingService {
       assigneeId: string | null;
       confidenceScore: number | null;
       jiraIssueKey: string | null;
+      jiraProposalAction: JiraProposalAction | null;
+      jiraProposalIssueKey: string | null;
+      jiraProposalTransitionId: string | null;
+      jiraProposalTargetStatus: string | null;
     }>,
   ): Promise<string> {
     let projectId = '';
@@ -257,6 +268,10 @@ export class MeetingProcessingService {
             assigneeId: task.assigneeId ?? null,
             confidenceScore: task.confidenceScore ?? null,
             jiraIssueKey: task.jiraIssueKey ?? null,
+            jiraProposalAction: task.jiraProposalAction ?? null,
+            jiraProposalIssueKey: task.jiraProposalIssueKey ?? null,
+            jiraProposalTransitionId: task.jiraProposalTransitionId ?? null,
+            jiraProposalTargetStatus: task.jiraProposalTargetStatus ?? null,
           })),
         });
       }
@@ -293,6 +308,10 @@ export class MeetingProcessingService {
     assigneeId: string | null;
     confidenceScore: number | null;
     jiraIssueKey: string | null;
+    jiraProposalAction: JiraProposalAction | null;
+    jiraProposalIssueKey: string | null;
+    jiraProposalTransitionId: string | null;
+    jiraProposalTargetStatus: string | null;
   }> {
     if (!Array.isArray(tasks)) {
       return [];
@@ -308,9 +327,12 @@ export class MeetingProcessingService {
         const description = (task.description ?? '').trim();
         const assigneeId = this.resolveAssigneeId(task.assigneeId, task.assignee);
         const confidenceScore = this.normalizeConfidence(task.confidence);
-        const jiraIssueKey = typeof task.task_id === 'string' && task.task_id.trim()
-          ? task.task_id.trim()
-          : null;
+        const jiraIssueKey = typeof task.jiraIssueKey === 'string' && task.jiraIssueKey.trim()
+          ? task.jiraIssueKey.trim()
+          : typeof task.task_id === 'string' && task.task_id.trim()
+            ? task.task_id.trim()
+            : null;
+        const jiraProposal = deriveJiraProposal(task);
 
         return {
           title: title || description || 'Extracted task',
@@ -318,6 +340,10 @@ export class MeetingProcessingService {
           assigneeId,
           confidenceScore,
           jiraIssueKey,
+          jiraProposalAction: jiraProposal.jiraProposalAction,
+          jiraProposalIssueKey: jiraProposal.jiraProposalIssueKey,
+          jiraProposalTransitionId: jiraProposal.jiraProposalTransitionId,
+          jiraProposalTargetStatus: jiraProposal.jiraProposalTargetStatus,
         };
       })
       .filter((task): task is {
@@ -326,6 +352,10 @@ export class MeetingProcessingService {
         assigneeId: string | null;
         confidenceScore: number | null;
         jiraIssueKey: string | null;
+        jiraProposalAction: JiraProposalAction | null;
+        jiraProposalIssueKey: string | null;
+        jiraProposalTransitionId: string | null;
+        jiraProposalTargetStatus: string | null;
       } => Boolean(task && task.title.trim().length > 0));
   }
 
