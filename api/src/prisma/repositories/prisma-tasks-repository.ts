@@ -129,6 +129,10 @@ export class PrismaTaskRepository implements ITaskRepository {
     return this.prisma.task.count({ where: this.buildWhere(filters) });
   }
 
+  async delete(id: string): Promise<void> {
+    await this.prisma.task.delete({ where: { id } });
+  }
+
   private buildWhere(filters: TaskFilters): Prisma.TaskWhereInput {
     const where: Prisma.TaskWhereInput = {};
     if (filters.meetingId) where.meetingId = filters.meetingId;

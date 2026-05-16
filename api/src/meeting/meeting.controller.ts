@@ -1,5 +1,6 @@
 import {
   Controller,
+  Delete,
   Get,
   Post,
   Param,
@@ -23,6 +24,8 @@ import {
   ApiConsumes,
   ApiOkResponse,
   ApiParam,
+  ApiForbiddenResponse,
+  ApiNotFoundResponse,
 } from '@nestjs/swagger';
 
 const MEETING_UPLOAD_AI_ENGINE_DOC = [
@@ -163,5 +166,58 @@ export class MeetingController {
     @CurrentUser() user: CurrentUserType,
   ) {
     return this.meetingService.getByIdWithDetails(projectId, meetingId, user.userId);
+  }
+
+  @Delete(':meetingId')
+  @ApiOperation({
+    summary: 'Delete a meeting',
+    description:
+      'Deletes the meeting, transcripts, and extracted tasks. Project owner or the user who uploaded the meeting may delete.',
+  })
+  @ApiParam({
+    name: 'projectId',
+    description: 'Project UUID.',
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+  })
+  @ApiParam({
+    name: 'meetingId',
+    description: 'Meeting UUID.',
+    example: 'f6a7b8c9-d0e1-2345-f012-456789012345',
+  })
+  @ApiOkResponse({
+    description: 'Meeting and related transcripts/tasks removed.',
+    schema: {
+      example: {
+        id: 'f6a7b8c9-d0e1-2345-f012-456789012345',
+        deleted: true,
+      },
+    },
+  })
+  @ApiForbiddenResponse({
+    description: 'Not allowed to delete this meeting.',
+    schema: {
+      example: {
+        statusCode: 403,
+        message: 'Only project owner or meeting uploader can delete this meeting',
+        error: 'FORBIDDEN',
+      },
+    },
+  })
+  @ApiNotFoundResponse({
+    description: 'Meeting not found.',
+    schema: {
+      example: {
+        statusCode: 404,
+        message: 'Meeting not found',
+        error: 'MEETING_NOT_FOUND',
+      },
+    },
+  })
+  deleteMeeting(
+    @Param('projectId') projectId: string,
+    @Param('meetingId') meetingId: string,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    return this.meetingService.deleteMeeting(projectId, meetingId, user.userId);
   }
 }

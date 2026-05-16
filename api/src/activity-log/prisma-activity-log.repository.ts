@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   IActivityLogRepository,
@@ -6,6 +7,24 @@ import type {
   ActivityLogFilters,
   ActivityLogWithRelations,
 } from './activity-log.repository';
+
+function buildActivityLogWhere(filters: ActivityLogFilters): Prisma.ActivityLogWhereInput {
+  const where: Prisma.ActivityLogWhereInput = {};
+
+  if (filters.projectId) where.projectId = filters.projectId;
+  if (filters.userId) where.userId = filters.userId;
+  if (filters.action) where.action = filters.action;
+  if (filters.entityType) where.entityType = filters.entityType;
+  if (filters.entityId) where.entityId = filters.entityId;
+
+  if (filters.fromDate || filters.toDate) {
+    where.createdAt = {};
+    if (filters.fromDate) where.createdAt.gte = filters.fromDate;
+    if (filters.toDate) where.createdAt.lte = filters.toDate;
+  }
+
+  return where;
+}
 
 @Injectable()
 export class PrismaActivityLogRepository implements IActivityLogRepository {
@@ -30,18 +49,8 @@ export class PrismaActivityLogRepository implements IActivityLogRepository {
     filters: ActivityLogFilters,
     options?: { skip?: number; take?: number },
   ): Promise<ActivityLogWithRelations[]> {
-    const where: Record<string, unknown> = {};
-    if (filters.projectId) where.projectId = filters.projectId;
-    if (filters.userId) where.userId = filters.userId;
-    if (filters.action) where.action = filters.action;
-    if (filters.fromDate || filters.toDate) {
-      where.createdAt = {};
-      if (filters.fromDate) (where.createdAt as Record<string, Date>).gte = filters.fromDate;
-      if (filters.toDate) (where.createdAt as Record<string, Date>).lte = filters.toDate;
-    }
-
     const rows = await this.prisma.activityLog.findMany({
-      where,
+      where: buildActivityLogWhere(filters),
       orderBy: { createdAt: 'desc' },
       skip: options?.skip,
       take: options?.take,
@@ -54,15 +63,8 @@ export class PrismaActivityLogRepository implements IActivityLogRepository {
   }
 
   async count(filters: ActivityLogFilters): Promise<number> {
-    const where: Record<string, unknown> = {};
-    if (filters.projectId) where.projectId = filters.projectId;
-    if (filters.userId) where.userId = filters.userId;
-    if (filters.action) where.action = filters.action;
-    if (filters.fromDate || filters.toDate) {
-      where.createdAt = {};
-      if (filters.fromDate) (where.createdAt as Record<string, Date>).gte = filters.fromDate;
-      if (filters.toDate) (where.createdAt as Record<string, Date>).lte = filters.toDate;
-    }
-    return this.prisma.activityLog.count({ where });
+    return this.prisma.activityLog.count({
+      where: buildActivityLogWhere(filters),
+    });
   }
 }

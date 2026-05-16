@@ -1,4 +1,4 @@
-import { Controller, Post, Param, UseGuards, Body, Patch, Get, Query } from '@nestjs/common';
+import { Controller, Post, Param, UseGuards, Body, Patch, Get, Query, Delete } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserType } from '../auth/types/current-user.type';
@@ -323,6 +323,49 @@ export class TaskController {
     @Body() body: JiraTransitionIssueDto,
   ) {
     return this.taskService.transitionJiraIssueForTask(id, user.userId, body.transitionId);
+  }
+
+  @Delete(':id')
+  @ApiOperation({
+    summary: 'Delete a task',
+    description: 'Permanently removes the task. Project owner or Scrum Master with project access only.',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Task UUID.',
+    example: 'c3d4e5f6-a7b8-9012-cdef-123456789012',
+  })
+  @ApiOkResponse({
+    description: 'Task permanently deleted.',
+    schema: {
+      example: {
+        id: 'c3d4e5f6-a7b8-9012-cdef-123456789012',
+        deleted: true,
+      },
+    },
+  })
+  @ApiForbiddenResponse({
+    description: 'Not allowed to delete this task.',
+    schema: {
+      example: {
+        statusCode: 403,
+        message: 'Only project owner or Scrum Master can delete tasks',
+        error: 'FORBIDDEN',
+      },
+    },
+  })
+  @ApiNotFoundResponse({
+    description: 'Task not found.',
+    schema: {
+      example: {
+        statusCode: 404,
+        message: 'Task not found',
+        error: 'TASK_NOT_FOUND',
+      },
+    },
+  })
+  deleteTask(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
+    return this.taskService.deleteTask(id, user);
   }
 
   @Get(':id')

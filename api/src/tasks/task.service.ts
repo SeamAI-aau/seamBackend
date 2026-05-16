@@ -483,6 +483,46 @@ export class TaskService {
     return result;
   }
 
+  async deleteTask(taskId: string, user: CurrentUserType) {
+    const task = await this.taskRepo.findByIdWithMeetingAndProject(taskId);
+    if (!task) {
+      throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
+    }
+
+    const projectId = task.meeting.projectId;
+    const isOwner = await this.projectRepo.isOwner(projectId, user.userId);
+    const isMember = await this.projectRepo.isMember(projectId, user.userId);
+    const canDelete =
+      isOwner || (user.role === Role.SCRUM_MASTER && (isOwner || isMember));
+
+    if (!canDelete) {
+      throw new AppException(
+        ErrorCode.FORBIDDEN,
+        'Only project owner or Scrum Master can delete tasks',
+        403,
+      );
+    }
+
+    await this.taskRepo.delete(taskId);
+
+    this.realtime.emitToProject(projectId, 'task.deleted', { taskId, projectId });
+
+    this.activityLog
+      .log({
+        projectId,
+        userId: user.userId,
+        action: 'task.deleted',
+        entityType: 'Task',
+        entityId: taskId,
+        metadata: { title: task.title },
+      })
+      .catch((err) => {
+        this.logger.warn({ taskId, projectId, err }, 'Failed to log task.deleted activity');
+      });
+
+    return { id: taskId, deleted: true };
+  }
+
   async getById(taskId: string, userId: string) {
     const task = await this.taskRepo.findByIdWithMeetingAndProject(taskId);
 
