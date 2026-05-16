@@ -9,34 +9,16 @@ import { buildHttpCorsOptions } from './common/config/cors.config';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
-  });
-  // Allow all origins by echoing the request origin and allow credentials.
-  // WARNING: This effectively allows requests from any origin and is
-  // insecure for production. Use only for local development/testing.
-
-  // enezi two lines only
-  // app.enableCors({ origin: true, credentials: true });
-
-  // app.use(cookieParser());
-
-  // just added now
-  // === ADD THESE LINES ===
-  app.set('trust proxy', 1); // Important for Render / proxies
-
-  const allowedOrigins = ['http://localhost:8080', 'http://192.168.1.3:8080'];
-
-  app.enableCors({
-    origin: allowedOrigins, // ← Use array instead of function for now
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
-    exposedHeaders: ['Set-Cookie'],
-  });
     /** Required for `POST /integrations/github/webhook` HMAC (`X-Hub-Signature-256`) verification. */
     rawBody: true,
   });
 
-  app.enableCors(buildHttpCorsOptions(process.env.CORS_ORIGINS));
+  app.set('trust proxy', 1);
+
+  app.enableCors({
+    ...buildHttpCorsOptions(process.env.CORS_ORIGINS),
+    exposedHeaders: ['Set-Cookie'],
+  });
 
   app.use(cookieParser());
 
@@ -69,9 +51,6 @@ async function bootstrap() {
       ].join('\n'),
     )
     .setVersion(process.env.npm_package_version ?? '1.0.0')
-    // .setContact('Seam.ai Dev Team', 'https://seam.ai', 'dev@seam.ai')
-    // .setLicense('MIT', 'https://opensource.org/licenses/MIT')
-    // .setTermsOfService('https://seam.ai/terms')
     .addBearerAuth(
       {
         type: 'http',
@@ -93,7 +72,6 @@ async function bootstrap() {
     )
     .build();
   const document = SwaggerModule.createDocument(app, config);
-  // Remove undesired controllers/endpoints from the OpenAPI document
   const pathsToRemove = ['/api', '/health'];
   if (document.paths) {
     for (const p of Object.keys(document.paths)) {
@@ -102,18 +80,15 @@ async function bootstrap() {
       }
     }
   }
-  // Ensure cookie security scheme is present in the generated OpenAPI document
   const components = (document.components ??
     (document.components = {} as ComponentsObject)) as ComponentsObject;
   components.securitySchemes = components.securitySchemes ?? {};
-  // add cookie-based scheme for refresh/access tokens (used by the app)
   (components.securitySchemes as Record<string, SecuritySchemeObject>)['access-cookie'] = {
     type: 'apiKey',
     in: 'cookie',
     name: 'accessToken',
     description: 'HTTP-only cookie containing the access JWT',
   } as SecuritySchemeObject;
-  // remove matching tags to keep Swagger UI tidy
   if (Array.isArray(document.tags)) {
     document.tags = document.tags.filter((t) => !['App', 'Health'].includes(t.name));
   }

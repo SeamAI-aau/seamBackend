@@ -19,16 +19,6 @@ import {
   ApiForbiddenResponse,
   ApiNotFoundResponse,
 } from '@nestjs/swagger';
-import {
-  ApiTags,
-  ApiBearerAuth,
-  ApiOperation,
-  ApiParam,
-  ApiOkResponse,
-  ApiUnauthorizedResponse,
-  ApiForbiddenResponse,
-  ApiNotFoundResponse,
-} from '@nestjs/swagger';
 
 const ACTIVITY_FEED_EXAMPLE = {
   items: [
@@ -62,9 +52,9 @@ const ACTIVITY_FEED_EXAMPLE = {
       userId: 'user-uuid',
       source: 'JIRA',
       type: 'jira_status_change',
-      externalId: 'jira:PAY-42:10001',
+      externalId: 'jira:PAY-42:10001:status',
       title: 'PAY-42: Implement webhook retries',
-      metadata: { issueKey: 'PAY-42', from: 'To Do', to: 'In Progress' },
+      metadata: { issueKey: 'PAY-42', field: 'status', from: 'To Do', to: 'In Progress' },
       occurredAt: '2026-04-14T10:00:00.000Z',
       user: { id: 'user-uuid', name: 'Dev One', email: 'dev1@example.com' },
     },
@@ -95,9 +85,10 @@ export class DeveloperActivityController {
   @ApiOperation({
     summary: 'Get developer activity feed for a project',
     description:
-      'Paginated feed of synced GitHub and Jira activity for the project. ' +
-      'Activity types include commit_count (daily aggregated commits), pr_opened, pr_merged, and jira_status_change. ' +
-      'Requires project owner or active member access. No request body.',
+      'Paginated feed of synced GitHub and Jira activity (newest first). ' +
+      'GitHub types: commit_count, pr_opened, pr_merged. ' +
+      'Jira types: jira_status_change, jira_assignee_change, jira_comment, jira_worklog, jira_issue_created. ' +
+      'Requires project owner or active member. No request body.',
   })
   @ApiParam({
     name: 'projectId',
@@ -106,8 +97,7 @@ export class DeveloperActivityController {
   })
   @ApiOkResponse({
     description:
-      'Paginated activity feed ordered by occurredAt descending. ' +
-      'user is null when the activity could not be mapped to a project member.',
+      'Paginated activity feed. user is null when activity could not be mapped to a project member.',
     schema: { example: ACTIVITY_FEED_EXAMPLE },
   })
   @ApiUnauthorizedResponse({
@@ -128,37 +118,6 @@ export class DeveloperActivityController {
       example: { statusCode: 404, message: 'Project not found', error: 'Not Found' },
     },
   })
-  @ApiOperation({
-    summary: 'Get developer activity feed for a project',
-    description:
-      'Paginated feed of GitHub and Jira activity. Jira types include jira_status_change, jira_assignee_change, jira_comment, jira_worklog, jira_issue_created.',
-  })
-  @ApiParam({ name: 'projectId', description: 'Project UUID.' })
-  @ApiOkResponse({
-    description: 'Paginated activity feed.',
-    schema: {
-      example: {
-        items: [
-          {
-            id: 'act-uuid',
-            source: 'JIRA',
-            type: 'jira_status_change',
-            title: 'PAY-42: Webhook retries',
-            metadata: { issueKey: 'PAY-42', from: 'To Do', to: 'In Progress' },
-            occurredAt: '2026-04-14T10:00:00.000Z',
-            user: { id: 'user-uuid', name: 'Dev One', email: 'dev@example.com' },
-          },
-        ],
-        total: 1,
-        page: 1,
-        limit: 50,
-        totalPages: 1,
-      },
-    },
-  })
-  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
-  @ApiForbiddenResponse({ description: 'Not a project member.' })
-  @ApiNotFoundResponse({ description: 'Project not found.' })
   getFeed(
     @Param('projectId') projectId: string,
     @CurrentUser() user: CurrentUserType,
@@ -178,10 +137,9 @@ export class DeveloperActivityController {
   @ApiOperation({
     summary: 'Get developer activity chart data for a project',
     description:
-      'Time-series buckets of activity counts for charts. ' +
-      'commit_count rows use metadata.count for totals; other types count as 1 per row. ' +
-      'byType breaks down counts per activity type (commit maps from commit_count). ' +
-      'Default range is the last 30 days when fromDate is omitted. No request body.',
+      'Time-series buckets for charts. commit_count uses metadata.count; other types count as 1. ' +
+      'byType breaks down per activity type (commit maps from commit_count). ' +
+      'Default range is last 30 days when fromDate is omitted. No request body.',
   })
   @ApiParam({
     name: 'projectId',
@@ -189,7 +147,7 @@ export class DeveloperActivityController {
     example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
   })
   @ApiOkResponse({
-    description: 'Array of chart buckets sorted by date ascending.',
+    description: 'Chart buckets sorted by date ascending.',
     schema: { example: CHART_DATA_EXAMPLE },
   })
   @ApiUnauthorizedResponse({
@@ -210,13 +168,6 @@ export class DeveloperActivityController {
       example: { statusCode: 404, message: 'Project not found', error: 'Not Found' },
     },
   })
-  @ApiOperation({ summary: 'Get developer activity chart buckets for a project' })
-  @ApiParam({ name: 'projectId', description: 'Project UUID.' })
-  @ApiOkResponse({
-    schema: {
-      example: [{ date: '2026-04-14', count: 5, byType: { jira_status_change: 2, commit: 3 } }],
-    },
-  })
   getCharts(
     @Param('projectId') projectId: string,
     @CurrentUser() user: CurrentUserType,
@@ -234,10 +185,9 @@ export class DeveloperActivityController {
   @ApiOperation({
     summary: 'Sync GitHub developer activity for a project',
     description:
-      'Pulls commits from the linked GitHub repo (last 30 days) and PRs from the local database, ' +
-      'then upserts DeveloperActivity rows. Commits are aggregated per developer per day (type commit_count). ' +
-      'Only commits/PRs authored by mapped project members (GitHub username on user or githubAccount) are stored. ' +
-      'Returns counts of rows upserted. No request body. Returns { commits: 0, prs: 0 } when the project has no githubRepoUrl.',
+      'Pulls commits (last 30 days) from the linked repo and PRs from the local DB, then upserts DeveloperActivity. ' +
+      'Uses project owner GitHub token. Only mapped members (githubUsername or GitHub OAuth) are attributed. ' +
+      'No request body. Returns { commits: 0, prs: 0 } when githubRepoUrl is not set.',
   })
   @ApiParam({
     name: 'projectId',
@@ -245,10 +195,8 @@ export class DeveloperActivityController {
     example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
   })
   @ApiOkResponse({
-    description: 'Number of commit-day aggregates and PR activity rows upserted.',
-    schema: {
-      example: { commits: 12, prs: 5 },
-    },
+    description: 'Rows upserted for commit-day aggregates and PR activity.',
+    schema: { example: { commits: 12, prs: 5 } },
   })
   @ApiUnauthorizedResponse({
     description: 'Missing or invalid access token.',
@@ -268,12 +216,6 @@ export class DeveloperActivityController {
       example: { statusCode: 404, message: 'Project not found', error: 'Not Found' },
     },
   })
-  @ApiOperation({
-    summary: 'Sync GitHub developer activity',
-    description:
-      'Uses project owner GitHub token. Maps commits/PRs to members with githubUsername or GitHub OAuth.',
-  })
-  @ApiOkResponse({ schema: { example: { commits: 12, prs: 5 } } })
   async syncGitHub(@Param('projectId') projectId: string, @CurrentUser() user: CurrentUserType) {
     return this.syncService.syncGitHubActivity(projectId, user.userId);
   }
@@ -282,9 +224,10 @@ export class DeveloperActivityController {
   @ApiOperation({
     summary: 'Sync Jira developer activity for a project',
     description:
-      'Fetches recent issues for the linked Jira project key and stores status transition changelog entries ' +
-      '(type jira_status_change). Only transitions where the changelog field is status are recorded. ' +
-      'No request body. Returns { issues: 0 } when the project has no jiraProjectKey.',
+      'Pulls Jira changelog (status + assignee), comments, worklogs, and issue-created events. ' +
+      'Uses project owner Jira token. Attributes via JiraAccount.accountId on owner and active members. ' +
+      'Query: optional fromDate, toDate, maxIssues. Incremental default uses last sync or 30 days. ' +
+      'Updates project.jiraLastActivitySyncAt. Returns { activities: 0, issuesScanned: 0 } when jiraProjectKey is unset.',
   })
   @ApiParam({
     name: 'projectId',
@@ -292,10 +235,8 @@ export class DeveloperActivityController {
     example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
   })
   @ApiOkResponse({
-    description: 'Number of Jira status-change activity rows upserted.',
-    schema: {
-      example: { issues: 18 },
-    },
+    description: 'activities = rows upserted; issuesScanned = Jira issues processed.',
+    schema: { example: { activities: 48, issuesScanned: 25 } },
   })
   @ApiUnauthorizedResponse({
     description: 'Missing or invalid access token.',
@@ -314,18 +255,6 @@ export class DeveloperActivityController {
     schema: {
       example: { statusCode: 404, message: 'Project not found', error: 'Not Found' },
     },
-  })
-  @ApiOperation({
-    summary: 'Sync Jira developer activity',
-    description:
-      'Pulls changelog (status + assignee), comments, worklogs, and issue-created events. ' +
-      'Uses project owner Jira token. Attributes activity to members who connected Jira (accountId on JiraAccount). ' +
-      'Incremental: defaults fromDate to last sync or 30 days ago. Updates project.jiraLastActivitySyncAt.',
-  })
-  @ApiParam({ name: 'projectId', description: 'Project UUID.' })
-  @ApiOkResponse({
-    description: 'Sync summary.',
-    schema: { example: { activities: 48, issuesScanned: 25 } },
   })
   async syncJira(
     @Param('projectId') projectId: string,
