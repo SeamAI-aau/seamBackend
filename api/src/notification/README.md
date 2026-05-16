@@ -32,6 +32,7 @@ If SMTP is not configured, emails are logged only and the app runs normally.
 - `invitation_sent` – Email only (invitee not yet a user)
 - `invitation_accepted` – In-app + optional email
 - `task_assigned` – In-app + email
+- `tasks_pending_assignment` – In-app: meeting tasks have no assignee; notify project owner + Scrum Master members to assign before dev approve flow
 - `task_approved` – In-app (to SM)
 - `task_declined` – In-app (to SM)
 - `blocker_detected` – In-app + email (wire as needed)

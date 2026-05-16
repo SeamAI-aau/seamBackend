@@ -9,6 +9,8 @@ export const NOTIFICATION_TYPES = {
   TASK_ASSIGNED: 'task_assigned',
   TASK_APPROVED: 'task_approved',
   TASK_DECLINED: 'task_declined',
+  /** Meeting pipeline saved tasks with no NLP assignee — SM should assign before dev approve flow. */
+  TASKS_PENDING_ASSIGNMENT: 'tasks_pending_assignment',
   BLOCKER_DETECTED: 'blocker_detected',
   MEETING_UPLOADED: 'meeting_uploaded',
 } as const;

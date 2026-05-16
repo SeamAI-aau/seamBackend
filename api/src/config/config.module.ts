@@ -38,6 +38,14 @@ function resolveApiEnvFilePaths(): string[] {
         REDIS_HOST: Joi.string().default('localhost'),
         REDIS_PORT: Joi.number().default(6379),
 
+        /** When `true`, BullMQ is not registered: meeting transcription jobs are skipped and Jira/GitHub sync queues are no-ops. */
+        DISABLE_QUEUES: Joi.string().valid('true', 'false').optional(),
+
+        /** Base URL of ai-engine-2 (e.g. `http://localhost:8000`). Required for meeting uploads. */
+        AI_ENGINE_BASE_URL: Joi.string().trim().optional().allow(''),
+        /** Max time (ms) for meeting dispatch: Cloudinary download + multipart POST to ai-engine until 202. Not full pipeline (that runs on the engine and completes via webhook). Default 10 minutes for large uploads. */
+        AI_ENGINE_REQUEST_TIMEOUT_MS: Joi.number().integer().min(5000).max(3_600_000).optional(),
+
         WORKER_SECRET: Joi.string().min(1).optional(),
 
         TOKEN_ENCRYPTION_SECRET: Joi.string().min(16).required(),
