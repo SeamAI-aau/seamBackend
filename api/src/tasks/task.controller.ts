@@ -21,6 +21,7 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskOutcomeDto } from './dto/update-task-outcome.dto';
 import { ReassignTaskDto } from './dto/reassign-task.dto';
 import { TaskListQueryDto } from './dto/task-list-query.dto';
+import { JiraTransitionIssueDto } from '../integrations/jira/dto/jira-transition.dto';
 
 @ApiTags('Tasks')
 @ApiBearerAuth('access-token')
@@ -258,6 +259,57 @@ export class TaskController {
     @Body() body: ReassignTaskDto,
   ) {
     return this.taskService.reassignTask(id, user, body.assigneeId ?? null);
+  }
+
+  @Get(':id/jira/transitions')
+  @ApiOperation({
+    summary: 'List Jira transitions for a synced task',
+    description:
+      'Convenience wrapper around GET /integrations/jira/projects/:projectId/issues/:issueKey/transitions. ' +
+      'Task must have jiraIssueKey (status SYNCED after approve).',
+  })
+  @ApiParam({ name: 'id', description: 'Task UUID.' })
+  @ApiOkResponse({
+    description: 'Available Jira workflow transitions.',
+    schema: {
+      example: {
+        transitions: [
+          { id: '21', name: 'In Progress', to: { id: '3', name: 'In Progress' } },
+        ],
+      },
+    },
+  })
+  @ApiBadRequestResponse({ description: 'Task not synced to Jira.' })
+  @ApiForbiddenResponse({ description: 'No access to task.' })
+  @ApiNotFoundResponse({ description: 'Task not found.' })
+  getJiraTransitions(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
+    return this.taskService.getJiraTransitionsForTask(id, user.userId);
+  }
+
+  @Post(':id/jira/transitions')
+  @ApiOperation({
+    summary: 'Apply a Jira transition for a synced task',
+    description:
+      'Moves the linked Jira issue using transitionId from GET :id/jira/transitions. ' +
+      'Uses project owner Jira credentials.',
+  })
+  @ApiParam({ name: 'id', description: 'Task UUID.' })
+  @ApiBody({
+    type: JiraTransitionIssueDto,
+    examples: {
+      start: { summary: 'Start progress', value: { transitionId: '21' } },
+    },
+  })
+  @ApiOkResponse({
+    schema: { example: { issueKey: 'PAY-42', transitionId: '21', applied: true } },
+  })
+  @ApiBadRequestResponse({ description: 'Invalid transition or task not synced.' })
+  transitionJiraIssue(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserType,
+    @Body() body: JiraTransitionIssueDto,
+  ) {
+    return this.taskService.transitionJiraIssueForTask(id, user.userId, body.transitionId);
   }
 
   @Get(':id')

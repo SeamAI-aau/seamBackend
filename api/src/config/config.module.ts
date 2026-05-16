@@ -37,6 +37,16 @@ function resolveApiEnvFilePaths(): string[] {
 
         REDIS_HOST: Joi.string().default('localhost'),
         REDIS_PORT: Joi.number().default(6379),
+        REDIS_PASSWORD: Joi.string().optional().allow(''),
+
+        /** Comma-separated CORS origins (include `chrome-extension://<id>` for the MV3 extension). Empty + non-production = allow all origins. */
+        CORS_ORIGINS: Joi.string().optional().allow(''),
+
+        /** Max meeting audio upload size in megabytes (multipart `file` on POST .../meetings). Default 500. */
+        MEETING_UPLOAD_MAX_MB: Joi.number().integer().min(1).max(2048).optional(),
+
+        /** BullMQ repeatable GitHub `sync-all` interval in milliseconds. Default 600000 (10 min). */
+        GITHUB_SYNC_REPEAT_MS: Joi.number().integer().min(60_000).max(86_400_000).optional(),
 
         /** When `true`, BullMQ is not registered: meeting transcription jobs are skipped and Jira/GitHub sync queues are no-ops. */
         DISABLE_QUEUES: Joi.string().valid('true', 'false').optional(),
@@ -59,6 +69,8 @@ function resolveApiEnvFilePaths(): string[] {
         GITHUB_CLIENT_SECRET: Joi.string().optional(),
         GITHUB_REDIRECT_URI: Joi.string().uri().optional(),
         GITHUB_OAUTH_SUCCESS_REDIRECT_URL: Joi.string().uri().optional(),
+        /** Secret for `POST /integrations/github/webhook` (`X-Hub-Signature-256`). Must match GitHub webhook configuration. */
+        GITHUB_WEBHOOK_SECRET: Joi.string().optional().allow(''),
 
         SMTP_HOST: Joi.string().optional(),
         SMTP_PORT: Joi.number().optional(),

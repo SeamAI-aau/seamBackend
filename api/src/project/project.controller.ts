@@ -523,7 +523,15 @@ export class ProjectController {
           },
           jira: {
             projectKey: 'PAY',
+            lastActivitySyncAt: '2026-04-14T12:00:00.000Z',
           },
+        },
+        integrationMapping: {
+          totalActiveMembers: 2,
+          githubMappedCount: 2,
+          jiraMappedCount: 1,
+          message:
+            'Connect GitHub/Jira integrations or set githubUsername on profile. Jira requires OAuth + refresh-profile for accountId.',
         },
         members: [
           {
@@ -532,6 +540,8 @@ export class ProjectController {
             email: 'scrum.master@example.com',
             role: 'SCRUM_MASTER',
             githubUsername: 'jane-doe-dev',
+            githubMapped: true,
+            jiraMapped: true,
             projectRole: 'owner',
             status: 'ACTIVE',
           },
@@ -541,6 +551,8 @@ export class ProjectController {
             email: 'dev1@example.com',
             role: 'DEVELOPER',
             githubUsername: 'dev-one',
+            githubMapped: true,
+            jiraMapped: false,
             projectRole: 'member',
             status: 'ACTIVE',
           },

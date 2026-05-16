@@ -9,6 +9,7 @@ import type { ExtendedError, Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeService } from './realtime.service';
+import { buildSocketIoCorsOptions } from '../../common/config/cors.config';
 
 type SocketJwtPayload = {
   sub: string;
@@ -19,12 +20,7 @@ type SocketJwtPayload = {
 };
 
 @WebSocketGateway({
-  cors: {
-    // Mirror HTTP CORS config (origin reflection) so browsers can send cookies with credentials.
-    // For production, prefer an explicit allowlist rather than `true`.
-    origin: true,
-    credentials: true,
-  },
+  cors: buildSocketIoCorsOptions(process.env.CORS_ORIGINS),
 })
 export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()

@@ -5,7 +5,9 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { CurrentUserType } from '../../auth/types/current-user.type';
 import { JiraService } from './jira.service';
+import { JiraIssueService } from './jira-issue.service';
 import { LinkJiraProjectDto } from './dto/link-jira-project.dto';
+import { JiraTransitionIssueDto } from './dto/jira-transition.dto';
 import { PROJECT_REPOSITORY } from '../../project/types/project.tokens';
 import type { IProjectRepository } from '../../project/types/project.repository';
 import { AppException } from '../../common/errors/app.exception';
@@ -30,6 +32,7 @@ import {
 export class JiraController {
   constructor(
     private readonly jiraService: JiraService,
+    private readonly jiraIssueService: JiraIssueService,
     private readonly config: ConfigService,
     @Inject(PROJECT_REPOSITORY)
     private readonly projectRepo: IProjectRepository,
@@ -55,7 +58,7 @@ export class JiraController {
   @ApiOperation({
     summary: 'OAuth callback (used by Atlassian redirect)',
     description:
-      'Exchanges the authorization code for access and refresh tokens, stores them for the user, then redirects to your frontend (e.g. /oauth-success). Do not call this manually; Atlassian redirects here after the user authorizes.',
+      'Exchanges the authorization code for access and refresh tokens, stores them for the user, fetches /myself (accountId for activity mapping), then redirects to your frontend. Do not call this manually.',
   })
   @ApiQuery({
     name: 'code',
@@ -169,5 +172,114 @@ export class JiraController {
       jiraProjectKey: body.projectKey.trim(),
     });
     return { success: true };
+  }
+
+  @Post('refresh-profile')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Refresh stored Jira accountId for the current user',
+    description:
+      'Calls Jira /myself and updates accountId, displayName, and emailAddress on your JiraAccount. ' +
+      'Run after connecting Jira or when developer-activity attribution is missing.',
+  })
+  @ApiOkResponse({
+    description: 'Profile refreshed from Jira.',
+    schema: {
+      example: {
+        accountId: '557058:abc123',
+        displayName: 'Jane Doe',
+        emailAddress: 'jane@example.com',
+      },
+    },
+  })
+  async refreshProfile(@CurrentUser() user: CurrentUserType) {
+    const profile = await this.jiraService.refreshMyselfProfile(user.userId);
+    if (!profile) {
+      throw new AppException(ErrorCode.VALIDATION_ERROR, 'Jira not connected or /myself failed', 400);
+    }
+    return profile;
+  }
+
+  @Get('projects/:projectId/issues/:issueKey/transitions')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'List available Jira workflow transitions for an issue',
+    description:
+      'Returns transitions you can apply with POST .../transitions. Uses the **project owner** Jira token. ' +
+      'Requires the Seam project to have jiraProjectKey set and the owner to have Jira connected.',
+  })
+  @ApiParam({ name: 'projectId', description: 'Seam project UUID.' })
+  @ApiParam({
+    name: 'issueKey',
+    description: 'Jira issue key (e.g. PAY-42).',
+    example: 'PAY-42',
+  })
+  @ApiOkResponse({
+    description: 'Available transitions for the issue.',
+    schema: {
+      example: {
+        transitions: [
+          {
+            id: '21',
+            name: 'In Progress',
+            to: { id: '3', name: 'In Progress', statusCategory: { name: 'In Progress' } },
+          },
+          {
+            id: '31',
+            name: 'Done',
+            to: { id: '10001', name: 'Done', statusCategory: { name: 'Done' } },
+          },
+        ],
+      },
+    },
+  })
+  @ApiForbiddenResponse({ description: 'Not a project member.' })
+  @ApiNotFoundResponse({ description: 'Project or Jira issue not found.' })
+  getIssueTransitions(
+    @Param('projectId') projectId: string,
+    @Param('issueKey') issueKey: string,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    return this.jiraIssueService.getTransitions(projectId, issueKey, user.userId);
+  }
+
+  @Post('projects/:projectId/issues/:issueKey/transitions')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Apply a Jira workflow transition to an issue',
+    description:
+      'Moves the issue to another status using Jira workflow transition id from GET .../transitions. ' +
+      'No request body fields besides transitionId. Uses project owner token.',
+  })
+  @ApiParam({ name: 'projectId', description: 'Seam project UUID.' })
+  @ApiParam({ name: 'issueKey', description: 'Jira issue key.', example: 'PAY-42' })
+  @ApiBody({
+    type: JiraTransitionIssueDto,
+    examples: {
+      inProgress: { summary: 'Start work', value: { transitionId: '21' } },
+      done: { summary: 'Mark done', value: { transitionId: '31' } },
+    },
+  })
+  @ApiOkResponse({
+    description: 'Transition applied in Jira.',
+    schema: {
+      example: { issueKey: 'PAY-42', transitionId: '21', applied: true },
+    },
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid transitionId or workflow does not allow this transition.',
+  })
+  transitionIssue(
+    @Param('projectId') projectId: string,
+    @Param('issueKey') issueKey: string,
+    @Body() body: JiraTransitionIssueDto,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    return this.jiraIssueService.transitionIssue(
+      projectId,
+      issueKey,
+      body.transitionId,
+      user.userId,
+    );
   }
 }

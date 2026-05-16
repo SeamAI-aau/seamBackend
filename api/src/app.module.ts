@@ -15,6 +15,7 @@ import { DeveloperActivityModule } from './developer-activity/developer-activity
 import { MailModule } from './infrastracture/mail/mail.module';
 import { NotificationModule } from './notification/notification.module';
 import { RealtimeModule } from './infrastracture/realtime/realtime.module';
+import { SchedulingModule } from './infrastracture/scheduling/scheduling.module';
 import { APP_FILTER } from '@nestjs/core';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { AppController } from './app.controller';
@@ -31,6 +32,7 @@ import { AppController } from './app.controller';
     TaskModule,
     JiraModule,
     GithubModule,
+    SchedulingModule,
     ActivityLogModule,
     DeveloperActivityModule,
     MailModule,
@@ -52,9 +54,15 @@ import { AppController } from './app.controller';
           return req.headers['x-request-id'] || crypto.randomUUID();
         },
 
-        customProps: (req) => ({
-          requestId: req.id,
-        }),
+        customProps: (req) => {
+          const seamClient = req.headers['x-seam-client'];
+          return {
+            requestId: req.id,
+            ...(typeof seamClient === 'string' && seamClient
+              ? { seamClient }
+              : {}),
+          };
+        },
       },
     }),
   ],

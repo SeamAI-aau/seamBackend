@@ -35,10 +35,11 @@ model Project {
   name                String
   description         String?
   githubRepoUrl       String?
-  jiraProjectKey      String?
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
-  ownerId             String
+  jiraProjectKey           String?
+  jiraLastActivitySyncAt   DateTime?
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
+  ownerId                  String
   activityLogs        ActivityLog[]
   blockers            Blocker[]
   developerActivities DeveloperActivity[]
@@ -113,6 +114,8 @@ model Task {
   confidenceScore Float?
   transcriptId    String
   jiraIssueKey    String?
+  /// Last Jira create failure message (cleared on successful SYNCED). Used for SM visibility while Bull retries.
+  jiraSyncLastError String?
   assignee        User?      @relation("AssignedTasks", fields: [assigneeId], references: [id])
   meeting         Meeting    @relation(fields: [meetingId], references: [id])
   transcript      Transcript @relation(fields: [transcriptId], references: [id])
@@ -134,8 +137,15 @@ model JiraAccount {
   refreshToken String
   expiresAt    DateTime
   cloudId      String
+  /// Atlassian account id (from /rest/api/3/myself) for changelog author mapping.
+  accountId    String?
+  displayName  String?
+  emailAddress String?
   createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
   user         User     @relation(fields: [userId], references: [id])
+
+  @@index([accountId])
 }
 
 model GithubAccount {
@@ -149,6 +159,13 @@ model GithubAccount {
   /// Cached GitHub login and avatar for profile display.
   username     String?
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// GitHub `X-GitHub-Delivery` ids we have already accepted (idempotent webhook processing).
+model GithubWebhookDelivery {
+  id          String   @id @default(uuid())
+  deliveryId String   @unique
+  createdAt   DateTime @default(now())
 }
 
 model PullRequest {
@@ -201,7 +218,7 @@ model ActivityLog {
   @@index([createdAt])
 }
 
-/// Developer activity from GitHub and Jira. Selective storage: PRs (opened/merged), daily commit counts, Jira status transitions only.
+/// Developer activity from GitHub and Jira (commits, PRs, Jira status/assignee/comments/worklog, etc.).
 model DeveloperActivity {
   id         String   @id @default(uuid())
   projectId  String

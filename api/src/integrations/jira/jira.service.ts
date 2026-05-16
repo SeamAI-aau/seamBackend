@@ -5,6 +5,7 @@ import { encrypt, decrypt } from '../../common/utils/encryption.util';
 import type { IJiraRepository } from './jira.repository';
 import { JIRA_REPOSITORY } from './jira.tokens';
 import type { AtlassianTokenResponse, AtlassianResource } from './types/jira-api.types';
+import type { JiraMyselfResponse } from './types/jira-myself.types';
 import {
   JIRA_SCOPES,
   ATLASSIAN_AUTH_URL,
@@ -75,12 +76,64 @@ export class JiraService {
     }
 
     const secret = this.config.get<string>('TOKEN_ENCRYPTION_SECRET') || 'this is a secret';
+    const encryptedAccess = encrypt(access_token, secret);
     await this.jiraRepo.upsertAccount(userId, {
-      accessToken: encrypt(access_token, secret),
+      accessToken: encryptedAccess,
       refreshToken: encrypt(refresh_token, secret),
       expiresAt: new Date(Date.now() + expires_in * 1000),
       cloudId,
     });
+
+    await this.refreshMyselfProfile(userId, access_token, cloudId);
+  }
+
+  /**
+   * Fetches /myself and stores accountId + profile fields for activity attribution.
+   */
+  async refreshMyselfProfile(
+    userId: string,
+    accessToken?: string,
+    cloudId?: string,
+  ): Promise<JiraMyselfResponse | null> {
+    let token = accessToken;
+    let siteCloudId = cloudId;
+    if (!token || !siteCloudId) {
+      const valid = await this.getValidAccessToken(userId);
+      token = valid.accessToken;
+      siteCloudId = valid.cloudId;
+    }
+
+    try {
+      const res = await axios.get<JiraMyselfResponse>(
+        `https://api.atlassian.com/ex/jira/${siteCloudId}/rest/api/3/myself`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/json',
+          },
+        },
+      );
+      const account = await this.jiraRepo.findAccountByUserId(userId);
+      if (!account) return null;
+
+      const secret = this.config.get<string>('TOKEN_ENCRYPTION_SECRET') || 'this is a secret';
+      await this.jiraRepo.upsertAccount(userId, {
+        accessToken: account.accessToken,
+        refreshToken: account.refreshToken,
+        expiresAt: account.expiresAt,
+        cloudId: account.cloudId,
+        accountId: res.data.accountId,
+        displayName: res.data.displayName ?? null,
+        emailAddress: res.data.emailAddress ?? null,
+      });
+      return res.data;
+    } catch {
+      return null;
+    }
+  }
+
+  getApiBaseUrl(cloudId: string): string {
+    return `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3`;
   }
 
   /**

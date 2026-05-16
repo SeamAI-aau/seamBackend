@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { JiraController } from './jira.controller';
 import { JiraService } from './jira.service';
 import { JiraSyncService } from './jira-sync.service';
+import { JiraIssueService } from './jira-issue.service';
 import { JiraSyncQueue } from './queue/jira-sync.queue';
 import { JiraSyncProcessor } from './queue/jira.sync.processor';
 import { JIRA_REPOSITORY } from './jira.tokens';
@@ -45,6 +46,7 @@ class NoopJiraSyncQueue {
   providers: [
     JiraService,
     JiraSyncService,
+    JiraIssueService,
     ...(queuesEnabled
       ? [JiraSyncQueue, JiraSyncProcessor]
       : [{ provide: JiraSyncQueue, useClass: NoopJiraSyncQueue }]),
@@ -53,6 +55,6 @@ class NoopJiraSyncQueue {
       useClass: PrismaJiraRepository,
     },
   ],
-  exports: [JiraSyncQueue, JiraService],
+  exports: [JiraSyncQueue, JiraService, JiraIssueService],
 })
 export class JiraModule {}

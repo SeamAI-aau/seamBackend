@@ -8,11 +8,19 @@ import { GithubService } from '../integrations/github/github.service';
 import { JiraService } from '../integrations/jira/jira.service';
 import { GithubApiClient } from '../integrations/github/github.client';
 import { parseGitHubRepoUrl } from '../integrations/github/utils/parse-repo-url';
-// Removed unused type import to satisfy linter
 import axios from 'axios';
 import { PullRequestState } from '@prisma/client';
 import { AppException } from '../common/errors/app.exception';
 import { ErrorCode } from '../common/errors/error-codes';
+import {
+  jiraActivityTypeForChangelogField,
+  toJiraJqlDate,
+} from './jira-activity-sync.util';
+import type { JiraActivitySyncQueryDto } from './dto/jira-activity-sync-query.dto';
+
+const JIRA_ISSUE_PAGE_SIZE = 50;
+const JIRA_CHANGELOG_PAGE_SIZE = 100;
+const JIRA_DEFAULT_MAX_ISSUES = 100;
 
 /** Jira changelog history item */
 interface JiraChangelogHistory {
@@ -30,6 +38,31 @@ interface JiraChangelogHistory {
 interface JiraChangelogResponse {
   values: JiraChangelogHistory[];
   total?: number;
+  isLast?: boolean;
+}
+
+interface JiraSearchIssue {
+  key: string;
+  fields?: {
+    summary?: string;
+    created?: string;
+    assignee?: { accountId?: string };
+    reporter?: { accountId?: string };
+  };
+}
+
+interface JiraComment {
+  id: string;
+  author?: { accountId?: string; displayName?: string };
+  created?: string;
+  body?: unknown;
+}
+
+interface JiraWorklog {
+  id: string;
+  author?: { accountId?: string };
+  started?: string;
+  timeSpentSeconds?: number;
 }
 
 @Injectable()
@@ -132,79 +165,281 @@ export class DeveloperActivitySyncService {
   }
 
   /**
-   * Sync Jira activity for a project (issue updates from changelog).
-   * Caller must have project access (owner or member).
+   * Sync Jira activity for a project (changelog, comments, worklogs, issue created).
+   * Uses project owner's token to read the linked Jira project.
    */
-  async syncJiraActivity(projectId: string, userId: string): Promise<{ issues: number }> {
+  async syncJiraActivity(
+    projectId: string,
+    userId: string,
+    options: JiraActivitySyncQueryDto = {},
+  ): Promise<{ activities: number; issuesScanned: number }> {
     await this.ensureProjectAccess(projectId, userId);
     const project = await this.projectRepo.findById(projectId);
-    if (!project?.jiraProjectKey?.trim()) return { issues: 0 };
+    if (!project?.jiraProjectKey?.trim()) return { activities: 0, issuesScanned: 0 };
 
     const ownerId = project.ownerId;
     const { accessToken, cloudId } = await this.jiraService.getValidAccessToken(ownerId);
-    const jiraUrl = `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3`;
+    const jiraUrl = this.jiraService.getApiBaseUrl(cloudId);
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    };
 
-    const searchRes = await axios.get<{
-      issues: Array<{ key: string; fields?: { summary?: string } }>;
-    }>(`${jiraUrl}/search`, {
-      params: {
-        jql: `project = ${project.jiraProjectKey} ORDER BY updated DESC`,
-        maxResults: 50,
-        fields: 'summary,created,updated,assignee',
-      },
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: 'application/json',
-      },
-    });
+    const toDate = options.toDate ? new Date(options.toDate) : new Date();
+    const fromDate = options.fromDate
+      ? new Date(options.fromDate)
+      : project.jiraLastActivitySyncAt
+        ? new Date(project.jiraLastActivitySyncAt)
+        : new Date(toDate.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const maxIssues = options.maxIssues ?? JIRA_DEFAULT_MAX_ISSUES;
+    const jqlParts = [`project = ${project.jiraProjectKey}`, `updated >= "${toJiraJqlDate(fromDate.toISOString())}"`];
+    if (options.toDate) {
+      jqlParts.push(`updated <= "${toJiraJqlDate(toDate.toISOString())}"`);
+    }
+    const jql = `${jqlParts.join(' AND ')} ORDER BY updated DESC`;
 
     const accountIdToUserId = await this.getJiraAccountIdToUserIdMap(projectId);
-    let count = 0;
+    let activities = 0;
+    let issuesScanned = 0;
+    let startAt = 0;
 
-    for (const issue of searchRes.data.issues ?? []) {
-      let changelogRes: { data: JiraChangelogResponse };
+    while (issuesScanned < maxIssues) {
+      const pageSize = Math.min(JIRA_ISSUE_PAGE_SIZE, maxIssues - issuesScanned);
+      const searchRes = await axios.get<{ issues?: JiraSearchIssue[] }>(`${jiraUrl}/search`, {
+        params: {
+          jql,
+          maxResults: pageSize,
+          startAt,
+          fields: 'summary,created,assignee,reporter',
+        },
+        headers,
+      });
+
+      const issues = searchRes.data.issues ?? [];
+      if (issues.length === 0) break;
+
+      for (const issue of issues) {
+        issuesScanned++;
+        const summary = issue.fields?.summary ?? issue.key;
+
+        if (issue.fields?.created) {
+          const createdAt = new Date(issue.fields.created);
+          if (createdAt >= fromDate && createdAt <= toDate) {
+            const reporterId = issue.fields.reporter?.accountId;
+            const seamUserId = reporterId ? accountIdToUserId.get(reporterId) : null;
+            await this.activityRepo.upsert({
+              projectId,
+              userId: seamUserId ?? null,
+              source: 'JIRA',
+              type: 'jira_issue_created',
+              externalId: `jira:created:${issue.key}`,
+              title: `${issue.key}: ${summary}`,
+              metadata: { issueKey: issue.key },
+              occurredAt: createdAt,
+            });
+            activities++;
+          }
+        }
+
+        activities += await this.syncIssueChangelog(
+          jiraUrl,
+          headers,
+          projectId,
+          issue,
+          summary,
+          accountIdToUserId,
+          fromDate,
+          toDate,
+        );
+        activities += await this.syncIssueComments(
+          jiraUrl,
+          headers,
+          projectId,
+          issue.key,
+          summary,
+          accountIdToUserId,
+          fromDate,
+          toDate,
+        );
+        activities += await this.syncIssueWorklogs(
+          jiraUrl,
+          headers,
+          projectId,
+          issue.key,
+          summary,
+          accountIdToUserId,
+          fromDate,
+          toDate,
+        );
+      }
+
+      if (issues.length < pageSize) break;
+      startAt += issues.length;
+    }
+
+    await this.prisma.project.update({
+      where: { id: projectId },
+      data: { jiraLastActivitySyncAt: new Date() },
+    });
+
+    return { activities, issuesScanned };
+  }
+
+  private async syncIssueChangelog(
+    jiraUrl: string,
+    headers: Record<string, string>,
+    projectId: string,
+    issue: JiraSearchIssue,
+    summary: string,
+    accountIdToUserId: Map<string, string>,
+    fromDate: Date,
+    toDate: Date,
+  ): Promise<number> {
+    let count = 0;
+    let changelogStart = 0;
+    let changelogLast = false;
+
+    while (!changelogLast) {
+      let data: JiraChangelogResponse;
       try {
-        changelogRes = await axios.get<JiraChangelogResponse>(
+        const res = await axios.get<JiraChangelogResponse>(
           `${jiraUrl}/issue/${issue.key}/changelog`,
           {
-            params: { maxResults: 50 },
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              Accept: 'application/json',
-            },
+            params: { startAt: changelogStart, maxResults: JIRA_CHANGELOG_PAGE_SIZE },
+            headers,
           },
         );
+        data = res.data;
       } catch {
-        continue;
+        break;
       }
-      const histories = changelogRes.data.values ?? [];
-      const summary = issue.fields?.summary ?? issue.key;
 
-      for (const h of histories) {
-        const item = h.items[0];
-        if (item?.field !== 'status') continue; // only store status transitions (To Do → In Progress → Done)
-        const accountId = h.author?.accountId;
-        const userId = accountId ? accountIdToUserId.get(accountId) : null;
-        const externalId = `jira:${issue.key}:${h.id}`;
+      for (const h of data.values ?? []) {
+        const occurredAt = new Date(h.created);
+        if (occurredAt < fromDate || occurredAt > toDate) continue;
+
+        const authorAccountId = h.author?.accountId;
+        const seamUserId = authorAccountId ? accountIdToUserId.get(authorAccountId) : null;
+
+        for (const item of h.items) {
+          const type = jiraActivityTypeForChangelogField(item.field);
+          if (!type) continue;
+
+          const externalId = `jira:${issue.key}:${h.id}:${item.field}`;
+          await this.activityRepo.upsert({
+            projectId,
+            userId: seamUserId ?? null,
+            source: 'JIRA',
+            type,
+            externalId,
+            title: `${issue.key}: ${summary}`,
+            metadata: {
+              issueKey: issue.key,
+              field: item.field,
+              from: item.fromString,
+              to: item.toString,
+            },
+            occurredAt,
+          });
+          count++;
+        }
+      }
+
+      changelogLast = data.isLast ?? (data.values?.length ?? 0) < JIRA_CHANGELOG_PAGE_SIZE;
+      changelogStart += data.values?.length ?? 0;
+      if ((data.values?.length ?? 0) === 0) break;
+    }
+
+    return count;
+  }
+
+  private async syncIssueComments(
+    jiraUrl: string,
+    headers: Record<string, string>,
+    projectId: string,
+    issueKey: string,
+    summary: string,
+    accountIdToUserId: Map<string, string>,
+    fromDate: Date,
+    toDate: Date,
+  ): Promise<number> {
+    let count = 0;
+    try {
+      const res = await axios.get<{ comments?: JiraComment[] }>(
+        `${jiraUrl}/issue/${issueKey}/comment`,
+        { params: { maxResults: 100 }, headers },
+      );
+      for (const c of res.data.comments ?? []) {
+        if (!c.created) continue;
+        const occurredAt = new Date(c.created);
+        if (occurredAt < fromDate || occurredAt > toDate) continue;
+        const accountId = c.author?.accountId;
+        const seamUserId = accountId ? accountIdToUserId.get(accountId) : null;
         await this.activityRepo.upsert({
           projectId,
-          userId: userId ?? null,
+          userId: seamUserId ?? null,
           source: 'JIRA',
-          type: 'jira_status_change',
-          externalId,
-          title: `${issue.key}: ${summary}`,
+          type: 'jira_comment',
+          externalId: `jira:comment:${issueKey}:${c.id}`,
+          title: `${issueKey}: ${summary}`,
           metadata: {
-            issueKey: issue.key,
-            from: item?.fromString,
-            to: item?.toString,
+            issueKey,
+            commentId: c.id,
+            authorDisplayName: c.author?.displayName,
           },
-          occurredAt: new Date(h.created),
+          occurredAt,
         });
         count++;
       }
+    } catch {
+      // comments may be disabled or restricted
     }
+    return count;
+  }
 
-    return { issues: count };
+  private async syncIssueWorklogs(
+    jiraUrl: string,
+    headers: Record<string, string>,
+    projectId: string,
+    issueKey: string,
+    summary: string,
+    accountIdToUserId: Map<string, string>,
+    fromDate: Date,
+    toDate: Date,
+  ): Promise<number> {
+    let count = 0;
+    try {
+      const res = await axios.get<{ worklogs?: JiraWorklog[] }>(
+        `${jiraUrl}/issue/${issueKey}/worklog`,
+        { params: { maxResults: 100 }, headers },
+      );
+      for (const w of res.data.worklogs ?? []) {
+        if (!w.started) continue;
+        const occurredAt = new Date(w.started);
+        if (occurredAt < fromDate || occurredAt > toDate) continue;
+        const accountId = w.author?.accountId;
+        const seamUserId = accountId ? accountIdToUserId.get(accountId) : null;
+        await this.activityRepo.upsert({
+          projectId,
+          userId: seamUserId ?? null,
+          source: 'JIRA',
+          type: 'jira_worklog',
+          externalId: `jira:worklog:${issueKey}:${w.id}`,
+          title: `${issueKey}: ${summary}`,
+          metadata: {
+            issueKey,
+            worklogId: w.id,
+            timeSpentSeconds: w.timeSpentSeconds,
+          },
+          occurredAt,
+        });
+        count++;
+      }
+    } catch {
+      // worklog may be restricted
+    }
+    return count;
   }
 
   private async ensureProjectAccess(projectId: string, userId: string): Promise<void> {
@@ -258,36 +493,33 @@ export class DeveloperActivitySyncService {
   }
 
   private async getJiraAccountIdToUserIdMap(projectId: string): Promise<Map<string, string>> {
-    const map = new Map<string, string>();
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
       select: { ownerId: true },
     });
-    if (!project) return map;
-    try {
-      const accountId = await this.getJiraUserAccountId(project.ownerId);
-      if (accountId) map.set(accountId, project.ownerId);
-    } catch {
-      // Owner may not have Jira connected
+    if (!project) return new Map();
+
+    const userIds = new Set<string>([project.ownerId]);
+    const members = await this.prisma.projectMember.findMany({
+      where: { projectId, status: 'ACTIVE', userId: { not: null } },
+      select: { userId: true },
+    });
+    for (const m of members) {
+      if (m.userId) userIds.add(m.userId);
+    }
+
+    const accounts = await this.prisma.jiraAccount.findMany({
+      where: {
+        userId: { in: [...userIds] },
+        accountId: { not: null },
+      },
+      select: { userId: true, accountId: true },
+    });
+
+    const map = new Map<string, string>();
+    for (const a of accounts) {
+      if (a.accountId) map.set(a.accountId, a.userId);
     }
     return map;
-  }
-
-  private async getJiraUserAccountId(userId: string): Promise<string | null> {
-    const { accessToken, cloudId } = await this.jiraService.getValidAccessToken(userId);
-    try {
-      const res = await axios.get<{ accountId: string }>(
-        `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/myself`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Accept: 'application/json',
-          },
-        },
-      );
-      return res.data?.accountId ?? null;
-    } catch {
-      return null;
-    }
   }
 }

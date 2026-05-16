@@ -34,6 +34,9 @@ export class PrismaJiraRepository implements IJiraRepository {
         refreshToken: data.refreshToken,
         expiresAt: data.expiresAt,
         cloudId: data.cloudId,
+        accountId: data.accountId ?? undefined,
+        displayName: data.displayName ?? undefined,
+        emailAddress: data.emailAddress ?? undefined,
       },
       create: {
         userId,
@@ -41,6 +44,9 @@ export class PrismaJiraRepository implements IJiraRepository {
         refreshToken: data.refreshToken,
         expiresAt: data.expiresAt,
         cloudId: data.cloudId,
+        accountId: data.accountId ?? undefined,
+        displayName: data.displayName ?? undefined,
+        emailAddress: data.emailAddress ?? undefined,
       },
     });
   }
