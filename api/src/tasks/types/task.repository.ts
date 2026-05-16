@@ -34,6 +34,9 @@ export interface ITaskRepository {
 
   markAsCreatedInJira(taskId: string, jiraIssueKey: string): Promise<Task>;
 
+  /** Persists last Jira sync error for SM visibility; truncated in service/repository as needed. */
+  setJiraSyncLastError(taskId: string, message: string | null): Promise<Task>;
+
   updateAssigneeAndStatus(id: string, assigneeId: string, status: TaskStatus): Promise<Task>;
 
   clearAssigneeAndStatus(id: string, status: TaskStatus): Promise<Task>;

@@ -10,6 +10,7 @@ import { CurrentUserType } from '../auth/types/current-user.type';
 import { CloudinaryService } from '../infrastracture/cloudinary/cloudinary.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { Response } from 'express';
+import type { UpdateUserProfileDto } from './dto/update-user-profile.dto';
 
 @Injectable()
 export class UserService {
@@ -50,6 +51,38 @@ export class UserService {
     }
 
     return this.toResponseDto(user, projects);
+  }
+
+  async updateProfile(userId: string, body: UpdateUserProfileDto): Promise<UserResponseDto> {
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new AppException(ErrorCode.UNAUTHORIZED, 'User not found', 401);
+    }
+
+    const data: { name?: string; githubUsername?: string | null } = {};
+    if (body.name !== undefined) data.name = body.name.trim();
+    if (body.githubUsername !== undefined) {
+      const trimmed = body.githubUsername.trim();
+      data.githubUsername = trimmed.length > 0 ? trimmed : null;
+    }
+
+    if (Object.keys(data).length === 0) {
+      throw new AppException(ErrorCode.VALIDATION_ERROR, 'At least one field is required', 400);
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data,
+    });
+
+    const projects = await this.prisma.project.findMany({
+      where: {
+        OR: [{ ownerId: userId }, { members: { some: { userId, status: 'ACTIVE' } } }],
+      },
+      select: { id: true, name: true },
+    });
+
+    return this.toResponseDto(updated, projects);
   }
 
   /**

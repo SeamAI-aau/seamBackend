@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Patch,
+  Body,
   Query,
   UseGuards,
   UseInterceptors,
@@ -15,6 +16,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UserService } from './user.service';
 import type { CurrentUserType } from '../auth/types/current-user.type';
 import { UserResponseDto } from './dto/user-response.dto';
+import { UpdateUserProfileDto } from './dto/update-user-profile.dto';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import {
   ApiTags,
@@ -68,6 +70,36 @@ export class UserController {
   })
   getMe(@CurrentUser() user: CurrentUserType): Promise<UserResponseDto> {
     return this.userService.getMe(user.userId);
+  }
+
+  @Patch('me')
+  @ApiOperation({
+    summary: 'Update current user profile',
+    description:
+      'Update name and/or GitHub username for developer-activity attribution. ' +
+      'Does not connect GitHub OAuth — use Integrations → GitHub for that. ' +
+      'For Jira attribution, use Integrations → Jira connect and POST /integrations/jira/refresh-profile.',
+  })
+  @ApiBody({
+    type: UpdateUserProfileDto,
+    examples: {
+      githubOnly: {
+        summary: 'Set GitHub username',
+        value: { githubUsername: 'dev-one' },
+      },
+      nameOnly: { summary: 'Update display name', value: { name: 'Dev One' } },
+    },
+  })
+  @ApiOkResponse({ type: UserResponseDto })
+  @ApiBadRequestResponse({
+    description: 'Validation error or no fields provided.',
+    schema: { example: { statusCode: 400, message: 'At least one field is required' } },
+  })
+  updateMe(
+    @CurrentUser() user: CurrentUserType,
+    @Body() body: UpdateUserProfileDto,
+  ): Promise<UserResponseDto> {
+    return this.userService.updateProfile(user.userId, body);
   }
 
   @Patch('me/voice')

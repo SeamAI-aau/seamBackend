@@ -56,7 +56,15 @@ export class PrismaTaskRepository implements ITaskRepository {
       data: {
         jiraIssueKey,
         status: TaskStatus.SYNCED,
+        jiraSyncLastError: null,
       },
+    });
+  }
+
+  async setJiraSyncLastError(taskId: string, message: string | null) {
+    return this.prisma.task.update({
+      where: { id: taskId },
+      data: { jiraSyncLastError: message },
     });
   }
 

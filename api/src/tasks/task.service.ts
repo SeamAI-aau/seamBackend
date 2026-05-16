@@ -9,6 +9,7 @@ import type { CurrentUserType } from '../auth/types/current-user.type';
 import { PROJECT_REPOSITORY } from '../project/types/project.tokens';
 import type { IProjectRepository } from '../project/types/project.repository';
 import { JiraSyncQueue } from '../integrations/jira/queue/jira-sync.queue';
+import { JiraIssueService } from '../integrations/jira/jira-issue.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { NotificationService } from '../notification/notification.service';
 import { RealtimeService } from '../infrastracture/realtime/realtime.service';
@@ -26,6 +27,7 @@ export class TaskService {
     @Inject(PROJECT_REPOSITORY)
     private readonly projectRepo: IProjectRepository,
     private readonly jiraSyncQueue: JiraSyncQueue,
+    private readonly jiraIssueService: JiraIssueService,
     private readonly activityLog: ActivityLogService,
     private readonly notification: NotificationService,
     private readonly realtime: RealtimeService,
@@ -491,6 +493,64 @@ export class TaskService {
     }
 
     return task;
+  }
+
+  async getJiraTransitionsForTask(taskId: string, userId: string) {
+    const task = await this.taskRepo.findByIdWithProject(taskId);
+    if (!task) {
+      throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
+    }
+    await this.assertTaskProjectAccess(task, userId);
+    if (!task.jiraIssueKey) {
+      throw new AppException(
+        ErrorCode.VALIDATION_ERROR,
+        'Task is not synced to Jira yet',
+        400,
+      );
+    }
+    return this.jiraIssueService.getTransitions(
+      task.meeting.projectId,
+      task.jiraIssueKey,
+      userId,
+    );
+  }
+
+  async transitionJiraIssueForTask(
+    taskId: string,
+    userId: string,
+    transitionId: string,
+  ) {
+    const task = await this.taskRepo.findByIdWithProject(taskId);
+    if (!task) {
+      throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
+    }
+    await this.assertTaskProjectAccess(task, userId);
+    if (!task.jiraIssueKey) {
+      throw new AppException(
+        ErrorCode.VALIDATION_ERROR,
+        'Task is not synced to Jira yet',
+        400,
+      );
+    }
+    return this.jiraIssueService.transitionIssue(
+      task.meeting.projectId,
+      task.jiraIssueKey,
+      transitionId,
+      userId,
+    );
+  }
+
+  private async assertTaskProjectAccess(
+    task: { meeting: { projectId: string }; assigneeId: string | null },
+    userId: string,
+  ): Promise<void> {
+    const projectId = task.meeting.projectId;
+    const isOwner = await this.projectRepo.isOwner(projectId, userId);
+    const isMember = await this.projectRepo.isMember(projectId, userId);
+    const isAssignee = task.assigneeId === userId;
+    if (!isOwner && !isMember && !isAssignee) {
+      throw new AppException(ErrorCode.FORBIDDEN, 'Access denied to this task', 403);
+    }
   }
 
   /**

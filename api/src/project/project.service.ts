@@ -375,6 +375,33 @@ export class ProjectService {
 
     const owner = await this.userRepo.findById(project.ownerId);
     const memberRows = await this.projectRepo.findMembersByProject(projectId);
+    const memberUserIds = [
+      project.ownerId,
+      ...memberRows.map((r) => r.userId).filter((id): id is string => !!id),
+    ];
+    const uniqueUserIds = [...new Set(memberUserIds)];
+
+    const [githubAccounts, jiraAccounts] = await Promise.all([
+      this.prisma.githubAccount.findMany({
+        where: { userId: { in: uniqueUserIds } },
+        select: { userId: true, username: true },
+      }),
+      this.prisma.jiraAccount.findMany({
+        where: { userId: { in: uniqueUserIds } },
+        select: { userId: true, accountId: true, displayName: true },
+      }),
+    ]);
+    const githubByUser = new Map(githubAccounts.map((g) => [g.userId, g]));
+    const jiraByUser = new Map(jiraAccounts.map((j) => [j.userId, j]));
+
+    const mapIntegrationFlags = (uid: string, githubUsername: string | null) => {
+      const gh = githubByUser.get(uid);
+      const jr = jiraByUser.get(uid);
+      const githubMapped = !!(githubUsername?.trim() || gh?.username?.trim());
+      const jiraMapped = !!jr?.accountId?.trim();
+      return { githubMapped, jiraMapped };
+    };
+
     const membersWithRole = [
       ...(owner
         ? [
@@ -386,6 +413,7 @@ export class ProjectService {
               githubUsername: owner.githubUsername ?? null,
               projectRole: 'owner' as const,
               status: 'ACTIVE' as const,
+              ...mapIntegrationFlags(owner.id, owner.githubUsername),
             },
           ]
         : []),
@@ -399,19 +427,33 @@ export class ProjectService {
           githubUsername: row.user?.githubUsername ?? null,
           projectRole: 'member' as const,
           status: row.status,
+          ...(row.userId
+            ? mapIntegrationFlags(row.userId, row.user?.githubUsername ?? null)
+            : { githubMapped: false, jiraMapped: false }),
         })),
     ];
+
+    const activeMembers = membersWithRole.filter((m) => m.status === 'ACTIVE');
+    const integrationMapping = {
+      totalActiveMembers: activeMembers.length,
+      githubMappedCount: activeMembers.filter((m) => m.githubMapped).length,
+      jiraMappedCount: activeMembers.filter((m) => m.jiraMapped).length,
+      message:
+        'Connect GitHub/Jira integrations or set githubUsername on profile. Jira requires OAuth + refresh-profile for accountId.',
+    };
 
     const integrations = {
       github: parseGithubRepoUrl(project.githubRepoUrl ?? null),
       jira: {
         projectKey: project.jiraProjectKey ?? null,
+        lastActivitySyncAt: project.jiraLastActivitySyncAt ?? null,
       },
     };
 
     return {
       project: { id: project.id, name: project.name },
       integrations,
+      integrationMapping,
       members: membersWithRole,
     };
   }
