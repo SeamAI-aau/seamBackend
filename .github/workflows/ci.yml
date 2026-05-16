@@ -19,12 +19,7 @@ jobs:
           filter: tree:0
           fetch-depth: 0
 
-      # This enables task distribution via Nx Cloud
-      # Run this command as early as possible, before dependencies are installed
-      # Learn more at https://nx.dev/ci/reference/nx-cloud-cli#npx-nxcloud-startcirun
-      - run: npx nx start-ci-run --distribute-on="3 linux-medium-js" --stop-agents-after="e2e-ci"
-
-      # Cache node_modules
+      # Cache node_modules and install dependencies first
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -32,8 +27,16 @@ jobs:
 
       - run: npm ci
 
-      # Prepend any command with "nx record --" to record its logs to Nx Cloud
-      - run: npx nx record -- npx nx format:check  --base="remotes/origin/main"
+      # If you have Nx Cloud credentials (set as the secret NX_CLOUD_AUTH),
+      # start the Nx Cloud CI agents and use `nx record` to capture logs.
+      # Otherwise fall back to running the checks directly so CI remains green.
+      - if: ${{ secrets.NX_CLOUD_AUTH }}
+        run: npx --yes nx start-ci-run --distribute-on="3 linux-medium-js" --stop-agents-after="e2e-ci"
+
+      - if: ${{ secrets.NX_CLOUD_AUTH }}
+        run: npx --yes nx record -- npx --yes nx format:check --base="remotes/origin/main"
+      - if: ${{ !secrets.NX_CLOUD_AUTH }}
+        run: npx --yes nx format:check --base="remotes/origin/main"
       - run: npx nx run-many -t lint test build typecheck e2e-ci
       # Nx Cloud recommends fixes for failures to help you get CI green faster. Learn more: https://nx.dev/ci/features/self-healing-ci
       - run: npx nx fix-ci
