@@ -203,6 +203,13 @@ export class TaskService {
             400,
           );
         }
+        if (body.jiraTransitionId?.trim() && !task.jiraIssueKey) {
+          await this.prisma.task.update({
+            where: { id: taskId },
+            data: { jiraProposalTransitionId: body.jiraTransitionId.trim() },
+          });
+        }
+
         const approvedTask = await this.taskRepo.updateStatus(taskId, TaskStatus.APPROVED);
         const finalTask = await this.taskRepo.findByIdWithMeetingAndProject(taskId);
         this.realtime.emitToProject(task.meeting.projectId, 'task.updated', {
@@ -493,6 +500,34 @@ export class TaskService {
     }
 
     return task;
+  }
+
+  async getProposedJiraTransitionsForTask(taskId: string, userId: string) {
+    const task = await this.taskRepo.findByIdWithProject(taskId);
+    if (!task) {
+      throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
+    }
+    await this.assertTaskProjectAccess(task, userId);
+    const issueKey = task.jiraProposalIssueKey?.trim();
+    if (!issueKey) {
+      throw new AppException(
+        ErrorCode.VALIDATION_ERROR,
+        'Task has no proposed Jira issue to transition',
+        400,
+      );
+    }
+    const transitions = await this.jiraIssueService.getTransitions(
+      task.meeting.projectId,
+      issueKey,
+      userId,
+    );
+    return {
+      issueKey: issueKey.toUpperCase(),
+      jiraProposalAction: task.jiraProposalAction,
+      jiraProposalTargetStatus: task.jiraProposalTargetStatus,
+      jiraProposalTransitionId: task.jiraProposalTransitionId,
+      ...transitions,
+    };
   }
 
   async getJiraTransitionsForTask(taskId: string, userId: string) {

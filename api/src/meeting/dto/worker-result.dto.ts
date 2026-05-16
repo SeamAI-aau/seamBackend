@@ -21,6 +21,16 @@ export interface WorkerTaskPayload {
   title: string;
   description?: string;
   assigneeId?: string;
+  confidence?: number;
+  /** Existing Jira issue key from reconciliation (alias: task_id). */
+  task_id?: string;
+  jiraIssueKey?: string;
+  /** `create` | `transition` — engine hint for post-approve Jira action. */
+  jiraAction?: string;
+  current_status?: string;
+  suggested_status?: string;
+  jiraProposalTargetStatus?: string;
+  jiraProposalTransitionId?: string;
 }
 
 /**
@@ -79,6 +89,53 @@ export class WorkerTaskBodyDto {
   @IsOptional()
   @IsUUID()
   assigneeId?: string;
+
+  @ApiPropertyOptional({ example: 0.92, description: 'NLP confidence score (0–1).' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  confidence?: number;
+
+  @ApiPropertyOptional({
+    example: 'SEAM-10',
+    description: 'Linked Jira issue key when reconciliation matches an existing ticket.',
+  })
+  @IsOptional()
+  @IsString()
+  task_id?: string;
+
+  @ApiPropertyOptional({ example: 'SEAM-10', description: 'Alias for task_id.' })
+  @IsOptional()
+  @IsString()
+  jiraIssueKey?: string;
+
+  @ApiPropertyOptional({ enum: ['create', 'transition'] })
+  @IsOptional()
+  @IsIn(['create', 'transition', 'CREATE', 'TRANSITION'])
+  jiraAction?: string;
+
+  @ApiPropertyOptional({ example: 'In Progress' })
+  @IsOptional()
+  @IsString()
+  current_status?: string;
+
+  @ApiPropertyOptional({ example: 'Done', description: 'AI-suggested Jira status after standup.' })
+  @IsOptional()
+  @IsString()
+  suggested_status?: string;
+
+  @ApiPropertyOptional({ example: 'Done' })
+  @IsOptional()
+  @IsString()
+  jiraProposalTargetStatus?: string;
+
+  @ApiPropertyOptional({
+    example: '31',
+    description: 'Optional Jira workflow transition id when engine resolves it.',
+  })
+  @IsOptional()
+  @IsString()
+  jiraProposalTransitionId?: string;
 }
 
 export class WorkerBlockerBodyDto {

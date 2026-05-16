@@ -6,6 +6,7 @@ import { CloudinaryService } from '../infrastracture/cloudinary/cloudinary.servi
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { NotificationService } from '../notification/notification.service';
 import type { WorkerResultPayload } from './dto/worker-result.dto';
+import { deriveJiraProposal } from './utils/derive-jira-proposal.util';
 import { WORKER_RESULT_STATUS_SUCCESS } from './constants/meeting.constants';
 import { NOTIFICATION_TYPES } from '../notification/constants/notification-types';
 
@@ -241,14 +242,25 @@ export class MeetingProcessingService {
 
       if (Array.isArray(payload.tasks) && payload.tasks.length > 0) {
         await tx.task.createMany({
-          data: payload.tasks.map((task) => ({
-            meetingId,
-            transcriptId: transcript.id,
-            title: task.title,
-            description: task.description ?? null,
-            status: task.assigneeId ? TaskStatus.SENT_TO_DEVELOPER : TaskStatus.EXTRACTED,
-            assigneeId: task.assigneeId ?? null,
-          })),
+          data: payload.tasks.map((task) => {
+            const proposal = deriveJiraProposal(task);
+            return {
+              meetingId,
+              transcriptId: transcript.id,
+              title: task.title,
+              description: task.description ?? null,
+              status: task.assigneeId ? TaskStatus.SENT_TO_DEVELOPER : TaskStatus.EXTRACTED,
+              assigneeId: task.assigneeId ?? null,
+              confidenceScore:
+                typeof task.confidence === 'number' && !Number.isNaN(task.confidence)
+                  ? task.confidence
+                  : null,
+              jiraProposalAction: proposal.jiraProposalAction,
+              jiraProposalIssueKey: proposal.jiraProposalIssueKey,
+              jiraProposalTransitionId: proposal.jiraProposalTransitionId,
+              jiraProposalTargetStatus: proposal.jiraProposalTargetStatus,
+            };
+          }),
         });
       }
 
