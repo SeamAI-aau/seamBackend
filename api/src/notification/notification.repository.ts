@@ -10,6 +10,10 @@ export interface NotificationFilters {
   userId: string;
   unreadOnly?: boolean;
   type?: string;
+  /** Match `metadata.projectId` (JSON path filter). */
+  projectId?: string;
+  /** Match `metadata.taskId` (JSON path filter). */
+  taskId?: string;
   fromDate?: Date;
   toDate?: Date;
 }

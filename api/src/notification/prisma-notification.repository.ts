@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   INotificationRepository,
@@ -6,6 +7,39 @@ import type {
   NotificationFilters,
   NotificationWithUser,
 } from './notification.repository';
+
+function buildNotificationWhere(filters: NotificationFilters): Prisma.NotificationWhereInput {
+  const where: Prisma.NotificationWhereInput = { userId: filters.userId };
+
+  if (filters.unreadOnly) {
+    where.readAt = null;
+  }
+  if (filters.type) {
+    where.type = filters.type;
+  }
+  if (filters.fromDate || filters.toDate) {
+    where.createdAt = {};
+    if (filters.fromDate) where.createdAt.gte = filters.fromDate;
+    if (filters.toDate) where.createdAt.lte = filters.toDate;
+  }
+
+  const metadataFilters: Prisma.NotificationWhereInput[] = [];
+  if (filters.projectId) {
+    metadataFilters.push({
+      metadata: { path: ['projectId'], equals: filters.projectId },
+    });
+  }
+  if (filters.taskId) {
+    metadataFilters.push({
+      metadata: { path: ['taskId'], equals: filters.taskId },
+    });
+  }
+  if (metadataFilters.length > 0) {
+    where.AND = [...(where.AND ?? []), ...metadataFilters];
+  }
+
+  return where;
+}
 
 @Injectable()
 export class PrismaNotificationRepository implements INotificationRepository {
@@ -28,17 +62,8 @@ export class PrismaNotificationRepository implements INotificationRepository {
     filters: NotificationFilters,
     options?: { skip?: number; take?: number },
   ): Promise<NotificationWithUser[]> {
-    const where: Record<string, unknown> = { userId: filters.userId };
-    if (filters.unreadOnly) where.readAt = null;
-    if (filters.type) where.type = filters.type;
-    if (filters.fromDate || filters.toDate) {
-      where.createdAt = {};
-      if (filters.fromDate) (where.createdAt as Record<string, Date>).gte = filters.fromDate;
-      if (filters.toDate) (where.createdAt as Record<string, Date>).lte = filters.toDate;
-    }
-
     const rows = await this.prisma.notification.findMany({
-      where,
+      where: buildNotificationWhere(filters),
       orderBy: { createdAt: 'desc' },
       skip: options?.skip,
       take: options?.take,
@@ -47,15 +72,9 @@ export class PrismaNotificationRepository implements INotificationRepository {
   }
 
   async count(filters: NotificationFilters): Promise<number> {
-    const where: Record<string, unknown> = { userId: filters.userId };
-    if (filters.unreadOnly) where.readAt = null;
-    if (filters.type) where.type = filters.type;
-    if (filters.fromDate || filters.toDate) {
-      where.createdAt = {};
-      if (filters.fromDate) (where.createdAt as Record<string, Date>).gte = filters.fromDate;
-      if (filters.toDate) (where.createdAt as Record<string, Date>).lte = filters.toDate;
-    }
-    return this.prisma.notification.count({ where });
+    return this.prisma.notification.count({
+      where: buildNotificationWhere(filters),
+    });
   }
 
   async markAsRead(id: string, userId: string): Promise<boolean> {
