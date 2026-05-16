@@ -1,5 +1,7 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AppException } from '../common/errors/app.exception';
+import { ErrorCode } from '../common/errors/error-codes';
 import type { INotificationRepository } from './notification.repository';
 import { NOTIFICATION_REPOSITORY } from './notification.tokens';
 import { MailService } from '../infrastracture/mail/mail.service';
@@ -134,6 +136,14 @@ export class NotificationService {
 
   async markAsRead(id: string, userId: string): Promise<boolean> {
     return this.repo.markAsRead(id, userId);
+  }
+
+  async deleteForUser(id: string, userId: string): Promise<{ success: boolean }> {
+    const deleted = await this.repo.delete(id, userId);
+    if (!deleted) {
+      throw new AppException(ErrorCode.NOT_FOUND, 'Notification not found', 404);
+    }
+    return { success: true };
   }
 
   async markAllAsRead(userId: string): Promise<{ count: number }> {

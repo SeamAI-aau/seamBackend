@@ -33,8 +33,10 @@ import {
   ApiUnauthorizedResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
+  ApiConflictResponse,
   ApiQuery,
   ApiBody,
+  ApiParam,
 } from '@nestjs/swagger';
 
 @ApiTags('Projects')
@@ -749,6 +751,38 @@ export class ProjectController {
       },
     },
   })
+  @ApiConflictResponse({
+    description:
+      'Email already has a pending invite or is already an active member. Use `details.memberId` with DELETE /projects/{id}/members/{memberId} to cancel a pending invite.',
+    schema: {
+      examples: {
+        pendingInvite: {
+          summary: 'Pending invitation already exists',
+          value: {
+            statusCode: 409,
+            message: 'An invitation for this email is already pending',
+            error: 'CONFLICT',
+            details: {
+              memberId: 'member_pending_1',
+              email: 'developer@example.com',
+            },
+          },
+        },
+        activeMember: {
+          summary: 'User is already an active member',
+          value: {
+            statusCode: 409,
+            message: 'User is already a member of this project',
+            error: 'CONFLICT',
+            details: {
+              memberId: 'member_active_1',
+              email: 'developer@example.com',
+            },
+          },
+        },
+      },
+    },
+  })
   @ApiBody({
     description: 'Email payload to add or invite a member.',
     type: AddMemberDto,
@@ -863,17 +897,32 @@ export class ProjectController {
   @Delete(':id/members/:memberId')
   @ApiOperation({
     summary: 'Remove a member or cancel a pending invite',
-    description: 'Only the project owner can remove members or cancel invitations.',
+    description:
+      'Only the project owner can remove members or cancel invitations. ' +
+      'Pass **`ProjectMember.id`** from `GET /projects/{id}/members` → `items[].id` (not `userId`). ' +
+      'For backwards compatibility, an active member’s `userId` is also accepted when it matches a membership row.',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Project UUID.',
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+  })
+  @ApiParam({
+    name: 'memberId',
+    description:
+      'ProjectMember row UUID (`items[].id` from GET /projects/{id}/members). Pending invites use this id because `userId` is null.',
+    example: 'f6a7b8c9-d0e1-2345-f012-456789012345',
   })
   @ApiOkResponse({
     description: 'Member or invitation removed.',
     schema: {
       example: {
-        id: 'member_1',
-        projectId: 'proj_123',
+        id: 'f6a7b8c9-d0e1-2345-f012-456789012345',
+        projectId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
         email: 'developer@example.com',
         status: 'PENDING',
         userId: null,
+        createdAt: '2026-05-14T10:00:00.000Z',
       },
     },
   })
@@ -913,6 +962,45 @@ export class ProjectController {
     @CurrentUser() user: CurrentUserType,
   ) {
     return this.projectService.removeMember(id, memberId, user.userId);
+  }
+
+  @Delete(':id')
+  @ApiOperation({
+    summary: 'Delete a project',
+    description:
+      'Permanently deletes the project and cascaded data (meetings, tasks, integrations metadata, etc.). Only the project owner.',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Project UUID.',
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+  })
+  @ApiOkResponse({
+    description: 'Project deleted.',
+    schema: { example: { id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', deleted: true } },
+  })
+  @ApiForbiddenResponse({
+    description: 'Only the project owner can delete the project.',
+    schema: {
+      example: {
+        statusCode: 403,
+        message: 'Only project owner can delete project',
+        error: 'FORBIDDEN',
+      },
+    },
+  })
+  @ApiNotFoundResponse({
+    description: 'Project not found.',
+    schema: {
+      example: {
+        statusCode: 404,
+        message: 'Project not found',
+        error: 'PROJECT_NOT_FOUND',
+      },
+    },
+  })
+  deleteProject(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
+    return this.projectService.deleteProject(id, user.userId);
   }
 
   @Get(':id/members')
