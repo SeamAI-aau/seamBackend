@@ -22,8 +22,8 @@ If SMTP is not configured, emails are logged only and the app runs normally.
 
 | Method | Path                          | Description                                                                                |
 | ------ | ----------------------------- | ------------------------------------------------------------------------------------------ |
-| GET    | `/notifications`              | List my notifications (query: `unreadOnly`, `type`, `fromDate`, `toDate`, `page`, `limit`) |
-| GET    | `/notifications/unread-count` | Unread count                                                                               |
+| GET    | `/notifications`              | List my notifications (query: `unreadOnly`, `type`, `projectId`, `taskId`, `fromDate`, `toDate`, `page`, `limit`) |
+| GET    | `/notifications/unread-count` | Unread count (same filters except `unreadOnly` is always applied)                                                |
 | PATCH  | `/notifications/:id/read`     | Mark one as read                                                                           |
 | PATCH  | `/notifications/read-all`     | Mark all as read                                                                           |
 

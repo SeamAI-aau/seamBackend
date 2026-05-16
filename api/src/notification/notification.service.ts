@@ -96,6 +96,8 @@ export class NotificationService {
     filters: {
       unreadOnly?: boolean;
       type?: string;
+      projectId?: string;
+      taskId?: string;
       fromDate?: string;
       toDate?: string;
       page?: number;
@@ -110,6 +112,8 @@ export class NotificationService {
       userId,
       unreadOnly: filters.unreadOnly,
       type: filters.type,
+      projectId: filters.projectId,
+      taskId: filters.taskId,
       fromDate: filters.fromDate ? new Date(filters.fromDate) : undefined,
       toDate: filters.toDate ? new Date(filters.toDate) : undefined,
     };
@@ -137,8 +141,25 @@ export class NotificationService {
     return { count };
   }
 
-  async getUnreadCount(userId: string): Promise<number> {
-    return this.repo.count({ userId, unreadOnly: true });
+  async getUnreadCount(
+    userId: string,
+    filters?: {
+      type?: string;
+      projectId?: string;
+      taskId?: string;
+      fromDate?: string;
+      toDate?: string;
+    },
+  ): Promise<number> {
+    return this.repo.count({
+      userId,
+      unreadOnly: true,
+      type: filters?.type,
+      projectId: filters?.projectId,
+      taskId: filters?.taskId,
+      fromDate: filters?.fromDate ? new Date(filters.fromDate) : undefined,
+      toDate: filters?.toDate ? new Date(filters.toDate) : undefined,
+    });
   }
 
   private buildEmailContent(
