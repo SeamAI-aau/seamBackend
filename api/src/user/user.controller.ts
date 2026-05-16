@@ -25,6 +25,7 @@ import {
   ApiOkResponse,
   ApiConsumes,
   ApiUnauthorizedResponse,
+  ApiForbiddenResponse,
   ApiBadRequestResponse,
   ApiQuery,
   ApiBody,
@@ -194,21 +195,23 @@ export class UserController {
   @ApiOperation({
     summary: 'List developers (Scrum Masters only)',
     description:
-      'Returns a paginated list of developers. Only users with the SCRUM_MASTER role can access this endpoint.',
+      'Returns a paginated list of all users with role DEVELOPER. ' +
+      'Only users with the SCRUM_MASTER role can access this endpoint. No request body.',
   })
   @ApiOkResponse({
-    description: 'Paginated list of developers.',
+    description:
+      'Paginated list of developers. Each item matches UserResponseDto; projects is always an empty array on this route.',
     schema: {
       example: {
         items: [
           {
-            id: 'dev-1',
+            id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
             email: 'dev1@example.com',
             name: 'Dev One',
             role: 'DEVELOPER',
             githubUsername: 'dev-one',
             hasVoiceSample: true,
-            projects: [{ id: 'project-1', name: 'Velocity Tracker' }],
+            projects: [],
           },
         ],
         total: 1,
@@ -225,6 +228,16 @@ export class UserController {
         statusCode: 401,
         message: 'Unauthorized',
         error: 'Unauthorized',
+      },
+    },
+  })
+  @ApiForbiddenResponse({
+    description: 'Caller does not have the SCRUM_MASTER role.',
+    schema: {
+      example: {
+        statusCode: 403,
+        message: 'Only Scrum Masters can view developers',
+        error: 'Forbidden',
       },
     },
   })
