@@ -20,7 +20,9 @@ type SocketJwtPayload = {
 
 @WebSocketGateway({
   cors: {
-    origin: '*',
+    // Mirror HTTP CORS config (origin reflection) so browsers can send cookies with credentials.
+    // For production, prefer an explicit allowlist rather than `true`.
+    origin: true,
     credentials: true,
   },
 })
@@ -40,16 +42,41 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       return err;
     };
 
+    const getCookie = (cookieHeader: unknown, name: string): string | null => {
+      if (typeof cookieHeader !== 'string' || !cookieHeader) return null;
+      // Minimal cookie parsing to avoid extra deps. Format: "a=1; b=2; accessToken=..."
+      const parts = cookieHeader.split(';');
+      for (const part of parts) {
+        const idx = part.indexOf('=');
+        if (idx < 0) continue;
+        const k = part.slice(0, idx).trim();
+        if (k !== name) continue;
+        const v = part.slice(idx + 1).trim();
+        if (!v) return null;
+        try {
+          return decodeURIComponent(v);
+        } catch {
+          return v;
+        }
+      }
+      return null;
+    };
+
     // Validate token during handshake so invalid tokens yield `connect_error` on client
     server.use((socket, next) => {
       try {
         const authToken = (socket.handshake.auth as { token?: string } | undefined)?.token;
         const header = socket.handshake.headers?.authorization;
+        const cookieHeader = socket.handshake.headers?.cookie;
         let token: string | null = null;
         if (authToken?.trim()) token = authToken.trim();
         else if (typeof header === 'string') {
           const match = header.match(/^Bearer\s+(.+)$/i);
           if (match?.[1]) token = match[1].trim();
+        }
+        // Fallback: allow cookie-based auth (HTTP-only accessToken cookie)
+        else {
+          token = getCookie(cookieHeader, 'accessToken');
         }
         if (!token) return next(unauthorized());
         const payload = this.jwt.verify<SocketJwtPayload>(token);
