@@ -92,6 +92,7 @@ export interface WorkerSummaryPayload {
 export interface WorkerResultPayload {
   status: 'success' | 'failed';
   transcript?: string;
+  tasks?: WorkerTaskPayload[];
   new_tasks?: WorkerTaskPayload[];
   transitioned_tasks?: WorkerTransitionedTaskPayload[];
   /** Blockers extracted from transcript by NLP; persisted and exposed next to GitHub blockers. */
@@ -325,6 +326,16 @@ export class WorkerResultBodyDto {
   @ValidateNested({ each: true })
   @Type(() => WorkerNewTaskBodyDto)
   new_tasks?: WorkerNewTaskBodyDto[];
+
+  @ApiPropertyOptional({
+    type: [WorkerNewTaskBodyDto],
+    description: 'Merged tasks list (new + transitioned). Preferred over new_tasks/transitioned_tasks.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => WorkerNewTaskBodyDto)
+  tasks?: WorkerNewTaskBodyDto[];
 
   @ApiPropertyOptional({
     type: [WorkerTransitionedTaskBodyDto],

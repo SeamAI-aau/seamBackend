@@ -12,7 +12,11 @@ import {
 import { CloudinaryService } from '../infrastracture/cloudinary/cloudinary.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { NotificationService } from '../notification/notification.service';
-import type { WorkerResultPayload } from './dto/worker-result.dto';
+import type {
+  WorkerResultPayload,
+  WorkerTaskPayload,
+  WorkerTransitionedTaskPayload,
+} from './dto/worker-result.dto';
 import { deriveJiraProposal } from './utils/derive-jira-proposal.util';
 import { WORKER_RESULT_STATUS_SUCCESS } from './constants/meeting.constants';
 import { NOTIFICATION_TYPES } from '../notification/constants/notification-types';
@@ -76,8 +80,8 @@ export class MeetingProcessingService {
       return;
     }
 
-    const newTasks = Array.isArray(payload.new_tasks) ? payload.new_tasks : [];
-    const normalizedTasks = this.normalizeNewTasks(newTasks);
+    const incomingTasks = this.resolveIncomingTasks(payload);
+    const normalizedTasks = this.normalizeNewTasks(incomingTasks);
     const projectId = await this.persistTranscriptAndTasks(meetingId, payload, normalizedTasks);
     this.logger.log({ meetingId }, 'Transcript and tasks saved');
 
@@ -302,7 +306,9 @@ export class MeetingProcessingService {
     return projectId;
   }
 
-  private normalizeNewTasks(tasks: WorkerResultPayload['new_tasks']): Array<{
+  private normalizeNewTasks(
+    tasks: Array<WorkerTaskPayload | WorkerTransitionedTaskPayload>,
+  ): Array<{
     title: string;
     description: string | null;
     assigneeId: string | null;
@@ -323,16 +329,17 @@ export class MeetingProcessingService {
           return null;
         }
 
-        const title = (task.title ?? '').trim();
-        const description = (task.description ?? '').trim();
-        const assigneeId = this.resolveAssigneeId(task.assigneeId, task.assignee);
-        const confidenceScore = this.normalizeConfidence(task.confidence);
-        const jiraIssueKey = typeof task.jiraIssueKey === 'string' && task.jiraIssueKey.trim()
-          ? task.jiraIssueKey.trim()
-          : typeof task.task_id === 'string' && task.task_id.trim()
-            ? task.task_id.trim()
+        const taskPayload = task as WorkerTaskPayload;
+        const title = (taskPayload.title ?? '').trim();
+        const description = (taskPayload.description ?? '').trim();
+        const assigneeId = this.resolveAssigneeId(taskPayload.assigneeId, taskPayload.assignee);
+        const confidenceScore = this.normalizeConfidence(taskPayload.confidence);
+        const jiraIssueKey = typeof taskPayload.jiraIssueKey === 'string' && taskPayload.jiraIssueKey.trim()
+          ? taskPayload.jiraIssueKey.trim()
+          : typeof taskPayload.task_id === 'string' && taskPayload.task_id.trim()
+            ? taskPayload.task_id.trim()
             : null;
-        const jiraProposal = deriveJiraProposal(task);
+        const jiraProposal = deriveJiraProposal(taskPayload);
 
         return {
           title: title || description || 'Extracted task',
@@ -357,6 +364,22 @@ export class MeetingProcessingService {
         jiraProposalTransitionId: string | null;
         jiraProposalTargetStatus: string | null;
       } => Boolean(task && task.title.trim().length > 0));
+  }
+
+  private resolveIncomingTasks(
+    payload: WorkerResultPayload,
+  ): Array<WorkerTaskPayload | WorkerTransitionedTaskPayload> {
+    if (Array.isArray(payload.tasks)) {
+      return payload.tasks;
+    }
+    const merged: Array<WorkerTaskPayload | WorkerTransitionedTaskPayload> = [];
+    if (Array.isArray(payload.transitioned_tasks)) {
+      merged.push(...payload.transitioned_tasks);
+    }
+    if (Array.isArray(payload.new_tasks)) {
+      merged.push(...payload.new_tasks);
+    }
+    return merged;
   }
 
   private resolveAssigneeId(
