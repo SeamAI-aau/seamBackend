@@ -300,20 +300,31 @@ export class ProjectService {
       );
     }
 
+    const project = await this.projectRepo.findById(projectId);
+    if (!project) {
+      throw new AppException(ErrorCode.PROJECT_NOT_FOUND, 'Project not found', 404);
+    }
+
     const member = await this.resolveMemberForRemoval(projectId, memberId);
     if (!member) {
       throw new AppException(ErrorCode.NOT_FOUND, 'Member or invite not found', 404);
     }
+
+    if (member.userId && member.userId === project.ownerId) {
+      throw new AppException(ErrorCode.FORBIDDEN, 'Cannot remove the project owner', 403);
+    }
+
+    const wasActive = member.status === 'ACTIVE';
 
     const result = await this.projectRepo.deleteMember(member.id);
     this.activityLog
       .log({
         projectId,
         userId: requesterId,
-        action: member.status === 'PENDING' ? 'invitation.cancelled' : 'member.removed',
+        action: wasActive ? 'member.removed' : 'invitation.cancelled',
         entityType: 'ProjectMember',
         entityId: member.id,
-        metadata: { email: member.email },
+        metadata: { email: member.email, status: member.status },
       })
       .catch((error) => {
         this.logger.warn(
@@ -321,6 +332,24 @@ export class ProjectService {
           'Failed to write activity log for removeMember',
         );
       });
+
+    if (wasActive && member.userId) {
+      this.notification
+        .notify({
+          userId: member.userId,
+          type: 'member_removed',
+          title: `Removed from ${project.name}`,
+          body: `You no longer have access to the project "${project.name}".`,
+          metadata: { projectId },
+        })
+        .catch((error) => {
+          this.logger.warn(
+            { projectId, removedUserId: member.userId, err: error },
+            'Failed to notify removed member',
+          );
+        });
+    }
+
     return result;
   }
 

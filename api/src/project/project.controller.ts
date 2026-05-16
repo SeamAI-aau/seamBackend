@@ -898,9 +898,9 @@ export class ProjectController {
   @ApiOperation({
     summary: 'Remove a member or cancel a pending invite',
     description:
-      'Only the project owner can remove members or cancel invitations. ' +
-      'Pass **`ProjectMember.id`** from `GET /projects/{id}/members` → `items[].id` (not `userId`). ' +
-      'For backwards compatibility, an active member’s `userId` is also accepted when it matches a membership row.',
+      'Only the project owner can call this. Works for **PENDING** invites (cancel) and **ACTIVE** members (revoke access after they accepted). ' +
+      'Pass **`ProjectMember.id`** from `GET /projects/{id}/members` → `items[].id`. ' +
+      'For backwards compatibility, an active member’s `userId` is also accepted. The project owner cannot be removed.',
   })
   @ApiParam({
     name: 'id',
@@ -916,13 +916,29 @@ export class ProjectController {
   @ApiOkResponse({
     description: 'Member or invitation removed.',
     schema: {
-      example: {
-        id: 'f6a7b8c9-d0e1-2345-f012-456789012345',
-        projectId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-        email: 'developer@example.com',
-        status: 'PENDING',
-        userId: null,
-        createdAt: '2026-05-14T10:00:00.000Z',
+      examples: {
+        cancelPending: {
+          summary: 'Cancelled pending invite',
+          value: {
+            id: 'f6a7b8c9-d0e1-2345-f012-456789012345',
+            projectId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+            email: 'developer@example.com',
+            status: 'PENDING',
+            userId: null,
+            createdAt: '2026-05-14T10:00:00.000Z',
+          },
+        },
+        removeActive: {
+          summary: 'Removed accepted (ACTIVE) member',
+          value: {
+            id: 'f6a7b8c9-d0e1-2345-f012-456789012345',
+            projectId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+            email: 'developer@example.com',
+            status: 'ACTIVE',
+            userId: 'b2c3d4e5-f6a7-8901-bcde-f12345678901',
+            createdAt: '2026-05-01T10:00:00.000Z',
+          },
+        },
       },
     },
   })
