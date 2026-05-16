@@ -1,5 +1,6 @@
 import axios, { type AxiosInstance, type AxiosResponse } from 'axios';
 import type { GitHubPullRequest, GitHubCommit } from './types/github-api.types';
+import type { GitHubRepoApiItem } from './types/github-repo.types';
 import { GITHUB_API_BASE } from './constants/github.constants';
 
 /**
@@ -17,6 +18,25 @@ export class GithubApiClient {
         Authorization: `Bearer ${accessToken}`,
       },
     });
+  }
+
+  async listUserRepositories(options?: {
+    perPage?: number;
+    page?: number;
+  }): Promise<{ items: GitHubRepoApiItem[]; hasNext: boolean }> {
+    const per_page = options?.perPage ?? 50;
+    const page = options?.page ?? 1;
+    const response: AxiosResponse<GitHubRepoApiItem[]> = await this.api.get('/user/repos', {
+      params: {
+        per_page,
+        page,
+        sort: 'updated',
+        affiliation: 'owner,collaborator,organization_member',
+      },
+    });
+    const link = response.headers['link'] as string | undefined;
+    const hasNext = typeof link === 'string' && link.includes('rel="next"');
+    return { items: response.data, hasNext };
   }
 
   async getPullRequests(owner: string, repo: string): Promise<GitHubPullRequest[]> {

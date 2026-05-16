@@ -201,7 +201,7 @@ model GithubWebhookDelivery {
 
 model PullRequest {
   id                      String           @id @default(uuid())
-  githubId                Int              @unique
+  githubId                BigInt           @unique
   title                   String
   author                  String
   state                   PullRequestState

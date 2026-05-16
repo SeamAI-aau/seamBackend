@@ -9,7 +9,7 @@ export interface GithubAccountUpsertData {
 }
 
 export interface PullRequestUpsertData {
-  githubId: number;
+  githubId: bigint;
   title: string;
   author: string;
   state: PullRequestState;

@@ -8,6 +8,8 @@ import type { CurrentUserType } from '../../auth/types/current-user.type';
 import { GithubService } from './github.service';
 import { GithubSyncService } from './github-sync.service';
 import { LinkRepoDto } from './dto/link-repo.dto';
+import { GitHubAvailableReposQueryDto } from './dto/github-available-repos-query.dto';
+import { GitHubAvailableReposResponseDto } from './dto/github-available-repo-response.dto';
 import { AppException } from '../../common/errors/app.exception';
 import { ErrorCode } from '../../common/errors/error-codes';
 import type { IProjectRepository } from '../../project/types/project.repository';
@@ -21,6 +23,7 @@ import {
   ApiBadRequestResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
+  ApiUnauthorizedResponse,
   ApiBody,
   ApiParam,
   ApiQuery,
@@ -73,7 +76,7 @@ export class GithubController {
   @ApiResponse({
     status: 302,
     description:
-      'Redirect to GITHUB_OAUTH_SUCCESS_REDIRECT_URL or http://localhost:5173/oauth-success.',
+      'Redirect to GITHUB_OAUTH_SUCCESS_REDIRECT_URL or http://localhost:8080/oauth-success?provider=github.',
   })
   @ApiBadRequestResponse({ description: 'Invalid or missing code; OAuth exchange failed.' })
   async callback(
@@ -84,7 +87,7 @@ export class GithubController {
     await this.githubService.handleCallback(code ?? '', state ?? '');
     const redirectUrl =
       this.config.get<string>('GITHUB_OAUTH_SUCCESS_REDIRECT_URL') ??
-      'http://localhost:5173/oauth-success';
+      'http://localhost:8080/oauth-success?provider=github';
     res.redirect(redirectUrl);
   }
 
@@ -106,6 +109,46 @@ export class GithubController {
   @UseGuards(JwtAuthGuard)
   async getStatus(@CurrentUser() user: CurrentUserType): Promise<{ connected: boolean }> {
     return this.githubService.getConnectionStatus(user.userId);
+  }
+
+  @Get('available-repositories')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'List GitHub repositories available to the current user',
+    description:
+      'Calls GitHub `GET /user/repos` using the **authenticated user’s** OAuth token. ' +
+      'Use this after `GET /integrations/github/connect` so Scrum Masters can pick a repository by name instead of pasting a URL. ' +
+      'Pass the selected `htmlUrl` to `POST /integrations/github/link/:projectId`.',
+  })
+  @ApiOkResponse({
+    description: 'Paginated list of repositories the user can access.',
+    type: GitHubAvailableReposResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'GitHub is not connected for this user, or GitHub API returned an error.',
+  })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  async listAvailableRepositories(
+    @CurrentUser() user: CurrentUserType,
+    @Query() query: GitHubAvailableReposQueryDto,
+  ): Promise<GitHubAvailableReposResponseDto> {
+    try {
+      return await this.githubService.listAvailableRepositories(user.userId, {
+        query: query.query,
+        perPage: query.perPage,
+        page: query.page,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to list GitHub repositories';
+      if (message.includes('GitHub not connected')) {
+        throw new AppException(
+          ErrorCode.VALIDATION_ERROR,
+          'Connect GitHub first via GET /integrations/github/connect',
+          400,
+        );
+      }
+      throw new AppException(ErrorCode.VALIDATION_ERROR, message, 400);
+    }
   }
 
   @Post('disconnect')

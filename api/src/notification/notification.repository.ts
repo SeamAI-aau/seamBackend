@@ -38,4 +38,6 @@ export interface INotificationRepository {
   count(filters: NotificationFilters): Promise<number>;
   markAsRead(id: string, userId: string): Promise<boolean>;
   markAllAsRead(userId: string): Promise<number>;
+
+  delete(id: string, userId: string): Promise<boolean>;
 }

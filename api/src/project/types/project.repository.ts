@@ -61,6 +61,16 @@ export interface IProjectRepository {
 
   findPendingInvite(projectId: string, email: string): Promise<ProjectMember | null>;
 
+  findMemberByProjectAndEmail(
+    projectId: string,
+    email: string,
+  ): Promise<ProjectMember | null>;
+
+  findMemberByProjectAndUserId(
+    projectId: string,
+    userId: string,
+  ): Promise<ProjectMember | null>;
+
   findMemberById(memberId: string): Promise<ProjectMemberWithUser | null>;
 
   acceptInvite(projectId: string, email: string, userId: string): Promise<ProjectMember>;

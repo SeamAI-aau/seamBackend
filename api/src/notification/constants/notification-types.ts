@@ -6,6 +6,8 @@ export const NOTIFICATION_TYPES = {
   INVITATION_SENT: 'invitation_sent',
   INVITATION_ACCEPTED: 'invitation_accepted',
   INVITATION_CANCELLED: 'invitation_cancelled',
+  /** User was removed from a project after accepting membership. */
+  MEMBER_REMOVED: 'member_removed',
   TASK_ASSIGNED: 'task_assigned',
   TASK_APPROVED: 'task_approved',
   TASK_DECLINED: 'task_declined',

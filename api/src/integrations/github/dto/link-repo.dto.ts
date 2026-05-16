@@ -5,7 +5,7 @@ export class LinkRepoDto {
   @ApiProperty({
     example: 'https://github.com/acme/payments-api',
     description:
-      'Full GitHub repository URL. Must be https (or http) and match github.com/owner/repo.',
+      'Full GitHub repository URL. Obtain from GET /integrations/github/available-repositories after OAuth, or use https://github.com/owner/repo.',
   })
   @IsString()
   @IsUrl()
