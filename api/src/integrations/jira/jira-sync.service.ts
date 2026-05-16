@@ -1,8 +1,10 @@
 import { Injectable, Inject } from '@nestjs/common';
 import axios, { isAxiosError } from 'axios';
 import { UnrecoverableError } from 'bullmq';
-import { TaskStatus } from '@prisma/client';
+import { JiraProposalAction, TaskStatus } from '@prisma/client';
 import { JiraService } from './jira.service';
+import { JiraIssueService } from './jira-issue.service';
+import { AppException } from '../../common/errors/app.exception';
 import { TASK_REPOSITORY } from '../../tasks/types/task.tokens';
 import type { ITaskRepository } from '../../tasks/types/task.repository';
 import type { JiraCreateIssueResponse } from './types/jira-api.types';
@@ -43,6 +45,7 @@ export class JiraSyncService {
     @Inject(TASK_REPOSITORY)
     private readonly taskRepo: ITaskRepository,
     private readonly jiraService: JiraService,
+    private readonly jiraIssueService: JiraIssueService,
   ) {}
 
   /**
@@ -59,13 +62,22 @@ export class JiraSyncService {
     if (task.jiraIssueKey) return;
     if (task.status !== TaskStatus.APPROVED) return;
 
+    const projectId = task.meeting.project.id;
     const ownerId = task.meeting.project.ownerId;
     const projectKey = task.meeting.project.jiraProjectKey;
 
     if (!projectKey?.trim()) {
-      const msg = `Project ${task.meeting.project.id} has no Jira project key configured`;
+      const msg = `Project ${projectId} has no Jira project key configured`;
       await this.taskRepo.setJiraSyncLastError(taskId, msg);
       throw new UnrecoverableError(msg);
+    }
+
+    if (
+      task.jiraProposalAction === JiraProposalAction.TRANSITION &&
+      task.jiraProposalIssueKey?.trim()
+    ) {
+      await this.syncApprovedTransition(taskId, projectId, ownerId, task);
+      return;
     }
 
     let accessToken: string;
@@ -107,6 +119,47 @@ export class JiraSyncService {
     } catch (err) {
       const msg = formatJiraApiError(err);
       await this.taskRepo.setJiraSyncLastError(taskId, msg);
+      const status = httpStatus(err);
+      if (status === 400 || status === 404) {
+        throw new UnrecoverableError(msg);
+      }
+      throw err;
+    }
+  }
+
+  private async syncApprovedTransition(
+    taskId: string,
+    projectId: string,
+    ownerId: string,
+    task: {
+      jiraProposalIssueKey: string | null;
+      jiraProposalTransitionId: string | null;
+      jiraProposalTargetStatus: string | null;
+    },
+  ): Promise<void> {
+    const issueKey = task.jiraProposalIssueKey!.trim().toUpperCase();
+
+    try {
+      const { transitions } = await this.jiraIssueService.getTransitions(
+        projectId,
+        issueKey,
+        ownerId,
+      );
+      const transitionId = this.jiraIssueService.resolveTransitionId(
+        transitions,
+        task.jiraProposalTransitionId,
+        task.jiraProposalTargetStatus,
+      );
+      await this.jiraIssueService.transitionIssue(projectId, issueKey, transitionId, ownerId);
+      await this.taskRepo.markAsCreatedInJira(taskId, issueKey);
+    } catch (err) {
+      const msg =
+        err instanceof AppException ? err.message : formatJiraApiError(err);
+      await this.taskRepo.setJiraSyncLastError(taskId, msg);
+      if (err instanceof UnrecoverableError) throw err;
+      if (err instanceof AppException && err.getStatus() < 500) {
+        throw new UnrecoverableError(msg);
+      }
       const status = httpStatus(err);
       if (status === 400 || status === 404) {
         throw new UnrecoverableError(msg);

@@ -57,6 +57,9 @@ function resolveApiEnvFilePaths(): string[] {
         AI_ENGINE_REQUEST_TIMEOUT_MS: Joi.number().integer().min(5000).max(3_600_000).optional(),
 
         WORKER_SECRET: Joi.string().min(1).optional(),
+        /** Optional pair for ai-engine `JIRA_CONTEXT_URL` auth (`X-Internal-Key` / `X-Internal-Secret`). */
+        INTERNAL_API_KEY: Joi.string().optional().allow(''),
+        INTERNAL_SECRET: Joi.string().optional().allow(''),
 
         TOKEN_ENCRYPTION_SECRET: Joi.string().min(16).required(),
 

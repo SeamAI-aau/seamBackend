@@ -6,6 +6,7 @@ import { CloudinaryService } from '../infrastracture/cloudinary/cloudinary.servi
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { NotificationService } from '../notification/notification.service';
 import type { WorkerResultPayload } from './dto/worker-result.dto';
+import { deriveJiraProposal } from './utils/derive-jira-proposal.util';
 import { WORKER_RESULT_STATUS_SUCCESS } from './constants/meeting.constants';
 import { NOTIFICATION_TYPES } from '../notification/constants/notification-types';
 

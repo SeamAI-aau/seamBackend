@@ -7,7 +7,8 @@ Manages the task lifecycle for stand-up action items: extraction → assignment 
 - **EXTRACTED** – From meeting transcription; not yet assigned (or assignee unknown). When the meeting callback saves unassigned tasks, the **project owner** and **Scrum Master** project members receive a **`tasks_pending_assignment`** notification so they can assign developers (`reassignTask` / assign flow).
 - **SENT_TO_DEVELOPER** – Assigned to a developer (by NLP / ai-engine with `assigneeId` or by Scrum Master).
 - **APPROVED** / **REJECTED** – Developer accepts or declines.
-- **SYNCED** – Approved task created in Jira (handled by Jira integration). If Jira create fails after approve, **`jiraSyncLastError`** on the task holds the last error message (Bull retries transient failures; **400/404** and missing Jira project key stop retries via a non-retryable job error).
+- **SYNCED** – Approved task synced to Jira: **create** new issue (default) or **transition** existing when the engine set `jiraProposalAction: TRANSITION` + `jiraProposalIssueKey`. If sync fails after approve, **`jiraSyncLastError`** holds the last error (Bull retries transient failures).
+- **Jira proposals** – Meeting callback may store `jiraProposalAction`, `jiraProposalIssueKey`, `jiraProposalTargetStatus`, `jiraProposalTransitionId`. Nothing is sent to Jira until the assignee **approves**. Use `GET /tasks/:id/jira/proposed-transitions` before approve; optional `jiraTransitionId` on `PATCH /tasks/:id` when approving.
 
 Transitions are enforced by `TaskStateMachine` in `task-state-machine.ts`.
 

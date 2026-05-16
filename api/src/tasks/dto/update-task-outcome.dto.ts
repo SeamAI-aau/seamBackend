@@ -39,4 +39,13 @@ export class UpdateTaskOutcomeDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @ApiPropertyOptional({
+    example: '31',
+    description:
+      'When approving a TRANSITION proposal, optional Jira workflow transition id (from GET .../jira/proposed-transitions). Overrides AI-suggested id.',
+  })
+  @IsOptional()
+  @IsString()
+  jiraTransitionId?: string;
 }
