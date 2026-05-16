@@ -33,7 +33,8 @@ export class UpdateProjectDto {
   @ApiPropertyOptional({
     example: 'PROJ',
     description:
-      'Jira project key (e.g. PROJ, MYTEAM). Used when syncing approved tasks to Jira. Can also be set via POST /integrations/jira/link/:projectId.',
+      'Jira project key (e.g. PROJ, MYTEAM). Used when syncing approved tasks to Jira. ' +
+      'List keys via GET /integrations/jira/available-projects after OAuth, or set via POST /integrations/jira/link/:projectId.',
   })
   @IsOptional()
   @IsString()
