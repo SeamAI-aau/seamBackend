@@ -88,7 +88,7 @@ export class AuthController {
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
-//temporarily changed by liya
+  //temporarily changed by liya
   // @Post('login')
   // @ApiOperation({ summary: 'Log in and receive JWT + cookies' })
   // @ApiOkResponse({
@@ -235,78 +235,78 @@ export class AuthController {
   //   return { message: 'Tokens refreshed' };
   // }
 
-@Post('login')
-@ApiOperation({ summary: 'Log in and receive JWT + cookies' })
-@ApiOkResponse({
-  description: 'Login succeeded. Access and refresh tokens are set as HTTP-only cookies.',
-  schema: { example: { message: 'Logged in successfully' } },
-})
-async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
-  const { accessToken, refreshToken } = await this.authService.login(dto);
+  @Post('login')
+  @ApiOperation({ summary: 'Log in and receive JWT + cookies' })
+  @ApiOkResponse({
+    description: 'Login succeeded. Access and refresh tokens are set as HTTP-only cookies.',
+    schema: { example: { message: 'Logged in successfully' } },
+  })
+  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
+    const { accessToken, refreshToken } = await this.authService.login(dto);
 
-  const isProduction = process.env.NODE_ENV === 'production';
+    const isProduction = process.env.NODE_ENV === 'production';
 
-  // Set accessToken cookie
-  res.cookie('accessToken', accessToken, {
-    httpOnly: true,
-    secure: true,                    // ← Force true (Render uses HTTPS)
-    sameSite: 'none',                // ← Force 'none' for cross-origin
-    maxAge: 15 * 60 * 1000,
-    path: '/',                             // important
-  });
-
-  // Set refreshToken cookie
-  res.cookie('refreshToken', refreshToken, {
-    httpOnly: true,
-    secure: true,                    // ← Force true
-    sameSite: 'none',                // ← Force 'none'
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    path: '/',
-  });
-
-  return { message: 'Logged in successfully' };
-}
-
-@Post('refresh')
-@ApiOperation({ summary: 'Refresh access and refresh tokens using refresh token' })
-async refresh(
-  @Body('refreshToken') oldToken: string,
-  @Req() req: Request,
-  @Res({ passthrough: true }) res: Response,
-) {
-  const token = oldToken ?? req.cookies?.refreshToken;
-  if (!token) {
-    throw new BadRequestException({
-      code: ErrorCode.VALIDATION_ERROR,
-      message: 'Refresh token is required',
-      details: { field: 'refreshToken', sources: ['body', 'cookie'] },
+    // Set accessToken cookie
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: true, // ← Force true (Render uses HTTPS)
+      sameSite: 'none', // ← Force 'none' for cross-origin
+      maxAge: 15 * 60 * 1000,
+      path: '/', // important
     });
+
+    // Set refreshToken cookie
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: true, // ← Force true
+      sameSite: 'none', // ← Force 'none'
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: '/',
+    });
+
+    return { message: 'Logged in successfully' };
   }
 
-  const { accessToken, refreshToken } = await this.authService.refreshToken(token);
+  @Post('refresh')
+  @ApiOperation({ summary: 'Refresh access and refresh tokens using refresh token' })
+  async refresh(
+    @Body('refreshToken') oldToken: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const token = oldToken ?? req.cookies?.refreshToken;
+    if (!token) {
+      throw new BadRequestException({
+        code: ErrorCode.VALIDATION_ERROR,
+        message: 'Refresh token is required',
+        details: { field: 'refreshToken', sources: ['body', 'cookie'] },
+      });
+    }
 
-  const isProduction = process.env.NODE_ENV === 'production';
+    const { accessToken, refreshToken } = await this.authService.refreshToken(token);
 
-  // Update accessToken cookie
-  res.cookie('accessToken', accessToken, {
-    httpOnly: true,
-    secure: true,                    // ← Force true (Render uses HTTPS)
-    sameSite: 'none',                // ← Force 'none' for cross-origin
-    maxAge: 15 * 60 * 1000,
-    path: '/',
-  });
+    const isProduction = process.env.NODE_ENV === 'production';
 
-  // Update refreshToken cookie
-  res.cookie('refreshToken', refreshToken, {
-    httpOnly: true,
-    secure: true,                    // ← Force true
-    sameSite: 'none',                // ← Force 'none'
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    path: '/',
-  });
+    // Update accessToken cookie
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: true, // ← Force true (Render uses HTTPS)
+      sameSite: 'none', // ← Force 'none' for cross-origin
+      maxAge: 15 * 60 * 1000,
+      path: '/',
+    });
 
-  return { message: 'Tokens refreshed' };
-}
+    // Update refreshToken cookie
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: true, // ← Force true
+      sameSite: 'none', // ← Force 'none'
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: '/',
+    });
+
+    return { message: 'Tokens refreshed' };
+  }
 
   @Post('logout')
   @ApiOperation({ summary: 'Log out current user (clear JWT cookies)' })
