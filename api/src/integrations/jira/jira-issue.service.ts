@@ -5,7 +5,7 @@ import type { IProjectRepository } from '../../project/types/project.repository'
 import { PROJECT_REPOSITORY } from '../../project/types/project.tokens';
 import { AppException } from '../../common/errors/app.exception';
 import { ErrorCode } from '../../common/errors/error-codes';
-import type { JiraTransitionsResponse } from './types/jira-myself.types';
+import type { JiraTransition, JiraTransitionsResponse } from './types/jira-myself.types';
 
 @Injectable()
 export class JiraIssueService {
@@ -37,6 +37,41 @@ export class JiraIssueService {
     } catch (err) {
       throw this.toAppException(err, 'Failed to load Jira transitions');
     }
+  }
+
+  /**
+   * Picks a workflow transition id: explicit id wins, else match target status name on `to.name`.
+   */
+  resolveTransitionId(
+    transitions: JiraTransition[],
+    transitionId: string | null | undefined,
+    targetStatusName: string | null | undefined,
+  ): string {
+    const explicit = transitionId?.trim();
+    if (explicit) return explicit;
+
+    const target = targetStatusName?.trim().toLowerCase();
+    if (!target) {
+      throw new AppException(
+        ErrorCode.VALIDATION_ERROR,
+        'transitionId or jiraProposalTargetStatus is required',
+        400,
+      );
+    }
+
+    const match = transitions.find(
+      (t) =>
+        t.to?.name?.toLowerCase() === target ||
+        t.name?.toLowerCase() === target,
+    );
+    if (!match?.id) {
+      throw new AppException(
+        ErrorCode.VALIDATION_ERROR,
+        `No Jira transition found for target status "${targetStatusName}"`,
+        400,
+      );
+    }
+    return match.id;
   }
 
   async transitionIssue(

@@ -102,6 +102,11 @@ model Transcript {
   @@unique([meetingId, version])
 }
 
+enum JiraProposalAction {
+  CREATE
+  TRANSITION
+}
+
 model Task {
   id              String     @id @default(uuid())
   title           String
@@ -114,6 +119,11 @@ model Task {
   confidenceScore Float?
   transcriptId    String
   jiraIssueKey    String?
+  /// AI / engine intent: create new Jira issue vs transition existing (applied only after dev approve).
+  jiraProposalAction       JiraProposalAction?
+  jiraProposalIssueKey     String?
+  jiraProposalTransitionId String?
+  jiraProposalTargetStatus String?
   /// Last Jira create failure message (cleared on successful SYNCED). Used for SM visibility while Bull retries.
   jiraSyncLastError String?
   assignee        User?      @relation("AssignedTasks", fields: [assigneeId], references: [id])

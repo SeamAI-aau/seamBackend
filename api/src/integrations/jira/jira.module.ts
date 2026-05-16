@@ -5,6 +5,8 @@ import { JiraController } from './jira.controller';
 import { JiraService } from './jira.service';
 import { JiraSyncService } from './jira-sync.service';
 import { JiraIssueService } from './jira-issue.service';
+import { JiraContextService } from './jira-context.service';
+import { InternalJiraController } from './internal-jira.controller';
 import { JiraSyncQueue } from './queue/jira-sync.queue';
 import { JiraSyncProcessor } from './queue/jira.sync.processor';
 import { JIRA_REPOSITORY } from './jira.tokens';
@@ -42,11 +44,12 @@ class NoopJiraSyncQueue {
       : []),
     forwardRef(() => TaskModule),
   ],
-  controllers: [JiraController],
+  controllers: [JiraController, InternalJiraController],
   providers: [
     JiraService,
     JiraSyncService,
     JiraIssueService,
+    JiraContextService,
     ...(queuesEnabled
       ? [JiraSyncQueue, JiraSyncProcessor]
       : [{ provide: JiraSyncQueue, useClass: NoopJiraSyncQueue }]),
@@ -55,6 +58,6 @@ class NoopJiraSyncQueue {
       useClass: PrismaJiraRepository,
     },
   ],
-  exports: [JiraSyncQueue, JiraService, JiraIssueService],
+  exports: [JiraSyncQueue, JiraService, JiraIssueService, JiraContextService],
 })
 export class JiraModule {}

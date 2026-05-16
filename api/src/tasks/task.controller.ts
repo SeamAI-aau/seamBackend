@@ -261,6 +261,19 @@ export class TaskController {
     return this.taskService.reassignTask(id, user, body.assigneeId ?? null);
   }
 
+  @Get(':id/jira/proposed-transitions')
+  @ApiOperation({
+    summary: 'List Jira transitions for an AI-proposed existing issue (before approve)',
+    description:
+      'Use when the task has jiraProposalIssueKey (TRANSITION proposal). Developer picks transitionId, then approves with optional jiraTransitionId in PATCH body.',
+  })
+  @ApiParam({ name: 'id', description: 'Task UUID.' })
+  @ApiOkResponse({ description: 'Proposed issue key and available transitions.' })
+  @ApiBadRequestResponse({ description: 'No Jira transition proposal on this task.' })
+  getProposedJiraTransitions(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
+    return this.taskService.getProposedJiraTransitionsForTask(id, user.userId);
+  }
+
   @Get(':id/jira/transitions')
   @ApiOperation({
     summary: 'List Jira transitions for a synced task',
