@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
+import { GoogleAuthService } from './google-auth.service';
 import { AuthController } from './auth.controller';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -25,6 +26,7 @@ import { JwtServiceAdapter } from './jwt.service';
   controllers: [AuthController],
   providers: [
     AuthService,
+    GoogleAuthService,
     PrismaService,
     JwtStrategy,
     { provide: AUTH_REPOSITORY, useClass: PrismaAuthRepository },

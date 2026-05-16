@@ -63,6 +63,17 @@ export class AuthService {
       });
     }
 
+    if (!user.passwordHash) {
+      this.logger.warn('Login failed: passwordless account', { email: dto.email });
+      throw new UnauthorizedException({
+        code: ErrorCode.INVALID_CREDENTIALS,
+        message: 'This account uses Google sign-in. Continue with Google instead.',
+        details: {
+          hint: 'Use the Sign in with Google button on the sign-in page.',
+        },
+      });
+    }
+
     const valid = await compare(dto.password, user.passwordHash);
     if (!valid) {
       this.logger.warn('Login failed: invalid password', { email: dto.email });

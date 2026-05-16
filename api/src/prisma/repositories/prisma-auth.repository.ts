@@ -12,8 +12,32 @@ export class PrismaAuthRepository implements IAuthRepository {
     return this.prisma.user.findUnique({ where: { email } });
   }
 
+  findByGoogleId(googleId: string): Promise<User | null> {
+    return this.prisma.user.findUnique({ where: { googleId } });
+  }
+
   create(data: CreateUserInput): Promise<User> {
     return this.prisma.user.create({ data });
+  }
+
+  updateGoogleLink(
+    userId: string,
+    data: {
+      googleId: string;
+      emailVerifiedAt?: Date;
+      name?: string;
+      avatarUrl?: string;
+    },
+  ): Promise<User> {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        googleId: data.googleId,
+        ...(data.emailVerifiedAt ? { emailVerifiedAt: data.emailVerifiedAt } : {}),
+        ...(data.name ? { name: data.name } : {}),
+        ...(data.avatarUrl ? { avatarUrl: data.avatarUrl } : {}),
+      },
+    });
   }
 
   async createRefreshToken(data: { userId: string; token: string; expiresAt: Date }) {

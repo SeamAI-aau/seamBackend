@@ -151,7 +151,9 @@ export class UserService {
       name: user.name,
       role: user.role,
       githubUsername: user.githubUsername ?? null,
+      avatarUrl: user.avatarUrl ?? null,
       hasVoiceSample: !!user.voiceSamplePublicId,
+      emailVerified: !!user.emailVerifiedAt,
       projects: projects ?? [],
     };
   }
