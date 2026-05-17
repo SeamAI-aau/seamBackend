@@ -1,5 +1,6 @@
 import { Body, Controller, Post, UseGuards, Res, Req, BadRequestException } from '@nestjs/common';
 import type { Response, Request } from 'express';
+import { Logger } from 'nestjs-pino';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -24,7 +25,10 @@ import { buildAuthCookieOptions } from '../common/config/auth-cookie.config';
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly logger: Logger,
+  ) {}
 
   @Post('register')
   @ApiOperation({ summary: 'Register a new user' })
@@ -139,14 +143,44 @@ export class AuthController {
     },
   })
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
-    const { accessToken, refreshToken, accessExpiresMs, refreshExpiresMs } =
-      await this.authService.login(dto);
+    const email = dto.email?.trim() ?? '';
+    this.logger.log({ email, step: 'controller.login.start' }, 'POST /auth/login received');
 
-    const base = buildAuthCookieOptions();
-    res.cookie('accessToken', accessToken, { ...base, maxAge: accessExpiresMs });
-    res.cookie('refreshToken', refreshToken, { ...base, maxAge: refreshExpiresMs });
+    try {
+      const { accessToken, refreshToken, accessExpiresMs, refreshExpiresMs } =
+        await this.authService.login(dto);
 
-    return { message: 'Logged in successfully' };
+      const base = buildAuthCookieOptions();
+      this.logger.log(
+        {
+          email,
+          step: 'controller.login.set_cookies',
+          cookie: { sameSite: base.sameSite, secure: base.secure, path: base.path },
+          maxAge: { accessMs: accessExpiresMs, refreshMs: refreshExpiresMs },
+        },
+        'POST /auth/login setting auth cookies',
+      );
+
+      res.cookie('accessToken', accessToken, { ...base, maxAge: accessExpiresMs });
+      res.cookie('refreshToken', refreshToken, { ...base, maxAge: refreshExpiresMs });
+
+      this.logger.log({ email, step: 'controller.login.success' }, 'POST /auth/login succeeded');
+      return { message: 'Logged in successfully' };
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      this.logger.error(
+        {
+          email,
+          step: 'controller.login.failed',
+          err: error,
+          errName: error.name,
+          errMessage: error.message,
+          errStack: error.stack,
+        },
+        'POST /auth/login failed',
+      );
+      throw err;
+    }
   }
 
   @Post('refresh')

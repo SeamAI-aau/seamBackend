@@ -24,13 +24,41 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
+      const response = exception.getResponse();
+      if (typeof response === 'string') {
+        message = response;
+      } else if (response && typeof response === 'object' && 'message' in response) {
+        const msg = (response as { message?: string | string[] }).message;
+        message = Array.isArray(msg) ? msg.join('; ') : (msg ?? exception.message);
+      } else {
+        message = exception.message;
+      }
+    } else if (exception instanceof Error) {
       message = exception.message;
     }
 
+    const errForLog =
+      exception instanceof Error
+        ? exception
+        : new Error(typeof exception === 'string' ? exception : JSON.stringify(exception));
+
     if (status >= 500) {
-      this.logger.error({ err: exception }, `Unhandled exception: ${message}`);
+      this.logger.error(
+        {
+          err: errForLog,
+          errName: errForLog.name,
+          errMessage: errForLog.message,
+          errStack: errForLog.stack,
+          path: request.url,
+          method: request.method,
+        },
+        `Unhandled exception: ${message}`,
+      );
     } else {
-      this.logger.warn({ err: exception }, `Client error: ${message}`);
+      this.logger.warn(
+        { err: errForLog, path: request.url, method: request.method },
+        `Client error: ${message}`,
+      );
     }
 
     response.status(status).json({

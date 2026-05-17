@@ -1,4 +1,10 @@
-import { Injectable, Inject, UnauthorizedException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  UnauthorizedException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { hash, compare } from 'bcryptjs';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from 'nestjs-pino';
@@ -51,9 +57,19 @@ export class AuthService {
 
   /** LOGIN */
   async login(dto: LoginDto) {
-    const user = await this.userRepo.findByEmail(dto.email);
+    const email = dto.email?.trim() ?? '';
+    this.logger.log({ email, step: 'login.start' }, 'Login attempt started');
+
+    let user;
+    try {
+      user = await this.userRepo.findByEmail(dto.email);
+    } catch (err) {
+      this.logLoginFailure('findByEmail', email, err);
+      throw err;
+    }
+
     if (!user) {
-      this.logger.warn('Login failed: user not found', { email: dto.email });
+      this.logger.warn({ email, step: 'login.user_not_found' }, 'Login failed: user not found');
       throw new UnauthorizedException({
         code: ErrorCode.INVALID_CREDENTIALS,
         message: 'Invalid email or password.',
@@ -63,9 +79,42 @@ export class AuthService {
       });
     }
 
-    const valid = await compare(dto.password, user.passwordHash);
+    this.logger.log(
+      {
+        email,
+        userId: user.id,
+        role: user.role,
+        hasPasswordHash: !!user.passwordHash,
+        step: 'login.user_loaded',
+      },
+      'Login: user found',
+    );
+
+    if (!user.passwordHash) {
+      this.logger.warn(
+        { email, userId: user.id, step: 'login.no_password_hash' },
+        'Login failed: account has no password (OAuth-only user)',
+      );
+      throw new UnauthorizedException({
+        code: ErrorCode.INVALID_CREDENTIALS,
+        message: 'This account cannot sign in with a password. Use your OAuth provider instead.',
+        details: { reason: 'missing_password_hash' },
+      });
+    }
+
+    let valid = false;
+    try {
+      valid = await compare(dto.password, user.passwordHash);
+    } catch (err) {
+      this.logLoginFailure('password_compare', email, err, { userId: user.id });
+      throw err;
+    }
+
     if (!valid) {
-      this.logger.warn('Login failed: invalid password', { email: dto.email });
+      this.logger.warn(
+        { email, userId: user.id, step: 'login.invalid_password' },
+        'Login failed: invalid password',
+      );
       throw new UnauthorizedException({
         code: ErrorCode.INVALID_CREDENTIALS,
         message: 'Invalid email or password.',
@@ -74,6 +123,8 @@ export class AuthService {
         },
       });
     }
+
+    this.logger.log({ email, userId: user.id, step: 'login.password_ok' }, 'Login: password valid');
 
     const payload: JwtPayload = {
       sub: user.id,
@@ -81,7 +132,17 @@ export class AuthService {
       role: user.role,
     };
 
-    return this.issueTokens(user.id, payload);
+    try {
+      const tokens = await this.issueTokens(user.id, payload, email);
+      this.logger.log(
+        { email, userId: user.id, step: 'login.success' },
+        'Login completed; tokens issued',
+      );
+      return tokens;
+    } catch (err) {
+      this.logLoginFailure('issueTokens', email, err, { userId: user.id });
+      throw err;
+    }
   }
 
   /** REFRESH */
@@ -135,6 +196,27 @@ export class AuthService {
     this.logger.log('User logged out, all refresh tokens revoked', { userId });
   }
 
+  private logLoginFailure(
+    step: string,
+    email: string,
+    err: unknown,
+    extra?: Record<string, unknown>,
+  ): void {
+    const error = err instanceof Error ? err : new Error(String(err));
+    this.logger.error(
+      {
+        step,
+        email,
+        ...extra,
+        err: error,
+        errName: error.name,
+        errMessage: error.message,
+        errStack: error.stack,
+      },
+      `Login failed at step: ${step}`,
+    );
+  }
+
   private async getValidRefreshToken(userId: string, token: string) {
     const all = await this.userRepo.findRefreshTokensByUserId(userId);
     if (!all.length) return null;
@@ -155,21 +237,57 @@ export class AuthService {
     return null;
   }
 
-  private async issueTokens(userId: string, payload: JwtPayload) {
+  private async issueTokens(userId: string, payload: JwtPayload, emailForLog?: string) {
+    const logCtx = { userId, email: emailForLog, step: '' as string };
+
     const accessExpiresIn =
       this.configService.get<StringValue>('JWT_ACCESS_TOKEN_EXPIRES_IN') ?? '15m';
     const refreshExpiresIn =
       this.configService.get<StringValue>('JWT_REFRESH_TOKEN_EXPIRES_IN') ?? '7d';
 
-    const accessExpiresMs = this.parseDuration(accessExpiresIn);
-    const refreshExpiresMs = this.parseDuration(refreshExpiresIn);
+    logCtx.step = 'issueTokens.parse_duration';
+    this.logger.debug(
+      { ...logCtx, accessExpiresIn, refreshExpiresIn },
+      'Login: parsing JWT expiry durations',
+    );
 
+    let accessExpiresMs: number;
+    let refreshExpiresMs: number;
+    try {
+      accessExpiresMs = this.parseDuration(accessExpiresIn);
+      refreshExpiresMs = this.parseDuration(refreshExpiresIn);
+    } catch (err) {
+      this.logger.error(
+        {
+          ...logCtx,
+          accessExpiresIn,
+          refreshExpiresIn,
+          err,
+        },
+        'Login: invalid JWT_ACCESS_TOKEN_EXPIRES_IN or JWT_REFRESH_TOKEN_EXPIRES_IN',
+      );
+      throw new BadRequestException({
+        code: ErrorCode.VALIDATION_ERROR,
+        message: 'Server JWT expiry configuration is invalid',
+        details: { accessExpiresIn, refreshExpiresIn },
+      });
+    }
+
+    logCtx.step = 'issueTokens.sign_access';
+    this.logger.debug(logCtx, 'Login: signing access token');
     const accessToken = await this.jwtService.sign(payload, { expiresIn: accessExpiresIn });
+
+    logCtx.step = 'issueTokens.sign_refresh';
+    this.logger.debug(logCtx, 'Login: signing refresh token');
     const refreshToken = await this.jwtService.sign(payload, { expiresIn: refreshExpiresIn });
 
+    logCtx.step = 'issueTokens.hash_refresh';
+    this.logger.debug(logCtx, 'Login: hashing refresh token for storage');
     const tokenHash = await hash(refreshToken, 10);
     const expiresAt = new Date(Date.now() + refreshExpiresMs);
 
+    logCtx.step = 'issueTokens.persist_refresh';
+    this.logger.debug({ ...logCtx, expiresAt: expiresAt.toISOString() }, 'Login: saving refresh token');
     await this.userRepo.createRefreshToken({
       userId,
       token: tokenHash,
@@ -183,6 +301,10 @@ export class AuthService {
   private parseDuration(duration: string): number {
     const unit = duration.slice(-1);
     const value = parseInt(duration.slice(0, -1), 10);
+
+    if (!Number.isFinite(value) || value <= 0) {
+      throw new Error(`Invalid duration value in: ${duration}`);
+    }
 
     switch (unit) {
       case 'd':
