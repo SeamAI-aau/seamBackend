@@ -42,6 +42,12 @@ function resolveApiEnvFilePaths(): string[] {
         /** Comma-separated CORS origins (include `chrome-extension://<id>` for the MV3 extension). Empty + non-production = allow all origins. */
         CORS_ORIGINS: Joi.string().optional().allow(''),
 
+        /**
+         * When `true`, auth cookies use SameSite=None + Secure (cross-origin dashboard ↔ API).
+         * Set on Render/staging without changing NODE_ENV to production.
+         */
+        AUTH_COOKIE_CROSS_SITE: Joi.string().valid('true', 'false', '1', '0').optional(),
+
         /** Max meeting audio upload size in megabytes (multipart `file` on POST .../meetings). Default 500. */
         MEETING_UPLOAD_MAX_MB: Joi.number().integer().min(1).max(2048).optional(),
 

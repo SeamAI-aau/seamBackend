@@ -19,17 +19,7 @@ import {
   ApiCookieAuth,
   ApiBody,
 } from '@nestjs/swagger';
-
-/** Shared cookie options: cross-origin dashboard needs `sameSite: 'none'` + `secure` in production. */
-const cookieBaseOptions = () => {
-  const isProduction = process.env.NODE_ENV === 'production';
-  return {
-    httpOnly: true,
-    secure: isProduction,
-    path: '/',
-    sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
-  };
-};
+import { buildAuthCookieOptions } from '../common/config/auth-cookie.config';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -152,7 +142,7 @@ export class AuthController {
     const { accessToken, refreshToken, accessExpiresMs, refreshExpiresMs } =
       await this.authService.login(dto);
 
-    const base = cookieBaseOptions();
+    const base = buildAuthCookieOptions();
     res.cookie('accessToken', accessToken, { ...base, maxAge: accessExpiresMs });
     res.cookie('refreshToken', refreshToken, { ...base, maxAge: refreshExpiresMs });
 
@@ -222,7 +212,7 @@ export class AuthController {
     const { accessToken, refreshToken, accessExpiresMs, refreshExpiresMs } =
       await this.authService.refreshToken(token);
 
-    const base = cookieBaseOptions();
+    const base = buildAuthCookieOptions();
     res.cookie('accessToken', accessToken, { ...base, maxAge: accessExpiresMs });
     res.cookie('refreshToken', refreshToken, { ...base, maxAge: refreshExpiresMs });
 
@@ -250,7 +240,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   async logout(@CurrentUser() user: CurrentUserType, @Res({ passthrough: true }) res: Response) {
     await this.authService.logout(user.userId);
-    const clearOpts = cookieBaseOptions();
+    const clearOpts = buildAuthCookieOptions();
     res.clearCookie('accessToken', clearOpts);
     res.clearCookie('refreshToken', clearOpts);
 
