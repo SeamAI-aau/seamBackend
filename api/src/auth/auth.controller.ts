@@ -1,10 +1,24 @@
-import { Body, Controller, Post, UseGuards, Res, Req, BadRequestException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+  UseGuards,
+  Res,
+  Req,
+  BadRequestException,
+} from '@nestjs/common';
 import type { Response, Request } from 'express';
-import { Logger } from 'nestjs-pino';
 import { AuthService } from './auth.service';
+import { AuthMailService } from './auth-mail.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { AuthThrottleGuard } from './guards/auth-throttle.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserType } from './types/current-user.type';
 import { ErrorCode } from '../common/errors/error-codes';
@@ -30,16 +44,30 @@ import {
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
-    private readonly logger: Logger,
+    private readonly authMail: AuthMailService,
   ) {}
 
   @Post('register')
   @ApiOperation({ summary: 'Register a new user' })
   @ApiCreatedResponse({
-    description: 'User registered successfully.',
+    description:
+      'User registered successfully. Access and refresh tokens are set as HTTP-only cookies.',
     schema: {
       example: {
         message: 'User registered successfully',
+        user: {
+          id: '…',
+          email: 'scrum.master@example.com',
+          name: 'Jane Doe',
+          role: 'SCRUM_MASTER',
+          emailVerified: false,
+        },
+      },
+    },
+    headers: {
+      'set-cookie': {
+        description: 'HTTP-only cookies for `accessToken` and `refreshToken`.',
+        schema: { type: 'string' },
       },
     },
   })
@@ -91,6 +119,7 @@ export class AuthController {
       },
     },
   })
+  @UseGuards(new AuthThrottleGuard(8, 60_000))
   async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
     const { accessToken, refreshToken, accessExpiresMs, refreshExpiresMs, user, message } =
       await this.authService.register(dto);
@@ -102,7 +131,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Log in and receive JWT + cookies' })
   @ApiOkResponse({
     description:
-      'Login succeeded. Access and refresh tokens are set as HTTP-only cookies; response body contains a message.',
+      'Login succeeded. Access and refresh tokens are set as HTTP-only cookies.',
     schema: {
       example: { message: 'Logged in successfully' },
     },
@@ -148,32 +177,11 @@ export class AuthController {
       },
     },
   })
+  @UseGuards(new AuthThrottleGuard(12, 60_000))
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
-    const email = dto.email?.trim() ?? '';
-    this.logger.log({ email, step: 'controller.login.start' }, 'POST /auth/login received');
-
-    try {
-      const tokens = await this.authService.login(dto);
-
-      setAuthCookies(res, tokens);
-
-      this.logger.log({ email, step: 'controller.login.success' }, 'POST /auth/login succeeded');
-      return { message: 'Logged in successfully' };
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      this.logger.error(
-        {
-          email,
-          step: 'controller.login.failed',
-          err: error,
-          errName: error.name,
-          errMessage: error.message,
-          errStack: error.stack,
-        },
-        'POST /auth/login failed',
-      );
-      throw err;
-    }
+    const tokens = await this.authService.login(dto);
+    setAuthCookies(res, tokens);
+    return { message: 'Logged in successfully' };
   }
 
   @Post('refresh')
@@ -181,7 +189,7 @@ export class AuthController {
   @ApiCookieAuth('access-cookie')
   @ApiOkResponse({
     description:
-      'Tokens refreshed. New access and refresh tokens are set as HTTP-only cookies; body contains a message.',
+      'Tokens refreshed. New access and refresh tokens are set as HTTP-only cookies.',
     schema: {
       example: { message: 'Tokens refreshed' },
     },
@@ -237,9 +245,7 @@ export class AuthController {
     }
 
     const tokens = await this.authService.refreshToken(token);
-
     setAuthCookies(res, tokens);
-
     return { message: 'Tokens refreshed' };
   }
 
@@ -265,7 +271,6 @@ export class AuthController {
   async logout(@CurrentUser() user: CurrentUserType, @Res({ passthrough: true }) res: Response) {
     await this.authService.logout(user.userId);
     clearAuthCookies(res);
-
     return { message: 'Logged out successfully' };
   }
 }

@@ -37,6 +37,12 @@ async function bootstrap() {
       [
         'Seam.ai backend — authentication, projects, meetings, tasks, integrations (Jira/GitHub), and notifications.',
         '',
+        '### Auth (remote dashboard)',
+        '',
+        '- Set **`CORS_ORIGINS`** and **`FRONTEND_URL`** to your dashboard origin(s).',
+        '- Set **`AUTH_COOKIE_CROSS_SITE=true`** when the API and dashboard are on different hosts (HTTPS required).',
+        '- Login/register/refresh set **httpOnly cookies** and return **tokens in the JSON body** for `Authorization: Bearer` on cross-origin clients.',
+        '',
         '### Chrome extension (Phase 9)',
         '',
         '- Set **`CORS_ORIGINS`** to include your dashboard URL and `chrome-extension://<extension-id>`.',

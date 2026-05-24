@@ -186,13 +186,10 @@ export class ProjectService {
           body: [
             `You've been invited to join the project "${project.name}".`,
             '',
-            'To accept this invitation:',
-            '1. Click the link below.',
-            '2. Sign in or create an account using this email address.',
-            '3. After signing in, the project will appear in your dashboard once you accept the invite.',
-            '',
-            acceptUrl,
+            'Sign in or create a developer account with this email address, then accept the invitation to access the project workspace.',
           ].join('\n'),
+          actionUrl: acceptUrl,
+          actionLabel: 'Accept invitation',
         })
         .catch((error) => {
           this.logger.warn(
@@ -206,11 +203,10 @@ export class ProjectService {
       // dangling invitations that the user never received.
       if (!emailSent) {
         await this.projectRepo.deleteMember(member.id);
-        throw new AppException(
-          ErrorCode.INTERNAL_SERVER_ERROR,
-          'Failed to send invitation email. Please try again later.',
-          500,
-        );
+        const smtpHint = this.notification.isEmailConfigured()
+          ? 'Failed to send invitation email. Check SMTP credentials and try again.'
+          : 'Email is not configured on the server (SMTP_HOST / SMTP_USER / SMTP_PASS).';
+        throw new AppException(ErrorCode.INTERNAL_SERVER_ERROR, smtpHint, 500);
       }
     }
     return {

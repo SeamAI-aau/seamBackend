@@ -21,16 +21,22 @@ export class MailService {
   private transporter: Transporter | null = null;
 
   constructor(private readonly config: ConfigService, private readonly logger: Logger) {
-    const host = this.config.get<string>('SMTP_HOST');
-    const user = this.config.get<string>('SMTP_USER');
-    if (host && user) {
+    const host = this.config.get<string>('SMTP_HOST')?.trim();
+    const user = this.config.get<string>('SMTP_USER')?.trim();
+    const pass = this.normalizeSecret(this.config.get<string>('SMTP_PASS'));
+    if (host && user && pass) {
+      const port = Number(this.config.get<string>('SMTP_PORT') ?? 587);
+      const secure =
+        this.config.get<string>('SMTP_SECURE') === 'true' ||
+        this.config.get<boolean>('SMTP_SECURE') === true ||
+        port === 465;
       this.transporter = nodemailer.createTransport({
         host,
-        port: this.config.get<number>('SMTP_PORT') ?? 587,
-        secure: this.config.get<boolean>('SMTP_SECURE') ?? false,
+        port,
+        secure,
         auth: {
           user,
-          pass: this.config.get<string>('SMTP_PASS'),
+          pass,
         },
       });
       this.logger.log('Mail service initialized with SMTP');
@@ -75,6 +81,19 @@ export class MailService {
 
   isConfigured(): boolean {
     return this.transporter !== null;
+  }
+
+  /** Strip wrapping quotes from .env values (e.g. Gmail app passwords with spaces). */
+  private normalizeSecret(value: string | undefined): string | undefined {
+    if (!value) return undefined;
+    const trimmed = value.trim();
+    if (
+      (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'"))
+    ) {
+      return trimmed.slice(1, -1);
+    }
+    return trimmed;
   }
 
   private textToHtml(text: string): string {

@@ -47,6 +47,8 @@ function resolveApiEnvFilePaths(): string[] {
          * Set on Render/staging without changing NODE_ENV to production.
          */
         AUTH_COOKIE_CROSS_SITE: Joi.string().valid('true', 'false', '1', '0').optional(),
+        /** Optional cookie Domain (e.g. `.yourdomain.com`) when dashboard and API share a parent domain. */
+        AUTH_COOKIE_DOMAIN: Joi.string().optional().allow(''),
 
         /** Max meeting audio upload size in megabytes (multipart `file` on POST .../meetings). Default 500. */
         MEETING_UPLOAD_MAX_MB: Joi.number().integer().min(1).max(2048).optional(),
@@ -88,6 +90,9 @@ function resolveApiEnvFilePaths(): string[] {
         SMTP_PASS: Joi.string().optional(),
         MAIL_FROM: Joi.string().email().optional(),
         APP_NAME: Joi.string().default('Seam'),
+        APP_URL: Joi.string().uri().optional(),
+        FRONTEND_URL: Joi.string().uri().optional(),
+        API_URL: Joi.string().uri().optional(),
       }),
     }),
   ],

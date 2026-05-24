@@ -10,6 +10,11 @@ export const CLOUDINARY_MEETING_AUDIO_FOLDER = 'meeting-audio';
 export const CLOUDINARY_VOICE_SAMPLE_FOLDER = 'voice-samples';
 
 /**
+ * Cloudinary folder for user profile avatars.
+ */
+export const CLOUDINARY_AVATAR_FOLDER = 'avatars';
+
+/**
  * Cloudinary resource_type for audio uploads.
  * Use 'video' so audio formats (mp3, wav, etc.) are accepted and streamable.
  */
