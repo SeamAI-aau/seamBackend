@@ -3,8 +3,12 @@ import type { CookieOptions, Response } from 'express';
 /**
  * Auth cookie policy for JWT httpOnly cookies.
  *
- * Local dev (Vite proxy, same-origin): leave `AUTH_COOKIE_CROSS_SITE` unset → Lax, not Secure.
- * Remote (split origins): set `AUTH_COOKIE_CROSS_SITE=true` → SameSite=None + Secure.
+ * | Deployment | Set |
+ * |------------|-----|
+ * | Local Vite proxy (`/api` → localhost) | leave `AUTH_COOKIE_CROSS_SITE` unset → Lax, not Secure |
+ * | DigitalOcean / split origins (dashboard ≠ API host) | `AUTH_COOKIE_CROSS_SITE=true` + HTTPS on both |
+ *
+ * `secure` is required when `sameSite` is `none`. `trust proxy` must be enabled (see `main.ts`).
  */
 export function isAuthCookieCrossSite(): boolean {
   const explicit = process.env.AUTH_COOKIE_CROSS_SITE?.trim().toLowerCase();
@@ -47,8 +51,3 @@ export function clearAuthCookies(res: Response): void {
   res.clearCookie('accessToken', clearOpts);
   res.clearCookie('refreshToken', clearOpts);
 }
-
-/**
- * Auth responses use httpOnly cookies only — tokens must not appear in JSON bodies
- * (avoids leaking JWTs in logs, APM, and browser extensions).
- */

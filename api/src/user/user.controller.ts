@@ -160,6 +160,50 @@ export class UserController {
     return this.userService.uploadVoiceSample(user.userId, file);
   }
 
+  @Patch('me/avatar')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiOperation({
+    summary: 'Upload or replace the current user profile avatar',
+    description:
+      'Uploads a profile photo (JPG, PNG, GIF, or WebP, max 2MB). Replaces any existing avatar.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiOkResponse({
+    description: 'Avatar uploaded successfully.',
+    schema: {
+      example: {
+        status: 'uploaded',
+        avatarUrl: 'https://res.cloudinary.com/example/image/upload/v1/avatars/user-123/photo.jpg',
+      },
+    },
+  })
+  @ApiBody({
+    description: 'Multipart form data containing the avatar image file.',
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'Profile photo (JPG, PNG, GIF, or WebP, max 2MB).',
+        },
+      },
+      required: ['file'],
+    },
+  })
+  @ApiBadRequestResponse({
+    description: 'No file was provided or the file is invalid.',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing or invalid access token.',
+  })
+  uploadAvatar(
+    @CurrentUser() user: CurrentUserType,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.userService.uploadAvatar(user.userId, file);
+  }
+
   @Get('me/voice-stream')
   @ApiOperation({
     summary: 'Stream the current user voice sample',

@@ -35,12 +35,25 @@ export class UserResponseDto {
   })
   githubUsername?: string | null;
 
+  @ApiPropertyOptional({
+    example: 'https://res.cloudinary.com/example/image/upload/v1/avatars/user-123/photo.jpg',
+    nullable: true,
+    description: 'Profile avatar image URL when the user has uploaded a photo.',
+  })
+  avatarUrl?: string | null;
+
   @ApiProperty({
     example: true,
     description:
       'Indicates whether the user has an uploaded voice sample. The actual URL is never exposed.',
   })
   hasVoiceSample!: boolean;
+
+  @ApiProperty({
+    example: true,
+    description: 'True after the user completes email verification.',
+  })
+  emailVerified!: boolean;
 
   @ApiPropertyOptional({
     description: 'Projects this user owns or is a member of.',

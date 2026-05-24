@@ -6,14 +6,28 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { hash, compare } from 'bcryptjs';
+import { randomBytes } from 'crypto';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from 'nestjs-pino';
+import { Role } from '@prisma/client';
+import {
+  AUTH_TOKEN_TYPE,
+  type AuthTokenPurpose,
+} from './constants/auth-token.constants';
 import type { IAuthRepository } from './types/auth.repository';
 import type { IJwtService, JwtPayload } from './types/jwt.service.interface';
 import { AUTH_REPOSITORY, JWT_SERVICE } from './auth.tokens';
 import { ErrorCode } from '../common/errors/error-codes';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { AuthMailService } from './auth-mail.service';
+import {
+  EMAIL_VERIFICATION_TTL_MS,
+  PASSWORD_RESET_TTL_MS,
+} from './constants/auth-token.constants';
 import { StringValue } from 'ms';
 
 @Injectable()
@@ -23,33 +37,32 @@ export class AuthService {
     @Inject(JWT_SERVICE) private readonly jwtService: IJwtService,
     private readonly configService: ConfigService,
     private readonly logger: Logger,
+    private readonly authMail: AuthMailService,
   ) {}
 
-  /** REGISTER */
+  /** REGISTER — creates user, issues tokens (auto-login), sends verification email */
   async register(dto: RegisterDto) {
-    const existing = await this.userRepo.findByEmail(dto.email);
+    const email = dto.email.trim().toLowerCase();
+    const existing = await this.userRepo.findByEmail(email);
     if (existing) {
-      this.logger.warn('Registration failed: email exists', { email: dto.email });
+      this.logger.warn('Registration failed: email exists', { email });
       throw new ConflictException({
         code: ErrorCode.EMAIL_ALREADY_EXISTS,
         message:
           'A user with this email already exists. Please log in instead or use a different email address.',
-        details: {
-          field: 'email',
-        },
+        details: { field: 'email' },
       });
     }
 
     const saltRounds = parseInt(this.configService.get<string>('BCRYPT_SALT_ROUNDS') ?? '10', 10);
-
     const passwordHash = await hash(dto.password, saltRounds);
-    const createData: Omit<RegisterDto, 'password'> = {
-      email: dto.email,
+    const user = await this.userRepo.create({
+      email,
       name: dto.name,
+      passwordHash,
       ...(dto.role !== undefined ? { role: dto.role } : {}),
-    };
-
-    const user = await this.userRepo.create({ ...createData, passwordHash });
+    });
+    await this.issueAndStoreEmailVerificationToken(user.id, user.email, user.name);
 
     this.logger.log('User registered successfully', { userId: user.id });
 
@@ -135,9 +148,7 @@ export class AuthService {
       throw new UnauthorizedException({
         code: ErrorCode.INVALID_CREDENTIALS,
         message: 'Invalid email or password.',
-        details: {
-          hint: 'Check that your email and password are correct.',
-        },
+        details: { hint: 'Check that your email and password are correct.' },
       });
     }
 
@@ -173,9 +184,7 @@ export class AuthService {
         code: ErrorCode.UNAUTHORIZED,
         message:
           'The provided refresh token is invalid, expired, or has already been used. Please log in again.',
-        details: {
-          reason: 'verification_failed',
-        },
+        details: { reason: 'verification_failed' },
       });
     }
     const tokens = await this.getValidRefreshToken(payload.sub, oldToken);
@@ -184,9 +193,7 @@ export class AuthService {
         code: ErrorCode.UNAUTHORIZED,
         message:
           'The provided refresh token is invalid, expired, or has already been used. Please log in again.',
-        details: {
-          reason: 'not_found_or_expired',
-        },
+        details: { reason: 'not_found_or_expired' },
       });
     }
 
@@ -207,25 +214,148 @@ export class AuthService {
     this.logger.log('User logged out, all refresh tokens revoked', { userId });
   }
 
-  private logLoginFailure(
-    step: string,
+  /** Verify email via link token; returns redirect path on frontend */
+  async verifyEmail(rawToken: string): Promise<{ redirectPath: string }> {
+    const userId = await this.consumeAuthToken(rawToken, AUTH_TOKEN_TYPE.EMAIL_VERIFICATION);
+    if (!userId) {
+      throw new BadRequestException({
+        code: ErrorCode.INVALID_AUTH_TOKEN,
+        message: 'This verification link is invalid or has already been used.',
+      });
+    }
+
+    await this.userRepo.markEmailVerified(userId);
+    const redirectPath = await this.resolveDashboardPath(userId);
+    this.logger.log('Email verified', { userId, redirectPath });
+    return { redirectPath };
+  }
+
+  /** Resend verification email for authenticated user */
+  async resendVerificationEmail(userId: string): Promise<{ message: string }> {
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new UnauthorizedException({ code: ErrorCode.UNAUTHORIZED, message: 'Unauthorized' });
+    }
+    if (user.emailVerifiedAt) {
+      return { message: 'Email is already verified' };
+    }
+
+    await this.issueAndStoreEmailVerificationToken(user.id, user.email, user.name);
+    return { message: 'Verification email sent' };
+  }
+
+  /** Forgot password — always returns success message (no email enumeration) */
+  async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
+    const user = await this.userRepo.findByEmail(dto.email);
+    if (user) {
+      const rawToken = randomBytes(32).toString('hex');
+      const tokenHash = await hash(rawToken, 10);
+      await this.userRepo.deleteAuthTokensByUserAndType(user.id, AUTH_TOKEN_TYPE.PASSWORD_RESET);
+      await this.userRepo.createAuthToken({
+        userId: user.id,
+        tokenHash,
+        type: AUTH_TOKEN_TYPE.PASSWORD_RESET,
+        expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
+      });
+      await this.authMail.sendPasswordReset(user.email, user.name, rawToken);
+    }
+
+    return {
+      message:
+        'If an account exists for that email, we sent password reset instructions.',
+    };
+  }
+
+  /** Reset password with token from email */
+  async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
+    const userId = await this.consumeAuthToken(dto.token, AUTH_TOKEN_TYPE.PASSWORD_RESET);
+    if (!userId) {
+      throw new BadRequestException({
+        code: ErrorCode.AUTH_TOKEN_EXPIRED,
+        message: 'This reset link is invalid or has expired. Request a new one.',
+      });
+    }
+
+    const saltRounds = parseInt(this.configService.get<string>('BCRYPT_SALT_ROUNDS') ?? '10', 10);
+    const passwordHash = await hash(dto.newPassword, saltRounds);
+    await this.userRepo.updatePassword(userId, passwordHash);
+    await this.userRepo.deleteAllUserRefreshTokens(userId);
+
+    return { message: 'Password updated successfully. You can sign in with your new password.' };
+  }
+
+  /** Change password while authenticated */
+  async changePassword(userId: string, dto: ChangePasswordDto): Promise<{ message: string }> {
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new UnauthorizedException({ code: ErrorCode.UNAUTHORIZED, message: 'Unauthorized' });
+    }
+
+    const valid = await compare(dto.currentPassword, user.passwordHash);
+    if (!valid) {
+      throw new UnauthorizedException({
+        code: ErrorCode.INVALID_CREDENTIALS,
+        message: 'Current password is incorrect.',
+      });
+    }
+
+    const saltRounds = parseInt(this.configService.get<string>('BCRYPT_SALT_ROUNDS') ?? '10', 10);
+    const passwordHash = await hash(dto.newPassword, saltRounds);
+    await this.userRepo.updatePassword(userId, passwordHash);
+    await this.userRepo.deleteAllUserRefreshTokens(userId);
+
+    return { message: 'Password changed successfully. Please sign in again on other devices.' };
+  }
+
+  private async issueAndStoreEmailVerificationToken(
+    userId: string,
     email: string,
-    err: unknown,
-    extra?: Record<string, unknown>,
-  ): void {
-    const error = err instanceof Error ? err : new Error(String(err));
-    this.logger.error(
-      {
-        step,
-        email,
-        ...extra,
-        err: error,
-        errName: error.name,
-        errMessage: error.message,
-        errStack: error.stack,
-      },
-      `Login failed at step: ${step}`,
-    );
+    name: string,
+  ): Promise<void> {
+    const rawToken = randomBytes(32).toString('hex');
+    const tokenHash = await hash(rawToken, 10);
+    await this.userRepo.deleteAuthTokensByUserAndType(userId, AUTH_TOKEN_TYPE.EMAIL_VERIFICATION);
+    await this.userRepo.createAuthToken({
+      userId,
+      tokenHash,
+      type: AUTH_TOKEN_TYPE.EMAIL_VERIFICATION,
+      expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS),
+    });
+    await this.authMail.sendEmailVerification(email, name, rawToken);
+  }
+
+  private async consumeAuthToken(rawToken: string, type: AuthTokenPurpose): Promise<string | null> {
+    if (!rawToken?.trim()) return null;
+
+    const candidates = await this.userRepo.findValidAuthTokensByType(type);
+
+    for (const row of candidates) {
+      const matches = await compare(rawToken, row.tokenHash);
+      if (!matches) continue;
+      await this.userRepo.deleteAuthTokenById(row.id);
+      return row.userId;
+    }
+
+    return null;
+  }
+
+  /** Dashboard path after verification (matches frontend getPostAuthPath logic). */
+  async resolveDashboardPath(userId: string): Promise<string> {
+    const context = await this.userRepo.findPostAuthRouteContext(userId);
+
+    if (!context) {
+      return '/sign-in';
+    }
+
+    if (context.role === Role.DEVELOPER) {
+      return '/projects';
+    }
+
+    if (context.projectId) {
+      return `/projects/${context.projectId}/dashboard`;
+    }
+
+    return '/projects';
   }
 
   private async getValidRefreshToken(userId: string, token: string) {
@@ -246,6 +376,18 @@ export class AuthService {
     }
 
     return null;
+  }
+
+  private logLoginFailure(
+    step: string,
+    email: string,
+    err: unknown,
+    extra?: Record<string, unknown>,
+  ): void {
+    this.logger.error(
+      { email, step: `login.${step}_failed`, err, ...extra },
+      `Login failed during ${step}`,
+    );
   }
 
   private async issueTokens(userId: string, payload: JwtPayload, emailForLog?: string) {
@@ -308,7 +450,6 @@ export class AuthService {
     return { accessToken, refreshToken, accessExpiresMs, refreshExpiresMs };
   }
 
-  /** PRIVATE: parse duration strings like '15m', '7d', '2h' into milliseconds */
   private parseDuration(duration: string): number {
     const unit = duration.slice(-1);
     const value = parseInt(duration.slice(0, -1), 10);
