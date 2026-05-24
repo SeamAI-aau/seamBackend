@@ -34,31 +34,11 @@ import {
   ApiCookieAuth,
   ApiBody,
 } from '@nestjs/swagger';
-
-/** Shared cookie options: cross-origin dashboard needs `sameSite: 'none'` + `secure` in production. */
-const cookieBaseOptions = () => {
-  const isProduction = process.env.NODE_ENV === 'production';
-  return {
-    httpOnly: true,
-    secure: isProduction,
-    path: '/',
-    sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
-  };
-};
-
-function setAuthCookies(
-  res: Response,
-  tokens: {
-    accessToken: string;
-    refreshToken: string;
-    accessExpiresMs: number;
-    refreshExpiresMs: number;
-  },
-): void {
-  const base = cookieBaseOptions();
-  res.cookie('accessToken', tokens.accessToken, { ...base, maxAge: tokens.accessExpiresMs });
-  res.cookie('refreshToken', tokens.refreshToken, { ...base, maxAge: tokens.refreshExpiresMs });
-}
+import {
+  authTokensBody,
+  clearAuthCookies,
+  setAuthCookies,
+} from '../common/config/auth-cookie.config';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -75,6 +55,8 @@ export class AuthController {
     schema: {
       example: {
         message: 'User registered successfully',
+        accessToken: '…',
+        refreshToken: '…',
       },
     },
   })
@@ -129,18 +111,22 @@ export class AuthController {
   @UseGuards(new AuthThrottleGuard(8, 60_000))
   async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.register(dto);
-    setAuthCookies(res, result);
-    const { accessToken, refreshToken, accessExpiresMs, refreshExpiresMs, ...body } = result;
-    return body;
+    const { accessToken, refreshToken, accessExpiresMs, refreshExpiresMs, user, message } = result;
+    setAuthCookies(res, { accessToken, refreshToken, accessExpiresMs, refreshExpiresMs });
+    return {
+      message,
+      user,
+      ...authTokensBody({ accessToken, refreshToken, accessExpiresMs, refreshExpiresMs }),
+    };
   }
 
   @Post('login')
   @ApiOperation({ summary: 'Log in and receive JWT + cookies' })
   @ApiOkResponse({
     description:
-      'Login succeeded. Access and refresh tokens are set as HTTP-only cookies; response body contains a message.',
+      'Login succeeded. Access and refresh tokens are set as HTTP-only cookies; response body also includes tokens for cross-origin Bearer use.',
     schema: {
-      example: { message: 'Logged in successfully' },
+      example: { message: 'Logged in successfully', accessToken: '…', refreshToken: '…' },
     },
     headers: {
       'set-cookie': {
@@ -188,7 +174,10 @@ export class AuthController {
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const tokens = await this.authService.login(dto);
     setAuthCookies(res, tokens);
-    return { message: 'Logged in successfully' };
+    return {
+      message: 'Logged in successfully',
+      ...authTokensBody(tokens),
+    };
   }
 
   @Post('refresh')
@@ -196,9 +185,9 @@ export class AuthController {
   @ApiCookieAuth('access-cookie')
   @ApiOkResponse({
     description:
-      'Tokens refreshed. New access and refresh tokens are set as HTTP-only cookies; body contains a message.',
+      'Tokens refreshed. New access and refresh tokens are set as HTTP-only cookies; body includes tokens for cross-origin Bearer use.',
     schema: {
-      example: { message: 'Tokens refreshed' },
+      example: { message: 'Tokens refreshed', accessToken: '…', refreshToken: '…' },
     },
     headers: {
       'set-cookie': {
@@ -253,7 +242,10 @@ export class AuthController {
 
     const tokens = await this.authService.refreshToken(token);
     setAuthCookies(res, tokens);
-    return { message: 'Tokens refreshed' };
+    return {
+      message: 'Tokens refreshed',
+      ...authTokensBody(tokens),
+    };
   }
 
   @Get('verify-email')
@@ -305,9 +297,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.changePassword(user.userId, dto);
-    const clearOpts = cookieBaseOptions();
-    res.clearCookie('accessToken', clearOpts);
-    res.clearCookie('refreshToken', clearOpts);
+    clearAuthCookies(res);
     return result;
   }
 
@@ -332,10 +322,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   async logout(@CurrentUser() user: CurrentUserType, @Res({ passthrough: true }) res: Response) {
     await this.authService.logout(user.userId);
-    const clearOpts = cookieBaseOptions();
-    res.clearCookie('accessToken', clearOpts);
-    res.clearCookie('refreshToken', clearOpts);
-
+    clearAuthCookies(res);
     return { message: 'Logged out successfully' };
   }
 }
