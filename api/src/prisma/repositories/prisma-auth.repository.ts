@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import type { AuthTokenPurpose } from '../../auth/constants/auth-token.constants';
-import { IAuthRepository, CreateUserInput } from '../../auth/types/auth.repository';
+import {
+  IAuthRepository,
+  CreateUserInput,
+  type AuthTokenCandidate,
+  type PostAuthRouteContext,
+} from '../../auth/types/auth.repository';
 import { PrismaService } from '../prisma.service';
 
 @Injectable()
@@ -89,5 +94,36 @@ export class PrismaAuthRepository implements IAuthRepository {
 
   async deleteAuthTokenById(id: string) {
     await this.prisma.userAuthToken.delete({ where: { id } });
+  }
+
+  findValidAuthTokensByType(type: AuthTokenPurpose): Promise<AuthTokenCandidate[]> {
+    return this.prisma.userAuthToken.findMany({
+      where: { type, expiresAt: { gt: new Date() } },
+      select: { id: true, userId: true, tokenHash: true },
+    });
+  }
+
+  async findPostAuthRouteContext(userId: string): Promise<PostAuthRouteContext | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        role: true,
+        ownedProjects: { select: { id: true }, take: 1, orderBy: { createdAt: 'asc' } },
+        projectMembers: {
+          where: { status: 'ACTIVE' },
+          select: { project: { select: { id: true } } },
+          take: 1,
+        },
+      },
+    });
+
+    if (!user) {
+      return null;
+    }
+
+    const projectId =
+      user.ownedProjects[0]?.id ?? user.projectMembers[0]?.project?.id ?? null;
+
+    return { role: user.role, projectId };
   }
 }

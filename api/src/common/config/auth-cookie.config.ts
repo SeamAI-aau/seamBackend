@@ -51,14 +51,3 @@ export function clearAuthCookies(res: Response): void {
   res.clearCookie('accessToken', clearOpts);
   res.clearCookie('refreshToken', clearOpts);
 }
-
-/** Body shape for login/register/refresh when dashboard uses Bearer + cookies (cross-origin). */
-export function authTokensBody(tokens: AuthTokenCookiePayload): {
-  accessToken: string;
-  refreshToken: string;
-} {
-  return {
-    accessToken: tokens.accessToken,
-    refreshToken: tokens.refreshToken,
-  };
-}
