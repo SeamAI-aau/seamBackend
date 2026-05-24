@@ -10,6 +10,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import type { Response, Request } from 'express';
+import { Logger } from 'nestjs-pino';
 import { AuthService } from './auth.service';
 import { AuthMailService } from './auth-mail.service';
 import { RegisterDto } from './dto/register.dto';

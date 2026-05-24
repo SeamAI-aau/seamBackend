@@ -5,6 +5,13 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  UnauthorizedException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { hash, compare } from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import { ConfigService } from '@nestjs/config';
@@ -99,7 +106,19 @@ export class AuthService {
       throw err;
     }
 
+    const email = dto.email?.trim() ?? '';
+    this.logger.log({ email, step: 'login.start' }, 'Login attempt started');
+
+    let user;
+    try {
+      user = await this.userRepo.findByEmail(dto.email);
+    } catch (err) {
+      this.logLoginFailure('findByEmail', email, err);
+      throw err;
+    }
+
     if (!user) {
+      this.logger.warn({ email, step: 'login.user_not_found' }, 'Login failed: user not found');
       this.logger.warn({ email, step: 'login.user_not_found' }, 'Login failed: user not found');
       throw new UnauthorizedException({
         code: ErrorCode.INVALID_CREDENTIALS,
@@ -110,8 +129,42 @@ export class AuthService {
       });
     }
 
-    const valid = await compare(dto.password, user.passwordHash);
+    this.logger.log(
+      {
+        email,
+        userId: user.id,
+        role: user.role,
+        hasPasswordHash: !!user.passwordHash,
+        step: 'login.user_loaded',
+      },
+      'Login: user found',
+    );
+
+    if (!user.passwordHash) {
+      this.logger.warn(
+        { email, userId: user.id, step: 'login.no_password_hash' },
+        'Login failed: account has no password (OAuth-only user)',
+      );
+      throw new UnauthorizedException({
+        code: ErrorCode.INVALID_CREDENTIALS,
+        message: 'This account cannot sign in with a password. Use your OAuth provider instead.',
+        details: { reason: 'missing_password_hash' },
+      });
+    }
+
+    let valid = false;
+    try {
+      valid = await compare(dto.password, user.passwordHash);
+    } catch (err) {
+      this.logLoginFailure('password_compare', email, err, { userId: user.id });
+      throw err;
+    }
+
     if (!valid) {
+      this.logger.warn(
+        { email, userId: user.id, step: 'login.invalid_password' },
+        'Login failed: invalid password',
+      );
       this.logger.warn(
         { email, userId: user.id, step: 'login.invalid_password' },
         'Login failed: invalid password',
@@ -125,12 +178,25 @@ export class AuthService {
 
     this.logger.log({ email, userId: user.id, step: 'login.password_ok' }, 'Login: password valid');
 
+    this.logger.log({ email, userId: user.id, step: 'login.password_ok' }, 'Login: password valid');
+
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
       role: user.role,
     };
 
+    try {
+      const tokens = await this.issueTokens(user.id, payload, email);
+      this.logger.log(
+        { email, userId: user.id, step: 'login.success' },
+        'Login completed; tokens issued',
+      );
+      return tokens;
+    } catch (err) {
+      this.logLoginFailure('issueTokens', email, err, { userId: user.id });
+      throw err;
+    }
     try {
       const tokens = await this.issueTokens(user.id, payload, email);
       this.logger.log(
@@ -368,6 +434,9 @@ export class AuthService {
   private async issueTokens(userId: string, payload: JwtPayload, emailForLog?: string) {
     const logCtx = { userId, email: emailForLog, step: '' as string };
 
+  private async issueTokens(userId: string, payload: JwtPayload, emailForLog?: string) {
+    const logCtx = { userId, email: emailForLog, step: '' as string };
+
     const accessExpiresIn =
       this.configService.get<StringValue>('JWT_ACCESS_TOKEN_EXPIRES_IN') ?? '15m';
     const refreshExpiresIn =
@@ -403,7 +472,40 @@ export class AuthService {
 
     logCtx.step = 'issueTokens.sign_access';
     this.logger.debug(logCtx, 'Login: signing access token');
+    logCtx.step = 'issueTokens.parse_duration';
+    this.logger.debug(
+      { ...logCtx, accessExpiresIn, refreshExpiresIn },
+      'Login: parsing JWT expiry durations',
+    );
+
+    let accessExpiresMs: number;
+    let refreshExpiresMs: number;
+    try {
+      accessExpiresMs = this.parseDuration(accessExpiresIn);
+      refreshExpiresMs = this.parseDuration(refreshExpiresIn);
+    } catch (err) {
+      this.logger.error(
+        {
+          ...logCtx,
+          accessExpiresIn,
+          refreshExpiresIn,
+          err,
+        },
+        'Login: invalid JWT_ACCESS_TOKEN_EXPIRES_IN or JWT_REFRESH_TOKEN_EXPIRES_IN',
+      );
+      throw new BadRequestException({
+        code: ErrorCode.VALIDATION_ERROR,
+        message: 'Server JWT expiry configuration is invalid',
+        details: { accessExpiresIn, refreshExpiresIn },
+      });
+    }
+
+    logCtx.step = 'issueTokens.sign_access';
+    this.logger.debug(logCtx, 'Login: signing access token');
     const accessToken = await this.jwtService.sign(payload, { expiresIn: accessExpiresIn });
+
+    logCtx.step = 'issueTokens.sign_refresh';
+    this.logger.debug(logCtx, 'Login: signing refresh token');
 
     logCtx.step = 'issueTokens.sign_refresh';
     this.logger.debug(logCtx, 'Login: signing refresh token');
@@ -411,9 +513,13 @@ export class AuthService {
 
     logCtx.step = 'issueTokens.hash_refresh';
     this.logger.debug(logCtx, 'Login: hashing refresh token for storage');
+    logCtx.step = 'issueTokens.hash_refresh';
+    this.logger.debug(logCtx, 'Login: hashing refresh token for storage');
     const tokenHash = await hash(refreshToken, 10);
     const expiresAt = new Date(Date.now() + refreshExpiresMs);
 
+    logCtx.step = 'issueTokens.persist_refresh';
+    this.logger.debug({ ...logCtx, expiresAt: expiresAt.toISOString() }, 'Login: saving refresh token');
     logCtx.step = 'issueTokens.persist_refresh';
     this.logger.debug({ ...logCtx, expiresAt: expiresAt.toISOString() }, 'Login: saving refresh token');
     await this.userRepo.createRefreshToken({
@@ -428,6 +534,10 @@ export class AuthService {
   private parseDuration(duration: string): number {
     const unit = duration.slice(-1);
     const value = parseInt(duration.slice(0, -1), 10);
+
+    if (!Number.isFinite(value) || value <= 0) {
+      throw new Error(`Invalid duration value in: ${duration}`);
+    }
 
     if (!Number.isFinite(value) || value <= 0) {
       throw new Error(`Invalid duration value in: ${duration}`);
