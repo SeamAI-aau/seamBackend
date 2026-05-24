@@ -200,10 +200,10 @@ export class AuthService {
 
     await this.userRepo.deleteRefreshToken(tokens.token);
 
-    const { exp, iat, nbf, ...cleanPayload } = payload as JwtPayload & {
-      exp?: number;
-      iat?: number;
-      nbf?: number;
+    const cleanPayload: JwtPayload = {
+      sub: payload.sub,
+      email: payload.email,
+      role: payload.role,
     };
 
     return this.issueTokens(tokens.userId, cleanPayload);
