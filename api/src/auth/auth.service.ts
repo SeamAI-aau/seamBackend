@@ -28,7 +28,6 @@ import {
   EMAIL_VERIFICATION_TTL_MS,
   PASSWORD_RESET_TTL_MS,
 } from './constants/auth-token.constants';
-import { PrismaService } from '../prisma/prisma.service';
 import { StringValue } from 'ms';
 
 @Injectable()
@@ -39,7 +38,6 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly logger: Logger,
     private readonly authMail: AuthMailService,
-    private readonly prisma: PrismaService,
   ) {}
 
   /** REGISTER — creates user, issues tokens (auto-login), sends verification email */
@@ -48,10 +46,13 @@ export class AuthService {
     const existing = await this.userRepo.findByEmail(email);
     if (existing) {
       this.logger.warn('Registration failed: email exists', { email });
+      const message =
+        existing.googleId && !existing.passwordHash
+          ? 'This email is registered with Google. Sign in with Google instead.'
+          : 'A user with this email already exists. Please log in instead or use a different email address.';
       throw new ConflictException({
         code: ErrorCode.EMAIL_ALREADY_EXISTS,
-        message:
-          'A user with this email already exists. Please log in instead or use a different email address.',
+        message,
         details: { field: 'email' },
       });
     }
@@ -317,10 +318,7 @@ export class AuthService {
   private async consumeAuthToken(rawToken: string, type: AuthTokenPurpose): Promise<string | null> {
     if (!rawToken?.trim()) return null;
 
-    const candidates = await this.prisma.userAuthToken.findMany({
-      where: { type, expiresAt: { gt: new Date() } },
-      select: { id: true, userId: true, tokenHash: true },
-    });
+    const candidates = await this.userRepo.findValidAuthTokensByType(type);
 
     for (const row of candidates) {
       const matches = await compare(rawToken, row.tokenHash);
@@ -334,31 +332,18 @@ export class AuthService {
 
   /** Dashboard path after verification (matches frontend getPostAuthPath logic). */
   async resolveDashboardPath(userId: string): Promise<string> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        role: true,
-        ownedProjects: { select: { id: true }, take: 1, orderBy: { createdAt: 'asc' } },
-        projectMembers: {
-          where: { status: 'ACTIVE' },
-          select: { project: { select: { id: true } } },
-          take: 1,
-        },
-      },
-    });
+    const context = await this.userRepo.findPostAuthRouteContext(userId);
 
-    if (!user) {
+    if (!context) {
       return '/sign-in';
     }
 
-    if (user.role === Role.DEVELOPER) {
+    if (context.role === Role.DEVELOPER) {
       return '/projects';
     }
 
-    const projectId =
-      user.ownedProjects[0]?.id ?? user.projectMembers[0]?.project?.id ?? null;
-    if (projectId) {
-      return `/projects/${projectId}/dashboard`;
+    if (context.projectId) {
+      return `/projects/${context.projectId}/dashboard`;
     }
 
     return '/projects';

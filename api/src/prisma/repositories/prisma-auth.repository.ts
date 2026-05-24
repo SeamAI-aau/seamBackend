@@ -1,29 +1,37 @@
 import { Injectable } from '@nestjs/common';
 import type { User } from '@prisma/client';
 import type { AuthTokenPurpose } from '../../auth/constants/auth-token.constants';
-import { IAuthRepository, CreateUserInput } from '../../auth/types/auth.repository';
+import {
+  IAuthRepository,
+  CreateUserInput,
+  type AuthTokenCandidate,
+  type PostAuthRouteContext,
+} from '../../auth/types/auth.repository';
 import { PrismaService } from '../prisma.service';
 
 @Injectable()
 export class PrismaAuthRepository implements IAuthRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findByEmail(email: string) {
+  findByEmail(email: string): Promise<User | null> {
     const normalized = email.trim().toLowerCase();
     return this.prisma.user.findFirst({
       where: { email: { equals: normalized, mode: 'insensitive' } },
     });
   }
 
-  findById(userId: string) {
+  findById(userId: string): Promise<User | null> {
     return this.prisma.user.findUnique({ where: { id: userId } });
   }
 
   findByGoogleId(googleId: string): Promise<User | null> {
-    return this.prisma.user.findUnique({ where: { googleId } });
+    const id = googleId?.trim();
+    if (!id) return Promise.resolve(null);
+
+    return this.prisma.user.findUnique({ where: { googleId: id } });
   }
 
-  create(data: CreateUserInput) {
+  create(data: CreateUserInput): Promise<User> {
     return this.prisma.user.create({
       data: {
         email: data.email.trim().toLowerCase(),
@@ -66,12 +74,12 @@ export class PrismaAuthRepository implements IAuthRepository {
         googleId: data.googleId,
         ...(data.emailVerifiedAt ? { emailVerifiedAt: data.emailVerifiedAt } : {}),
         ...(data.name ? { name: data.name } : {}),
-        ...(data.avatarUrl ? { avatarUrl: data.avatarUrl } : {}),
+        ...(data.avatarUrl !== undefined ? { avatarUrl: data.avatarUrl } : {}),
       },
     });
   }
 
-  async createRefreshToken(data: { userId: string; token: string; expiresAt: Date }) {
+  async createRefreshToken(data: { userId: string; token: string; expiresAt: Date }): Promise<void> {
     await this.prisma.refreshToken.create({ data });
   }
 
@@ -89,15 +97,15 @@ export class PrismaAuthRepository implements IAuthRepository {
     });
   }
 
-  async deleteRefreshToken(token: string) {
+  async deleteRefreshToken(token: string): Promise<void> {
     await this.prisma.refreshToken.deleteMany({ where: { token } });
   }
 
-  async deleteAllUserRefreshTokens(userId: string) {
+  async deleteAllUserRefreshTokens(userId: string): Promise<void> {
     await this.prisma.refreshToken.deleteMany({ where: { userId } });
   }
 
-  async deleteAuthTokensByUserAndType(userId: string, type: AuthTokenPurpose) {
+  async deleteAuthTokensByUserAndType(userId: string, type: AuthTokenPurpose): Promise<void> {
     await this.prisma.userAuthToken.deleteMany({ where: { userId, type } });
   }
 
@@ -106,7 +114,7 @@ export class PrismaAuthRepository implements IAuthRepository {
     tokenHash: string;
     type: AuthTokenPurpose;
     expiresAt: Date;
-  }) {
+  }): Promise<void> {
     await this.prisma.userAuthToken.create({ data });
   }
 
@@ -117,7 +125,38 @@ export class PrismaAuthRepository implements IAuthRepository {
     });
   }
 
-  async deleteAuthTokenById(id: string) {
+  findValidAuthTokensByType(type: AuthTokenPurpose): Promise<AuthTokenCandidate[]> {
+    return this.prisma.userAuthToken.findMany({
+      where: { type, expiresAt: { gt: new Date() } },
+      select: { id: true, userId: true, tokenHash: true },
+    });
+  }
+
+  async deleteAuthTokenById(id: string): Promise<void> {
     await this.prisma.userAuthToken.delete({ where: { id } });
+  }
+
+  async findPostAuthRouteContext(userId: string): Promise<PostAuthRouteContext | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        role: true,
+        ownedProjects: { select: { id: true }, take: 1, orderBy: { createdAt: 'asc' } },
+        projectMembers: {
+          where: { status: 'ACTIVE' },
+          select: { project: { select: { id: true } } },
+          take: 1,
+        },
+      },
+    });
+
+    if (!user) {
+      return null;
+    }
+
+    const projectId =
+      user.ownedProjects[0]?.id ?? user.projectMembers[0]?.project?.id ?? null;
+
+    return { role: user.role, projectId };
   }
 }

@@ -33,12 +33,12 @@ export class GoogleAuthService {
     private readonly logger: Logger,
   ) {}
 
-  getAuthorizationUrl(intent: GoogleOAuthIntent, role?: Role): string {
+  async getAuthorizationUrl(intent: GoogleOAuthIntent, role?: Role): Promise<string> {
     this.assertGoogleConfigured();
 
     const clientId = this.config.get<string>('GOOGLE_CLIENT_ID')!;
     const redirectUri = this.config.get<string>('GOOGLE_REDIRECT_URI')!;
-    const state = this.signState({ intent, role });
+    const state = await this.signState({ intent, role });
 
     const params = new URLSearchParams({
       client_id: clientId,
@@ -72,7 +72,7 @@ export class GoogleAuthService {
       });
     }
 
-    const statePayload = this.verifyState(state);
+    const statePayload = await this.verifyState(state);
     const profile = await this.exchangeCodeAndFetchProfile(code.trim());
     const { user, isNewUser } = await this.findOrCreateUser(profile, statePayload);
 
@@ -208,7 +208,7 @@ export class GoogleAuthService {
     return userResponse.data;
   }
 
-  private signState(input: { intent: GoogleOAuthIntent; role?: Role }): string {
+  private async signState(input: { intent: GoogleOAuthIntent; role?: Role }): Promise<string> {
     const payload: GoogleOAuthStatePayload = {
       purpose: 'google_auth',
       intent: input.intent,
@@ -218,7 +218,7 @@ export class GoogleAuthService {
     return this.jwtService.sign(payload as unknown as JwtPayload, { expiresIn: '10m' });
   }
 
-  private verifyState(state: string): GoogleOAuthStatePayload {
+  private async verifyState(state: string): Promise<GoogleOAuthStatePayload> {
     if (!state?.trim()) {
       throw new UnauthorizedException({
         code: ErrorCode.VALIDATION_ERROR,
@@ -227,7 +227,7 @@ export class GoogleAuthService {
     }
 
     try {
-      const payload = this.jwtService.verify<GoogleOAuthStatePayload>(state);
+      const payload = await this.jwtService.verify<GoogleOAuthStatePayload>(state);
       if (payload.purpose !== 'google_auth') {
         throw new Error('invalid purpose');
       }

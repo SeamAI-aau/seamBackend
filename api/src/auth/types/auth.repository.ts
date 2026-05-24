@@ -11,6 +11,17 @@ export type CreateUserInput = {
   role?: Role;
 };
 
+export type AuthTokenCandidate = {
+  id: string;
+  userId: string;
+  tokenHash: string;
+};
+
+export type PostAuthRouteContext = {
+  role: Role;
+  projectId: string | null;
+};
+
 export interface IAuthRepository {
   findByEmail(email: string): Promise<User | null>;
   findById(userId: string): Promise<User | null>;
@@ -55,5 +66,7 @@ export interface IAuthRepository {
     userId: string,
     type: AuthTokenPurpose,
   ): Promise<{ id: string; tokenHash: string; expiresAt: Date }[]>;
+  findValidAuthTokensByType(type: AuthTokenPurpose): Promise<AuthTokenCandidate[]>;
   deleteAuthTokenById(id: string): Promise<void>;
+  findPostAuthRouteContext(userId: string): Promise<PostAuthRouteContext | null>;
 }

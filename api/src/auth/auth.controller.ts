@@ -48,10 +48,8 @@ import {
 @Controller('auth')
 export class AuthController {
   constructor(
-    
     private readonly authService: AuthService,
     private readonly authMail: AuthMailService,
-  ,
     private readonly googleAuthService: GoogleAuthService,
     private readonly config: ConfigService,
   ) {}
@@ -63,11 +61,11 @@ export class AuthController {
       'Redirects the browser to Google. Use `intent=login` or `intent=signup`. ' +
       'Optional `role=DEVELOPER` for invite-based developer registration.',
   })
-  googleConnect(
+  async googleConnect(
     @Query('intent') intent: GoogleOAuthIntent | undefined,
     @Query('role') role: string | undefined,
     @Res() res: Response,
-  ): void {
+  ): Promise<void> {
     const resolvedIntent: GoogleOAuthIntent = intent === 'signup' ? 'signup' : 'login';
     const resolvedRole =
       role === Role.DEVELOPER
@@ -76,7 +74,7 @@ export class AuthController {
           ? Role.SCRUM_MASTER
           : undefined;
 
-    const url = this.googleAuthService.getAuthorizationUrl(resolvedIntent, resolvedRole);
+    const url = await this.googleAuthService.getAuthorizationUrl(resolvedIntent, resolvedRole);
     res.redirect(url);
   }
 
@@ -98,12 +96,9 @@ export class AuthController {
       return;
     }
 
-    const { accessToken, refreshToken, accessExpiresMs, refreshExpiresMs } =
-      await this.googleAuthService.authenticateCallback(code ?? '', state ?? '');
+    const tokens = await this.googleAuthService.authenticateCallback(code ?? '', state ?? '');
 
-    const base = cookieBaseOptions();
-    res.cookie('accessToken', accessToken, { ...base, maxAge: accessExpiresMs });
-    res.cookie('refreshToken', refreshToken, { ...base, maxAge: refreshExpiresMs });
+    setAuthCookies(res, tokens);
 
     const redirectUrl =
       this.config.get<string>('GOOGLE_OAUTH_SUCCESS_REDIRECT_URL') ??
