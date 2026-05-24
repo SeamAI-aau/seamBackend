@@ -20,7 +20,10 @@ import {
   ApiCookieAuth,
   ApiBody,
 } from '@nestjs/swagger';
-import { buildAuthCookieOptions } from '../common/config/auth-cookie.config';
+import {
+  clearAuthCookies,
+  setAuthCookies,
+} from '../common/config/auth-cookie.config';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -88,8 +91,11 @@ export class AuthController {
       },
     },
   })
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
+  async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
+    const { accessToken, refreshToken, accessExpiresMs, refreshExpiresMs, user, message } =
+      await this.authService.register(dto);
+    setAuthCookies(res, { accessToken, refreshToken, accessExpiresMs, refreshExpiresMs });
+    return { message, user };
   }
 
   @Post('login')
@@ -147,22 +153,9 @@ export class AuthController {
     this.logger.log({ email, step: 'controller.login.start' }, 'POST /auth/login received');
 
     try {
-      const { accessToken, refreshToken, accessExpiresMs, refreshExpiresMs } =
-        await this.authService.login(dto);
+      const tokens = await this.authService.login(dto);
 
-      const base = buildAuthCookieOptions();
-      this.logger.log(
-        {
-          email,
-          step: 'controller.login.set_cookies',
-          cookie: { sameSite: base.sameSite, secure: base.secure, path: base.path },
-          maxAge: { accessMs: accessExpiresMs, refreshMs: refreshExpiresMs },
-        },
-        'POST /auth/login setting auth cookies',
-      );
-
-      res.cookie('accessToken', accessToken, { ...base, maxAge: accessExpiresMs });
-      res.cookie('refreshToken', refreshToken, { ...base, maxAge: refreshExpiresMs });
+      setAuthCookies(res, tokens);
 
       this.logger.log({ email, step: 'controller.login.success' }, 'POST /auth/login succeeded');
       return { message: 'Logged in successfully' };
@@ -243,12 +236,9 @@ export class AuthController {
       });
     }
 
-    const { accessToken, refreshToken, accessExpiresMs, refreshExpiresMs } =
-      await this.authService.refreshToken(token);
+    const tokens = await this.authService.refreshToken(token);
 
-    const base = buildAuthCookieOptions();
-    res.cookie('accessToken', accessToken, { ...base, maxAge: accessExpiresMs });
-    res.cookie('refreshToken', refreshToken, { ...base, maxAge: refreshExpiresMs });
+    setAuthCookies(res, tokens);
 
     return { message: 'Tokens refreshed' };
   }
@@ -274,9 +264,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   async logout(@CurrentUser() user: CurrentUserType, @Res({ passthrough: true }) res: Response) {
     await this.authService.logout(user.userId);
-    const clearOpts = buildAuthCookieOptions();
-    res.clearCookie('accessToken', clearOpts);
-    res.clearCookie('refreshToken', clearOpts);
+    clearAuthCookies(res);
 
     return { message: 'Logged out successfully' };
   }

@@ -52,7 +52,24 @@ export class AuthService {
     const user = await this.userRepo.create({ ...createData, passwordHash });
 
     this.logger.log('User registered successfully', { userId: user.id });
-    return { message: 'User registered successfully' };
+
+    const tokens = await this.issueTokens(user.id, {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    });
+
+    return {
+      message: 'User registered successfully',
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        emailVerified: false,
+      },
+      ...tokens,
+    };
   }
 
   /** LOGIN */
@@ -175,17 +192,11 @@ export class AuthService {
 
     await this.userRepo.deleteRefreshToken(tokens.token);
 
-    const { exp, iat, nbf, ...cleanPayload } = payload as JwtPayload & {
-      exp?: number;
-      iat?: number;
-      nbf?: number;
+    const cleanPayload: JwtPayload = {
+      sub: payload.sub,
+      email: payload.email,
+      role: payload.role,
     };
-    this.logger.log('Refresh token validated, issuing new tokens', {
-      userId: payload.sub,
-      exp,
-      iat,
-      nbf,
-    });
 
     return this.issueTokens(tokens.userId, cleanPayload);
   }

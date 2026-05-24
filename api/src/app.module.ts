@@ -1,6 +1,7 @@
 import { LoggerModule } from 'nestjs-pino';
 import { ConfigModule } from './config/config.module';
 import { Module } from '@nestjs/common';
+import { buildPinoHttpOptions } from './common/config/pino-logger.config';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -39,31 +40,7 @@ import { AppController } from './app.controller';
     NotificationModule,
     RealtimeModule,
     LoggerModule.forRoot({
-      pinoHttp: {
-        level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
-
-        transport:
-          process.env.NODE_ENV !== 'production'
-            ? {
-                target: 'pino-pretty',
-                options: { singleLine: true },
-              }
-            : undefined,
-
-        genReqId: (req) => {
-          return req.headers['x-request-id'] || crypto.randomUUID();
-        },
-
-        customProps: (req) => {
-          const seamClient = req.headers['x-seam-client'];
-          return {
-            requestId: req.id,
-            ...(typeof seamClient === 'string' && seamClient
-              ? { seamClient }
-              : {}),
-          };
-        },
-      },
+      pinoHttp: buildPinoHttpOptions(),
     }),
   ],
   providers: [
