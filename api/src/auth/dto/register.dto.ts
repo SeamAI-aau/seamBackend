@@ -1,4 +1,9 @@
-import { IsEmail, IsString, MinLength, IsOptional } from 'class-validator';
+import { IsEmail, IsString, MinLength, IsOptional, Matches } from 'class-validator';
+import {
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_PATTERN,
+  PASSWORD_PATTERN_MESSAGE,
+} from '../constants/password.constants';
 import { Role } from '@prisma/client';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -18,12 +23,13 @@ export class RegisterDto {
   name!: string;
 
   @ApiProperty({
-    example: 'StrongP@ssw0rd',
-    description: 'Password with minimum length of 6 characters.',
-    minLength: 6,
+    example: 'StrongP@ss1',
+    description: PASSWORD_PATTERN_MESSAGE,
+    minLength: PASSWORD_MIN_LENGTH,
   })
   @IsString()
-  @MinLength(6)
+  @MinLength(PASSWORD_MIN_LENGTH)
+  @Matches(PASSWORD_PATTERN, { message: PASSWORD_PATTERN_MESSAGE })
   password!: string;
 
   @ApiPropertyOptional({

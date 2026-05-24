@@ -38,7 +38,7 @@ export class UserResponseDto {
   @ApiPropertyOptional({
     example: 'https://res.cloudinary.com/example/image/upload/v1/avatars/user-123/photo.jpg',
     nullable: true,
-    description: 'Profile avatar image URL when set.',
+    description: 'Profile avatar image URL when the user has uploaded a photo.',
   })
   avatarUrl?: string | null;
 

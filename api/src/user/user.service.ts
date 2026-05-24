@@ -11,6 +11,10 @@ import { CloudinaryService } from '../infrastracture/cloudinary/cloudinary.servi
 import { PrismaService } from '../prisma/prisma.service';
 import type { Response } from 'express';
 import type { UpdateUserProfileDto } from './dto/update-user-profile.dto';
+import {
+  AVATAR_ALLOWED_MIME_TYPES,
+  AVATAR_MAX_BYTES,
+} from './constants/avatar-upload.constants';
 
 @Injectable()
 export class UserService {
@@ -83,6 +87,52 @@ export class UserService {
     });
 
     return this.toResponseDto(updated, projects);
+  }
+
+  /**
+   * Upload profile avatar image. Replaces any existing avatar; old Cloudinary asset is deleted.
+   */
+  async uploadAvatar(
+    userId: string,
+    file: Express.Multer.File,
+  ): Promise<{ status: string; avatarUrl: string }> {
+    if (!file) {
+      throw new AppException(ErrorCode.VALIDATION_ERROR, 'File is required', 400);
+    }
+
+    if (!file.mimetype || !AVATAR_ALLOWED_MIME_TYPES.has(file.mimetype)) {
+      throw new AppException(
+        ErrorCode.VALIDATION_ERROR,
+        'Avatar must be a JPG, PNG, GIF, or WebP image',
+        400,
+      );
+    }
+
+    if (file.size > AVATAR_MAX_BYTES) {
+      throw new AppException(ErrorCode.VALIDATION_ERROR, 'Avatar must be 2MB or smaller', 400);
+    }
+
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new AppException(ErrorCode.UNAUTHORIZED, 'User not found', 401);
+    }
+
+    const { url, publicId } = await this.cloudinaryService.uploadAvatar(file, userId);
+
+    if (user.avatarPublicId) {
+      try {
+        await this.cloudinaryService.deleteByPublicId(user.avatarPublicId, 'image');
+      } catch {
+        // Non-fatal; new avatar is saved
+      }
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl: url, avatarPublicId: publicId },
+    });
+
+    return { status: 'uploaded', avatarUrl: url };
   }
 
   /**

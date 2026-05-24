@@ -15,14 +15,18 @@ model User {
   googleId            String?             @unique
   emailVerifiedAt     DateTime?
   role                Role                @default(DEVELOPER)
+  emailVerifiedAt     DateTime?
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
   avatarUrl           String?
   avatarPublicId      String?
   githubUsername      String?
+  avatarUrl           String?
+  avatarPublicId      String?
   voiceSampleUrl      String?
   voiceSamplePublicId String?
   activityLogs        ActivityLog[]
+  authTokens          UserAuthToken[]
   developerActivities DeveloperActivity[]
   githubAccount       GithubAccount?
   jiraAccount         JiraAccount?
@@ -32,6 +36,23 @@ model User {
   projectMembers      ProjectMember[]
   refreshTokens       RefreshToken[]
   tasks               Task[]              @relation("AssignedTasks")
+}
+
+enum AuthTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+model UserAuthToken {
+  id        String        @id @default(uuid())
+  userId    String
+  tokenHash String
+  type      AuthTokenType
+  expiresAt DateTime
+  createdAt DateTime      @default(now())
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
 }
 
 model Project {

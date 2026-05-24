@@ -14,6 +14,7 @@ import type { MeetingAudioUploadOptions } from './types/cloudinary.types';
 import {
   CLOUDINARY_MEETING_AUDIO_FOLDER,
   CLOUDINARY_VOICE_SAMPLE_FOLDER,
+  CLOUDINARY_AVATAR_FOLDER,
   CLOUDINARY_AUDIO_RESOURCE_TYPE,
 } from './constants/cloudinary.constants';
 
@@ -60,6 +61,21 @@ export class CloudinaryService {
   }
 
   /**
+   * Upload user profile avatar image. Stored under avatars/{userId}/.
+   */
+  async uploadAvatar(
+    file: Express.Multer.File,
+    userId: string,
+  ): Promise<CloudinaryUploadResult> {
+    const folder = `${CLOUDINARY_AVATAR_FOLDER}/${userId}`;
+    const result = await this.uploadStream(file, {
+      resource_type: 'image',
+      folder,
+    });
+    return this.toUploadResult(result);
+  }
+
+  /**
    * Get a readable stream for a stored voice sample by its URL.
    * The URL is never exposed to the client; it is only used server-side.
    */
@@ -98,11 +114,14 @@ export class CloudinaryService {
   /**
    * Delete an asset by public ID. Use for cleanup when a meeting (and its audio) is removed.
    */
-  async deleteByPublicId(publicId: string): Promise<void> {
+  async deleteByPublicId(
+    publicId: string,
+    resourceType: 'image' | 'video' = CLOUDINARY_AUDIO_RESOURCE_TYPE,
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       cloudinary.uploader.destroy(
         publicId,
-        { resource_type: CLOUDINARY_AUDIO_RESOURCE_TYPE },
+        { resource_type: resourceType },
         (error) => {
           if (error) {
             this.logger.warn({ publicId, err: error }, 'Cloudinary delete failed');
