@@ -19,7 +19,7 @@ function connectionUsesTls(connectionString: string): boolean {
   return sslmode !== 'disable' && sslmode !== 'allow';
 }
 
-/** Resolve Aiven / managed-Postgres CA bundle (committed at api/certs/ca.pem). */
+/** Resolve Aiven / managed-Postgres CA bundle (api/src/certs/ca.pem, copied to dist/certs on build). */
 export function resolveDatabaseCaCertPath(): string | undefined {
   const explicit = process.env.DATABASE_SSL_CA_PATH?.trim();
   if (explicit && existsSync(explicit)) {
@@ -33,10 +33,13 @@ export function resolveDatabaseCaCertPath(): string | undefined {
 
   const cwd = process.cwd();
   const candidates = [
-    join(cwd, 'api', 'certs', 'ca.pem'),
-    join(cwd, 'certs', 'ca.pem'),
     join(__dirname, 'certs', 'ca.pem'),
     join(__dirname, '..', 'certs', 'ca.pem'),
+    join(cwd, 'api', 'dist', 'certs', 'ca.pem'),
+    join(cwd, 'api', 'src', 'certs', 'ca.pem'),
+    join(cwd, 'api', 'certs', 'ca.pem'),
+    join(cwd, 'src', 'certs', 'ca.pem'),
+    join(cwd, 'certs', 'ca.pem'),
   ];
 
   return candidates.find((p) => existsSync(p));
@@ -67,7 +70,7 @@ export function createPgPoolConfig(): PoolConfig {
   if (sslmode === 'verify-full' || sslmode === 'verify-ca') {
     throw new Error(
       `DATABASE_URL uses sslmode=${sslmode} but no CA file was found. ` +
-        'Add api/certs/ca.pem (Aiven CA) or set DATABASE_SSL_CA_PATH to its absolute path.',
+        'Add api/src/certs/ca.pem (Aiven CA) or set DATABASE_SSL_CA_PATH to its absolute path.',
     );
   }
 
