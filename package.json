@@ -5,6 +5,8 @@
   "scripts": {
     "postinstall": "prisma generate --schema api/src/prisma/schema.prisma",
     "build:api": "nx run api:build",
+    "db:migrate:deploy": "cd api && prisma migrate deploy",
+    "start:api": "node api/dist/main.js",
     "serve:api": "nx serve api"
   },
   "private": true,

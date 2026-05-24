@@ -1,5 +1,19 @@
 import type { CorsOptions } from '@nestjs/common/interfaces/external/cors-options.interface';
 
+/** Browser `Origin` headers never include a trailing slash. */
+export function normalizeOrigin(value: string): string {
+  return value.trim().replace(/\/+$/, '');
+}
+
+const DEFAULT_ALLOWED_HEADERS = [
+  'Content-Type',
+  'Accept',
+  'Authorization',
+  'X-Requested-With',
+];
+
+const DEFAULT_ALLOWED_METHODS = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
+
 const LOCAL_DASHBOARD_ORIGINS = [
   'http://localhost:8080',
   'http://127.0.0.1:8080',
@@ -16,14 +30,14 @@ export function parseCorsOrigins(raw: string | undefined): string[] {
 
   if (raw?.trim()) {
     for (const part of raw.split(',')) {
-      const trimmed = part.trim();
+      const trimmed = normalizeOrigin(part);
       if (trimmed) origins.add(trimmed);
     }
   }
 
   const frontendUrl = process.env.FRONTEND_URL?.trim();
   if (frontendUrl) {
-    origins.add(frontendUrl.replace(/\/$/, ''));
+    origins.add(normalizeOrigin(frontendUrl));
   }
 
   // Production-mode local dev often omits CORS_ORIGINS; allow the Vite dashboard.
@@ -59,7 +73,7 @@ export function corsOriginDelegate(
       callback(null, true);
       return;
     }
-    if (allowlist.includes(origin)) {
+    if (allowlist.includes(normalizeOrigin(origin))) {
       callback(null, true);
       return;
     }
@@ -72,12 +86,19 @@ export function buildHttpCorsOptions(corsOriginsRaw: string | undefined): CorsOp
   const devOpen = isDevOpenCors(allowlist);
 
   if (devOpen) {
-    return { origin: true, credentials: true };
+    return {
+      origin: true,
+      credentials: true,
+      allowedHeaders: DEFAULT_ALLOWED_HEADERS,
+      methods: DEFAULT_ALLOWED_METHODS,
+    };
   }
 
   return {
     origin: corsOriginDelegate(allowlist),
     credentials: true,
+    allowedHeaders: DEFAULT_ALLOWED_HEADERS,
+    methods: DEFAULT_ALLOWED_METHODS,
   };
 }
 
