@@ -1,5 +1,6 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import cookieParser from 'cookie-parser';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
@@ -7,7 +8,7 @@ import type { ComponentsObject, SecuritySchemeObject } from 'openapi3-ts';
 import { buildHttpCorsOptions } from './common/config/cors.config';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
     /** Required for `POST /integrations/github/webhook` HMAC (`X-Hub-Signature-256`) verification. */
     rawBody: true,

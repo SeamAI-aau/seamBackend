@@ -158,7 +158,7 @@ export class JiraIssueService {
         return new AppException(ErrorCode.NOT_FOUND, message, 404);
       }
       if (status === 400 || status === 403) {
-        return new AppException(ErrorCode.BAD_REQUEST, message, 400);
+        return new AppException(ErrorCode.VALIDATION_ERROR, message, 400);
       }
       return new AppException(ErrorCode.VALIDATION_ERROR, message, status >= 500 ? 502 : 400);
     }

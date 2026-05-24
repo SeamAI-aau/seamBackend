@@ -120,7 +120,6 @@ export class JiraService {
       const account = await this.jiraRepo.findAccountByUserId(userId);
       if (!account) return null;
 
-      const secret = this.config.get<string>('TOKEN_ENCRYPTION_SECRET') || 'this is a secret';
       await this.jiraRepo.upsertAccount(userId, {
         accessToken: account.accessToken,
         refreshToken: account.refreshToken,

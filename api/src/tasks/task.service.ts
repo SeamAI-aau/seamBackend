@@ -557,7 +557,7 @@ export class TaskService {
       );
     }
     const transitions = await this.jiraIssueService.getTransitions(
-      task.meeting.projectId,
+      task.meeting.project.id,
       issueKey,
       userId,
     );
@@ -584,7 +584,7 @@ export class TaskService {
       );
     }
     return this.jiraIssueService.getTransitions(
-      task.meeting.projectId,
+      task.meeting.project.id,
       task.jiraIssueKey,
       userId,
     );
@@ -608,7 +608,7 @@ export class TaskService {
       );
     }
     return this.jiraIssueService.transitionIssue(
-      task.meeting.projectId,
+      task.meeting.project.id,
       task.jiraIssueKey,
       transitionId,
       userId,
@@ -616,10 +616,10 @@ export class TaskService {
   }
 
   private async assertTaskProjectAccess(
-    task: { meeting: { projectId: string }; assigneeId: string | null },
+    task: TaskWithMeetingProject,
     userId: string,
   ): Promise<void> {
-    const projectId = task.meeting.projectId;
+    const projectId = task.meeting.project.id;
     const isOwner = await this.projectRepo.isOwner(projectId, userId);
     const isMember = await this.projectRepo.isMember(projectId, userId);
     const isAssignee = task.assigneeId === userId;

@@ -35,7 +35,12 @@ function buildNotificationWhere(filters: NotificationFilters): Prisma.Notificati
     });
   }
   if (metadataFilters.length > 0) {
-    where.AND = [...(where.AND ?? []), ...metadataFilters];
+    const existingAnd = where.AND
+      ? Array.isArray(where.AND)
+        ? where.AND
+        : [where.AND]
+      : [];
+    where.AND = [...existingAnd, ...metadataFilters];
   }
 
   return where;
