@@ -291,6 +291,13 @@ export class AuthService {
       throw new UnauthorizedException({ code: ErrorCode.UNAUTHORIZED, message: 'Unauthorized' });
     }
 
+    if (!user.passwordHash) {
+      throw new BadRequestException({
+        code: ErrorCode.VALIDATION_ERROR,
+        message: 'This account uses OAuth sign-in and has no password to change.',
+      });
+    }
+
     const valid = await compare(dto.currentPassword, user.passwordHash);
     if (!valid) {
       throw new UnauthorizedException({

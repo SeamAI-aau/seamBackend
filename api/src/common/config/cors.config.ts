@@ -1,5 +1,12 @@
 import type { CorsOptions } from '@nestjs/common/interfaces/external/cors-options.interface';
 
+const LOCAL_DASHBOARD_ORIGINS = [
+  'http://localhost:8080',
+  'http://127.0.0.1:8080',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+];
+
 /**
  * Comma-separated origins from `CORS_ORIGINS`, e.g.
  * `https://app.example.com,http://localhost:5173,chrome-extension://abcdef123456`
@@ -17,6 +24,13 @@ export function parseCorsOrigins(raw: string | undefined): string[] {
   const frontendUrl = process.env.FRONTEND_URL?.trim();
   if (frontendUrl) {
     origins.add(frontendUrl.replace(/\/$/, ''));
+  }
+
+  // Production-mode local dev often omits CORS_ORIGINS; allow the Vite dashboard.
+  if (origins.size === 0 && !frontendUrl && !raw?.trim()) {
+    for (const origin of LOCAL_DASHBOARD_ORIGINS) {
+      origins.add(origin);
+    }
   }
 
   return [...origins];

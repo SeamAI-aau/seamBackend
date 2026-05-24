@@ -41,7 +41,7 @@ async function bootstrap() {
         '',
         '- Set **`CORS_ORIGINS`** and **`FRONTEND_URL`** to your dashboard origin(s).',
         '- Set **`AUTH_COOKIE_CROSS_SITE=true`** when the API and dashboard are on different hosts (HTTPS required).',
-        '- Login/register/refresh set **httpOnly cookies** and return **tokens in the JSON body** for `Authorization: Bearer` on cross-origin clients.',
+        '- Login/register/refresh set **httpOnly cookies** (`accessToken`, `refreshToken`). Send requests with credentials so the browser includes them.',
         '',
         '### Chrome extension (Phase 9)',
         '',

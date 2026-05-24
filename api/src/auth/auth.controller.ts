@@ -34,10 +34,7 @@ import {
   ApiCookieAuth,
   ApiBody,
 } from '@nestjs/swagger';
-import {
-  clearAuthCookies,
-  setAuthCookies,
-} from '../common/config/auth-cookie.config';
+import { clearAuthCookies, setAuthCookies } from '../common/config/auth-cookie.config';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -227,6 +224,7 @@ export class AuthController {
       },
     },
   })
+  @UseGuards(new AuthThrottleGuard(20, 60_000))
   async refresh(
     @Body('refreshToken') oldToken: string,
     @Req() req: Request,
@@ -272,5 +270,64 @@ export class AuthController {
     await this.authService.logout(user.userId);
     clearAuthCookies(res);
     return { message: 'Logged out successfully' };
+  }
+
+  @Post('clear-session')
+  @ApiOperation({ summary: 'Clear auth cookies without requiring a valid access token' })
+  @ApiOkResponse({
+    description: 'Auth cookies cleared (used before sign-in to drop stale sessions).',
+    schema: { example: { message: 'Session cleared' } },
+  })
+  clearSession(@Res({ passthrough: true }) res: Response) {
+    clearAuthCookies(res);
+    return { message: 'Session cleared' };
+  }
+
+  @Get('verify-email')
+  @ApiOperation({ summary: 'Verify email from link and redirect to the dashboard' })
+  async verifyEmail(@Query('token') token: string, @Res() res: Response) {
+    if (!token?.trim()) {
+      throw new BadRequestException({
+        code: ErrorCode.VALIDATION_ERROR,
+        message: 'Verification token is required',
+      });
+    }
+
+    const { redirectPath } = await this.authService.verifyEmail(token);
+    const base = this.authMail.getFrontendBaseUrl();
+    const separator = redirectPath.includes('?') ? '&' : '?';
+    res.redirect(`${base}${redirectPath}${separator}emailVerified=1`);
+  }
+
+  @Post('resend-verification')
+  @ApiOperation({ summary: 'Resend email verification for the current user' })
+  @ApiBearerAuth('access-token')
+  @ApiCookieAuth('access-cookie')
+  @UseGuards(JwtAuthGuard, new AuthThrottleGuard(5, 60_000))
+  resendVerification(@CurrentUser() user: CurrentUserType) {
+    return this.authService.resendVerificationEmail(user.userId);
+  }
+
+  @Post('forgot-password')
+  @ApiOperation({ summary: 'Request a password reset email' })
+  @UseGuards(new AuthThrottleGuard(5, 60_000))
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Post('reset-password')
+  @ApiOperation({ summary: 'Reset password using token from email' })
+  @UseGuards(new AuthThrottleGuard(8, 60_000))
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
+  }
+
+  @Post('change-password')
+  @ApiOperation({ summary: 'Change password while authenticated' })
+  @ApiBearerAuth('access-token')
+  @ApiCookieAuth('access-cookie')
+  @UseGuards(JwtAuthGuard, new AuthThrottleGuard(8, 60_000))
+  changePassword(@CurrentUser() user: CurrentUserType, @Body() dto: ChangePasswordDto) {
+    return this.authService.changePassword(user.userId, dto);
   }
 }
