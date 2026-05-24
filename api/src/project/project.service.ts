@@ -174,9 +174,11 @@ export class ProjectService {
         this.config.get<string>('FRONTEND_URL') ??
         'https://app.seam.dev';
       const baseUrl = appUrl.replace(/\/+$/, '');
+      const existingUser = await this.userRepo.findByEmail(normalizedEmail);
+      const authMode = existingUser ? 'sign-in' : 'sign-up';
       const acceptUrl = `${baseUrl}/auth/invite?projectId=${project.id}&email=${encodeURIComponent(
         normalizedEmail,
-      )}`;
+      )}&auth=${authMode}`;
 
       const emailSent = await this.notification
         .notifyEmailOnly({
