@@ -35,6 +35,7 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import { clearAuthCookies, setAuthCookies } from '../common/config/auth-cookie.config';
+import { SkipEmailVerification } from '../common/decorators/skip-email-verification.decorator';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -103,11 +104,11 @@ export class AuthController {
           email: 'scrum.master@example.com',
           name: 'Jane Doe',
           password: 'StrongP@ssw0rd',
-          role: 'SCRUM_MASTER',
+          registrationIntent: 'scrum_master',
         },
       },
       developer: {
-        summary: 'Developer registration (role defaults to DEVELOPER)',
+        summary: 'Developer registration (default role)',
         value: {
           email: 'dev@example.com',
           name: 'John Dev',
@@ -266,6 +267,7 @@ export class AuthController {
     },
   })
   @UseGuards(JwtAuthGuard)
+  @SkipEmailVerification()
   async logout(@CurrentUser() user: CurrentUserType, @Res({ passthrough: true }) res: Response) {
     await this.authService.logout(user.userId);
     clearAuthCookies(res);
@@ -304,6 +306,7 @@ export class AuthController {
   @ApiBearerAuth('access-token')
   @ApiCookieAuth('access-cookie')
   @UseGuards(JwtAuthGuard, new AuthThrottleGuard(5, 60_000))
+  @SkipEmailVerification()
   resendVerification(@CurrentUser() user: CurrentUserType) {
     return this.authService.resendVerificationEmail(user.userId);
   }

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Logger } from 'nestjs-pino';
 import {
@@ -20,6 +20,8 @@ import type {
 import { deriveJiraProposal } from './utils/derive-jira-proposal.util';
 import { WORKER_RESULT_STATUS_SUCCESS } from './constants/meeting.constants';
 import { NOTIFICATION_TYPES } from '../notification/constants/notification-types';
+import { PROJECT_REPOSITORY } from '../project/types/project.tokens';
+import type { IProjectRepository } from '../project/types/project.repository';
 
 /**
  * Persists callback results from ai-engine-2 (or bridge): transcript + extracted tasks,
@@ -37,6 +39,7 @@ export class MeetingProcessingService {
     private readonly cloudinaryService: CloudinaryService,
     private readonly activityLog: ActivityLogService,
     private readonly notification: NotificationService,
+    @Inject(PROJECT_REPOSITORY) private readonly projectRepo: IProjectRepository,
     private readonly logger: Logger,
   ) {}
 
@@ -81,7 +84,10 @@ export class MeetingProcessingService {
     }
 
     const incomingTasks = this.resolveIncomingTasks(payload);
-    const normalizedTasks = this.normalizeNewTasks(incomingTasks);
+    const normalizedTasks = await this.filterAssignableTaskAssignees(
+      meeting.projectId,
+      this.normalizeNewTasks(incomingTasks),
+    );
     const projectId = await this.persistTranscriptAndTasks(meetingId, payload, normalizedTasks);
     this.logger.log({ meetingId }, 'Transcript and tasks saved');
 
@@ -304,6 +310,30 @@ export class MeetingProcessingService {
       });
     });
     return projectId;
+  }
+
+  private async filterAssignableTaskAssignees<T extends { assigneeId: string | null }>(
+    projectId: string,
+    tasks: T[],
+  ): Promise<T[]> {
+    const filtered: T[] = [];
+    for (const task of tasks) {
+      if (!task.assigneeId) {
+        filtered.push(task);
+        continue;
+      }
+      const allowed = await this.projectRepo.canAssignTasksToUser(projectId, task.assigneeId);
+      if (!allowed) {
+        this.logger.warn(
+          { projectId, assigneeId: task.assigneeId },
+          'Dropped NLP task assignee who is not an active project member',
+        );
+        filtered.push({ ...task, assigneeId: null });
+        continue;
+      }
+      filtered.push(task);
+    }
+    return filtered;
   }
 
   private normalizeNewTasks(

@@ -18,6 +18,7 @@ import type { CreateTaskDto } from './dto/create-task.dto';
 import type { UpdateTaskOutcomeDto } from './dto/update-task-outcome.dto';
 import { MANUAL_TASK_PLACEHOLDER_AUDIO_URL } from './constants/task.constants';
 import { Logger } from 'nestjs-pino';
+import { assertProjectTaskAssignee } from '../project/project-membership.util';
 
 @Injectable()
 export class TaskService {
@@ -44,6 +45,10 @@ export class TaskService {
     const isMember = await this.projectRepo.isMember(body.projectId, userId);
     if (!isOwner && !isMember) {
       throw new AppException(ErrorCode.FORBIDDEN, 'Access denied to this project', 403);
+    }
+
+    if (body.assigneeId) {
+      await assertProjectTaskAssignee(this.projectRepo, body.projectId, body.assigneeId);
     }
 
     const status = body.assigneeId ? TaskStatus.SENT_TO_DEVELOPER : TaskStatus.EXTRACTED;
@@ -429,6 +434,9 @@ export class TaskService {
     if (!TaskStateMachine.canTransition(task.status, TaskStatus.SENT_TO_DEVELOPER)) {
       throw new AppException(ErrorCode.INVALID_STATE, `Cannot assign from ${task.status}`, 400);
     }
+
+    await assertProjectTaskAssignee(this.projectRepo, task.meeting.projectId, assigneeId);
+
     const result = await this.taskRepo.updateAssigneeAndStatus(
       taskId,
       assigneeId,

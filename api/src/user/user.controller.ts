@@ -30,6 +30,7 @@ import {
   ApiQuery,
   ApiBody,
 } from '@nestjs/swagger';
+import { SkipEmailVerification } from '../common/decorators/skip-email-verification.decorator';
 
 @ApiTags('Users')
 @ApiBearerAuth('access-token')
@@ -39,6 +40,7 @@ export class UserController {
   constructor(private readonly userService: UserService) {}
 
   @Get('me')
+  @SkipEmailVerification()
   @ApiOperation({ summary: 'Get the currently authenticated user' })
   @ApiOkResponse({
     description: 'The full profile of the currently authenticated user.',
@@ -72,7 +74,32 @@ export class UserController {
     return this.userService.getMe(user.userId);
   }
 
+  @Get('me/invitations')
+  @SkipEmailVerification()
+  @ApiOperation({ summary: 'List pending project invitations for the current user' })
+  @ApiOkResponse({
+    description: 'Pending invitations for the authenticated user email.',
+    schema: {
+      example: {
+        items: [
+          {
+            projectId: 'proj_123',
+            projectName: 'Velocity Tracker',
+            email: 'developer@example.com',
+            inviterName: 'Jane Doe',
+            memberId: 'member_1',
+            status: 'PENDING',
+          },
+        ],
+      },
+    },
+  })
+  getMyInvitations(@CurrentUser() user: CurrentUserType) {
+    return this.userService.getMyInvitations(user.userId);
+  }
+
   @Patch('me')
+  @SkipEmailVerification()
   @ApiOperation({
     summary: 'Update current user profile',
     description:

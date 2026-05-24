@@ -15,6 +15,7 @@ import {
   AVATAR_ALLOWED_MIME_TYPES,
   AVATAR_MAX_BYTES,
 } from './constants/avatar-upload.constants';
+import { ProjectService } from '../project/project.service';
 
 @Injectable()
 export class UserService {
@@ -23,6 +24,7 @@ export class UserService {
     private readonly userRepo: IUserRepository,
     private readonly cloudinaryService: CloudinaryService,
     private readonly prisma: PrismaService,
+    private readonly projectService: ProjectService,
   ) {}
 
   async getDevelopers(currentUser: CurrentUserType, page = 1, limit = 20) {
@@ -55,6 +57,10 @@ export class UserService {
     }
 
     return this.toResponseDto(user, projects);
+  }
+
+  getMyInvitations(userId: string) {
+    return this.projectService.getMyInvitations(userId);
   }
 
   async updateProfile(userId: string, body: UpdateUserProfileDto): Promise<UserResponseDto> {

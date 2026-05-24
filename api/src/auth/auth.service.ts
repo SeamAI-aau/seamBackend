@@ -17,6 +17,8 @@ import {
 import type { IAuthRepository } from './types/auth.repository';
 import type { IJwtService, JwtPayload } from './types/jwt.service.interface';
 import { AUTH_REPOSITORY, JWT_SERVICE } from './auth.tokens';
+import { PROJECT_REPOSITORY } from '../project/types/project.tokens';
+import type { IProjectRepository } from '../project/types/project.repository';
 import { ErrorCode } from '../common/errors/error-codes';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -35,6 +37,7 @@ export class AuthService {
   constructor(
     @Inject(AUTH_REPOSITORY) private readonly userRepo: IAuthRepository,
     @Inject(JWT_SERVICE) private readonly jwtService: IJwtService,
+    @Inject(PROJECT_REPOSITORY) private readonly projectRepo: IProjectRepository,
     private readonly configService: ConfigService,
     private readonly logger: Logger,
     private readonly authMail: AuthMailService,
@@ -56,15 +59,20 @@ export class AuthService {
 
     const saltRounds = parseInt(this.configService.get<string>('BCRYPT_SALT_ROUNDS') ?? '10', 10);
     const passwordHash = await hash(dto.password, saltRounds);
+    const role =
+      dto.registrationIntent === 'scrum_master' ? Role.SCRUM_MASTER : Role.DEVELOPER;
+
     const user = await this.userRepo.create({
       email,
       name: dto.name,
       passwordHash,
-      ...(dto.role !== undefined ? { role: dto.role } : {}),
+      role,
     });
     await this.issueAndStoreEmailVerificationToken(user.id, user.email, user.name);
 
     this.logger.log('User registered successfully', { userId: user.id });
+
+    await this.acceptPendingProjectInvites(user.id, user.email);
 
     const tokens = await this.issueTokens(user.id, {
       sub: user.id,
@@ -153,6 +161,8 @@ export class AuthService {
     }
 
     this.logger.log({ email, userId: user.id, step: 'login.password_ok' }, 'Login: password valid');
+
+    await this.acceptPendingProjectInvites(user.id, user.email);
 
     const payload: JwtPayload = {
       sub: user.id,
@@ -312,6 +322,20 @@ export class AuthService {
     await this.userRepo.deleteAllUserRefreshTokens(userId);
 
     return { message: 'Password changed successfully. Please sign in again on other devices.' };
+  }
+
+  private async acceptPendingProjectInvites(userId: string, email: string): Promise<void> {
+    try {
+      const count = await this.projectRepo.acceptAllPendingInvitesForUser(userId, email);
+      if (count > 0) {
+        this.logger.log({ userId, count }, 'Auto-accepted pending project invitations');
+      }
+    } catch (err) {
+      this.logger.warn(
+        { userId, err },
+        'Failed to auto-accept pending project invitations after auth',
+      );
+    }
   }
 
   private async issueAndStoreEmailVerificationToken(

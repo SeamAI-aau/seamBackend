@@ -19,6 +19,8 @@ import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { AddMemberDto } from './dto/add-member.dto';
 import { AcceptInviteDto } from './dto/accept-invite.dto';
+import { DeclineInviteDto } from './dto/decline-invite.dto';
+import { SkipEmailVerification } from '../common/decorators/skip-email-verification.decorator';
 import { DashboardFilterDto } from './dto/dashboard-filter.dto';
 import { BlockersFilterDto } from './dto/blockers-filter.dto';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
@@ -162,6 +164,7 @@ export class ProjectController {
   }
 
   @Get(':id/dashboard')
+  @UseGuards(RolesGuard)
   @Roles(Role.SCRUM_MASTER)
   @ApiOperation({
     summary: 'Get Scrum Master project dashboard',
@@ -697,7 +700,7 @@ export class ProjectController {
   @ApiOperation({
     summary: 'Add a project member by email',
     description:
-      'Adds a new active member (if the user already exists) or creates a pending invitation. Only the project owner can call this.',
+      'Creates a pending invitation emailed to the member. Membership becomes ACTIVE only after they accept. Only the project owner can call this.',
   })
   @ApiOkResponse({
     description: 'Member added or invitation created.',
@@ -804,6 +807,7 @@ export class ProjectController {
   }
 
   @Post(':id/invitations/accept')
+  @SkipEmailVerification()
   @ApiOperation({
     summary: 'Accept a project invitation by email',
     description:
@@ -892,6 +896,26 @@ export class ProjectController {
     @Body() body: AcceptInviteDto,
   ) {
     return this.projectService.acceptInvite(id, user.userId, body.email);
+  }
+
+  @Post(':id/invitations/decline')
+  @SkipEmailVerification()
+  @ApiOperation({
+    summary: 'Decline a project invitation by email',
+    description:
+      'Removes a pending invitation for the given project. The email must match the currently authenticated user.',
+  })
+  @ApiOkResponse({
+    description: 'Invitation declined.',
+    schema: { example: { message: 'Invitation declined' } },
+  })
+  @ApiBody({ type: DeclineInviteDto })
+  declineInvite(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserType,
+    @Body() body: DeclineInviteDto,
+  ) {
+    return this.projectService.declineInvite(id, user.userId, body.email);
   }
 
   @Delete(':id/members/:memberId')
