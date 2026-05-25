@@ -51,6 +51,7 @@
     "api-e2e"
   ],
   "dependencies": {
+    "@getbrevo/brevo": "^5.0.4",
     "@nestjs/bullmq": "^11.0.4",
     "@nestjs/common": "^11.0.0",
     "@nestjs/config": "^4.0.3",

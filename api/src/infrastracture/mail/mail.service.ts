@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
-import { Resend } from 'resend';
 import { Logger } from 'nestjs-pino';
 
 export interface SendMailOptions {
@@ -14,15 +13,15 @@ export interface SendMailOptions {
 }
 
 /**
- * Email sender with SMTP primary and Resend HTTP fallback.
+ * Email sender with SMTP primary and Brevo HTTP fallback.
  * SMTP is tried first; if it times out or fails (e.g. port blocked on Render),
- * we immediately retry via Resend's HTTPS API (port 443, never blocked).
+ * we immediately retry via Brevo's HTTPS API (port 443, never blocked).
  */
 @Injectable()
 export class MailService {
   private transporter: Transporter | null = null;
-  private resend: Resend | null = null;
-  private httpFrom: string;
+  private brevoApiKey: string | null = null;
+  private httpFrom: { name: string; email: string };
 
   constructor(private readonly config: ConfigService, private readonly logger: Logger) {
     // ── SMTP (primary) ──
@@ -53,15 +52,19 @@ export class MailService {
       this.logger.warn('Mail service: SMTP not configured');
     }
 
-    // ── HTTP email fallback (Resend) ──
-    const httpApiKey = this.config.get<string>('MAIL_HTTP_API_KEY')?.trim();
-    this.httpFrom =
-      this.config.get<string>('MAIL_HTTP_FROM')?.trim() || 'Seam AI <onboarding@resend.dev>';
-
-    if (httpApiKey) {
-      this.resend = new Resend(httpApiKey);
-      this.logger.log('Mail service: HTTP email fallback configured');
+    // ── HTTP email fallback (Brevo) ──
+    const brevoKey = this.config.get<string>('MAIL_HTTP_API_KEY')?.trim();
+    if (brevoKey) {
+      this.brevoApiKey = brevoKey;
+      this.logger.log('Mail service: Brevo HTTP fallback configured');
     }
+
+    const appName = this.config.get<string>('APP_NAME') ?? 'Seam AI';
+    const fromEmail =
+      this.config.get<string>('MAIL_FROM') ??
+      this.config.get<string>('SMTP_USER') ??
+      'noreply@seam.local';
+    this.httpFrom = { name: appName, email: fromEmail };
   }
 
   async send(options: SendMailOptions): Promise<boolean> {
@@ -84,29 +87,42 @@ export class MailService {
       } catch (err) {
         this.logger.warn(
           { err, to: options.to, subject: options.subject },
-          'SMTP send failed — trying Resend fallback',
+          'SMTP send failed — trying Brevo HTTP fallback',
         );
       }
     }
 
-    // ── Attempt 2: Resend HTTP API ──
-    if (this.resend) {
+    // ── Attempt 2: Brevo HTTP API ──
+    if (this.brevoApiKey) {
       try {
-        const { error } = await this.resend.emails.send({
-          from: this.httpFrom,
-          to: [options.to],
-          subject: options.subject,
-          text: options.text,
-          html: htmlContent,
+        const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'api-key': this.brevoApiKey,
+          },
+          body: JSON.stringify({
+            sender: this.httpFrom,
+            to: [{ email: options.to }],
+            subject: options.subject,
+            textContent: options.text,
+            htmlContent: htmlContent,
+          }),
         });
-        if (error) {
-          this.logger.error({ error, to: options.to }, 'Resend API returned error');
+
+        if (!response.ok) {
+          const errorBody = await response.text();
+          this.logger.error(
+            { status: response.status, body: errorBody, to: options.to },
+            'Brevo API returned error',
+          );
           return false;
         }
-        this.logger.log({ to: options.to, subject: options.subject }, 'Email sent via Resend');
+
+        this.logger.log({ to: options.to, subject: options.subject }, 'Email sent via Brevo');
         return true;
       } catch (err) {
-        this.logger.error({ err, to: options.to }, 'Resend HTTP fallback failed');
+        this.logger.error({ err, to: options.to }, 'Brevo HTTP fallback failed');
       }
     }
 
@@ -119,7 +135,7 @@ export class MailService {
   }
 
   isConfigured(): boolean {
-    return this.transporter !== null || this.resend !== null;
+    return this.transporter !== null || this.brevoApiKey !== null;
   }
 
   private getFrom(): string {
