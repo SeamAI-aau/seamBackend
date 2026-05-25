@@ -6,10 +6,10 @@ Meeting upload → **ai-engine-2** over HTTP; results return via **`POST /intern
 
 1. **Upload** – `POST /projects/:projectId/meetings` (multipart `file`)  
    Owner uploads audio → Cloudinary → meeting row (`UPLOADED`).  
-   **`AI_ENGINE_BASE_URL` is required**; Nest downloads the file from `audioUrl` and `POST`s to  
-   `{AI_ENGINE_BASE_URL}/api/v1/meetings/process-audio` with form fields **`meeting_id`**, **`project_id`**, and **`file`**.  
+   **`AI_ENGINE_BASE_URL` is required**; Nest sends the Cloudinary `audioUrl` to  
+   `{AI_ENGINE_BASE_URL}/api/v1/meetings/process-audio` with form fields **`meeting_id`**, **`project_id`**, and **`audio_url`**.  
    The engine returns **HTTP 202** immediately with a **`job_id`**, runs the pipeline **in the background**, then `POST`s transcript/tasks to Nest (`WORKER_SECRET` must match). Nest sets **`PROCESSING`** + `externalJobId` after 202; completion is via callback.  
-   Dispatch failure (non-202, missing `job_id`, network): **`FAILED`** + `lastProcessingError`. `AI_ENGINE_REQUEST_TIMEOUT_MS` bounds **download + upload until 202**, not full AI runtime.
+   Dispatch failure (non-202, missing `job_id`, network): **`FAILED`** + `lastProcessingError`. `AI_ENGINE_REQUEST_TIMEOUT_MS` bounds the request until 202, not full AI runtime.
 
 2. **Callback** – ai-engine-2 `POST`s to Nest:
 
