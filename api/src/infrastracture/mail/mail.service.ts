@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
+import { Resend } from 'resend';
 import { Logger } from 'nestjs-pino';
 
 export interface SendMailOptions {
@@ -13,74 +14,121 @@ export interface SendMailOptions {
 }
 
 /**
- * Professional email sender using Nodemailer.
- * Supports SMTP (Gmail, SendGrid, AWS SES, etc.). Gracefully no-ops when SMTP is not configured.
+ * Email sender with SMTP primary and Resend HTTP fallback.
+ * SMTP is tried first; if it times out or fails (e.g. port blocked on Render),
+ * we immediately retry via Resend's HTTPS API (port 443, never blocked).
  */
 @Injectable()
 export class MailService {
   private transporter: Transporter | null = null;
+  private resend: Resend | null = null;
+  private httpFrom: string;
 
   constructor(private readonly config: ConfigService, private readonly logger: Logger) {
+    // ── SMTP (primary) ──
     const host = this.config.get<string>('SMTP_HOST')?.trim();
     const user = this.config.get<string>('SMTP_USER')?.trim();
     const pass = this.normalizeSecret(this.config.get<string>('SMTP_PASS'));
+
     if (host && user && pass) {
       const port = Number(this.config.get<string>('SMTP_PORT') ?? 587);
       const secure =
         this.config.get<string>('SMTP_SECURE') === 'true' ||
         this.config.get<boolean>('SMTP_SECURE') === true ||
         port === 465;
+
+      const timeoutMs = Number(this.config.get<string>('SMTP_TIMEOUT_MS') ?? 7000);
+
       this.transporter = nodemailer.createTransport({
         host,
         port,
         secure,
-        auth: {
-          user,
-          pass,
-        },
+        auth: { user, pass },
+        connectionTimeout: timeoutMs,
+        greetingTimeout: timeoutMs,
+        socketTimeout: timeoutMs + 3000,
       });
-      this.logger.log('Mail service initialized with SMTP');
+      this.logger.log(`Mail service: SMTP configured (${host}:${port}, timeout ${timeoutMs}ms)`);
     } else {
-      this.logger.warn('SMTP not configured; emails will be logged only');
+      this.logger.warn('Mail service: SMTP not configured');
+    }
+
+    // ── HTTP email fallback (Resend) ──
+    const httpApiKey = this.config.get<string>('MAIL_HTTP_API_KEY')?.trim();
+    this.httpFrom =
+      this.config.get<string>('MAIL_HTTP_FROM')?.trim() || 'Seam AI <onboarding@resend.dev>';
+
+    if (httpApiKey) {
+      this.resend = new Resend(httpApiKey);
+      this.logger.log('Mail service: HTTP email fallback configured');
     }
   }
 
   async send(options: SendMailOptions): Promise<boolean> {
+    const from = this.getFrom();
+    const htmlContent = options.html ?? this.textToHtml(options.text);
+
+    // ── Attempt 1: SMTP ──
+    if (this.transporter) {
+      try {
+        await this.transporter.sendMail({
+          from,
+          to: options.to,
+          subject: options.subject,
+          text: options.text,
+          html: htmlContent,
+          replyTo: options.replyTo,
+        });
+        this.logger.log({ to: options.to, subject: options.subject }, 'Email sent via SMTP');
+        return true;
+      } catch (err) {
+        this.logger.warn(
+          { err, to: options.to, subject: options.subject },
+          'SMTP send failed — trying Resend fallback',
+        );
+      }
+    }
+
+    // ── Attempt 2: Resend HTTP API ──
+    if (this.resend) {
+      try {
+        const { error } = await this.resend.emails.send({
+          from: this.httpFrom,
+          to: [options.to],
+          subject: options.subject,
+          text: options.text,
+          html: htmlContent,
+        });
+        if (error) {
+          this.logger.error({ error, to: options.to }, 'Resend API returned error');
+          return false;
+        }
+        this.logger.log({ to: options.to, subject: options.subject }, 'Email sent via Resend');
+        return true;
+      } catch (err) {
+        this.logger.error({ err, to: options.to }, 'Resend HTTP fallback failed');
+      }
+    }
+
+    // ── Both failed or neither configured ──
+    this.logger.error(
+      { to: options.to, subject: options.subject },
+      'All email transports failed or none configured',
+    );
+    return false;
+  }
+
+  isConfigured(): boolean {
+    return this.transporter !== null || this.resend !== null;
+  }
+
+  private getFrom(): string {
     const from =
       this.config.get<string>('MAIL_FROM') ??
       this.config.get<string>('SMTP_USER') ??
       'noreply@seam.local';
     const appName = this.config.get<string>('APP_NAME') ?? 'Seam';
-
-    const mailOptions = {
-      from: `"${appName}" <${from}>`,
-      to: options.to,
-      subject: options.subject,
-      text: options.text,
-      html: options.html ?? this.textToHtml(options.text),
-      replyTo: options.replyTo,
-    };
-
-    if (!this.transporter) {
-      this.logger.warn(
-        { to: options.to, subject: options.subject },
-        '[Mail] SKIPPED: SMTP not configured',
-      );
-      return false;
-    }
-
-    try {
-      await this.transporter.sendMail(mailOptions);
-      this.logger.log({ to: options.to, subject: options.subject }, 'Email sent successfully');
-      return true;
-    } catch (err) {
-      this.logger.error({ err, to: options.to, subject: options.subject }, 'Failed to send email');
-      return false;
-    }
-  }
-
-  isConfigured(): boolean {
-    return this.transporter !== null;
+    return `"${appName}" <${from}>`;
   }
 
   /** Strip wrapping quotes from .env values (e.g. Gmail app passwords with spaces). */
