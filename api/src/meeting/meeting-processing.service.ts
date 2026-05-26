@@ -84,9 +84,10 @@ export class MeetingProcessingService {
     }
 
     const incomingTasks = this.resolveIncomingTasks(payload);
+    const normalizedPre = await this.normalizeNewTasks(incomingTasks, meeting.projectId);
     const normalizedTasks = await this.filterAssignableTaskAssignees(
       meeting.projectId,
-      this.normalizeNewTasks(incomingTasks),
+      normalizedPre,
     );
     const projectId = await this.persistTranscriptAndTasks(meetingId, payload, normalizedTasks);
     this.logger.log({ meetingId }, 'Transcript and tasks saved');
@@ -343,64 +344,74 @@ export class MeetingProcessingService {
     return filtered;
   }
 
-  private normalizeNewTasks(
+  private async normalizeNewTasks(
     tasks: Array<WorkerTaskPayload | WorkerTransitionedTaskPayload>,
-  ): Array<{
-    title: string;
-    description: string | null;
-    assigneeId: string | null;
-    confidenceScore: number | null;
-    jiraIssueKey: string | null;
-    jiraProposalAction: JiraProposalAction | null;
-    jiraProposalIssueKey: string | null;
-    jiraProposalTransitionId: string | null;
-    jiraProposalTargetStatus: string | null;
-  }> {
+    projectId?: string,
+  ): Promise<
+    Array<{
+      title: string;
+      description: string | null;
+      assigneeId: string | null;
+      confidenceScore: number | null;
+      jiraIssueKey: string | null;
+      jiraProposalAction: JiraProposalAction | null;
+      jiraProposalIssueKey: string | null;
+      jiraProposalTransitionId: string | null;
+      jiraProposalTargetStatus: string | null;
+    }>
+  > {
     if (!Array.isArray(tasks)) {
       return [];
     }
 
-    return tasks
-      .map((task) => {
-        if (!task || typeof task !== 'object') {
-          return null;
-        }
+    const out: Array<{
+      title: string;
+      description: string | null;
+      assigneeId: string | null;
+      confidenceScore: number | null;
+      jiraIssueKey: string | null;
+      jiraProposalAction: JiraProposalAction | null;
+      jiraProposalIssueKey: string | null;
+      jiraProposalTransitionId: string | null;
+      jiraProposalTargetStatus: string | null;
+    }> = [];
 
-        const taskPayload = task as WorkerTaskPayload;
-        const title = (taskPayload.title ?? '').trim();
-        const description = (taskPayload.description ?? '').trim();
-        const assigneeId = this.resolveAssigneeId(taskPayload.assigneeId, taskPayload.assignee);
-        const confidenceScore = this.normalizeConfidence(taskPayload.confidence);
-        const jiraIssueKey = typeof taskPayload.jiraIssueKey === 'string' && taskPayload.jiraIssueKey.trim()
+    for (const task of tasks) {
+      if (!task || typeof task !== 'object') continue;
+
+      const taskPayload = task as WorkerTaskPayload;
+      const title = (taskPayload.title ?? '').trim();
+      const description = (taskPayload.description ?? '').trim();
+      const assigneeId = await this.resolveAssigneeId(
+        taskPayload.assigneeId,
+        taskPayload.assignee,
+        projectId,
+      );
+      const confidenceScore = this.normalizeConfidence(taskPayload.confidence);
+      const jiraIssueKey =
+        typeof taskPayload.jiraIssueKey === 'string' && taskPayload.jiraIssueKey.trim()
           ? taskPayload.jiraIssueKey.trim()
           : typeof taskPayload.task_id === 'string' && taskPayload.task_id.trim()
-            ? taskPayload.task_id.trim()
-            : null;
-        const jiraProposal = deriveJiraProposal(taskPayload);
+          ? taskPayload.task_id.trim()
+          : null;
+      const jiraProposal = deriveJiraProposal(taskPayload);
 
-        return {
-          title: title || description || 'Extracted task',
-          description: description || null,
-          assigneeId,
-          confidenceScore,
-          jiraIssueKey,
-          jiraProposalAction: jiraProposal.jiraProposalAction,
-          jiraProposalIssueKey: jiraProposal.jiraProposalIssueKey,
-          jiraProposalTransitionId: jiraProposal.jiraProposalTransitionId,
-          jiraProposalTargetStatus: jiraProposal.jiraProposalTargetStatus,
-        };
-      })
-      .filter((task): task is {
-        title: string;
-        description: string | null;
-        assigneeId: string | null;
-        confidenceScore: number | null;
-        jiraIssueKey: string | null;
-        jiraProposalAction: JiraProposalAction | null;
-        jiraProposalIssueKey: string | null;
-        jiraProposalTransitionId: string | null;
-        jiraProposalTargetStatus: string | null;
-      } => Boolean(task && task.title.trim().length > 0));
+      const item = {
+        title: title || description || 'Extracted task',
+        description: description || null,
+        assigneeId,
+        confidenceScore,
+        jiraIssueKey,
+        jiraProposalAction: jiraProposal.jiraProposalAction,
+        jiraProposalIssueKey: jiraProposal.jiraProposalIssueKey,
+        jiraProposalTransitionId: jiraProposal.jiraProposalTransitionId,
+        jiraProposalTargetStatus: jiraProposal.jiraProposalTargetStatus,
+      };
+
+      if (item.title && item.title.trim().length > 0) out.push(item);
+    }
+
+    return out;
   }
 
   private resolveIncomingTasks(
@@ -419,16 +430,52 @@ export class MeetingProcessingService {
     return merged;
   }
 
-  private resolveAssigneeId(
+  private async resolveAssigneeId(
     assigneeId?: string,
     assignee?: string,
-  ): string | null {
+    projectId?: string,
+  ): Promise<string | null> {
     if (this.isUuid(assigneeId)) {
       return assigneeId!.trim();
     }
     if (this.isUuid(assignee)) {
       return assignee!.trim();
     }
+
+    if (!projectId || !assignee || typeof assignee !== 'string') return null;
+
+    const target = assignee.trim().toLowerCase();
+    if (!target) return null;
+
+    try {
+      const members = await this.projectRepo.findMembersByProject(projectId);
+      // First pass: exact name or exact email
+      for (const m of members) {
+        const user = (m as any).user;
+        if (!user) continue;
+        const name = (user.name || '').trim().toLowerCase();
+        const email = (user.email || '').trim().toLowerCase();
+        if (name && name === target) return user.id;
+        if (email && email === target) return user.id;
+      }
+
+      // Second pass: contains / token match (first/last or nickname)
+      for (const m of members) {
+        const user = (m as any).user;
+        if (!user) continue;
+        const name = (user.name || '').trim().toLowerCase();
+        const email = (user.email || '').trim().toLowerCase();
+        if (name && name.includes(target)) return user.id;
+        if (email && email.includes(target)) return user.id;
+        // match local-part of email (alice@ → 'alice')
+        const local = (email || '').split('@')[0];
+        if (local && local === target) return user.id;
+      }
+    } catch (err) {
+      this.logger.warn({ projectId, assignee, err }, 'Failed to resolve assignee name to project member');
+      return null;
+    }
+
     return null;
   }
 
