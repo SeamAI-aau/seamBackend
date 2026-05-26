@@ -1,12 +1,13 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { UserController } from './user.controller';
 import { UserService } from './user.service';
 import { USER_REPOSITORY } from './user.token';
 import { PrismaUserRepository } from '../prisma/repositories/prisma.user.repository';
 import { CloudinaryModule } from '../infrastracture/cloudinary/cloudinary.module';
+import { ProjectModule } from '../project/project.module';
 
 @Module({
-  imports: [CloudinaryModule],
+  imports: [CloudinaryModule, forwardRef(() => ProjectModule)],
   controllers: [UserController],
   providers: [
     UserService,

@@ -190,6 +190,74 @@ export class PrismaProjectRepository implements IProjectRepository {
     return !!membership;
   }
 
+  async canAssignTasksToUser(projectId: string, userId: string): Promise<boolean> {
+    if (await this.isOwner(projectId, userId)) {
+      return true;
+    }
+    return this.isMember(projectId, userId);
+  }
+
+  async findPendingInvitationsByEmail(email: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const rows = await this.prisma.projectMember.findMany({
+      where: {
+        email: normalizedEmail,
+        status: ProjectMemberStatus.PENDING,
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        project: { select: { id: true, name: true, ownerId: true } },
+      },
+    });
+
+    const ownerIds = [...new Set(rows.map((r) => r.project.ownerId))];
+    const owners =
+      ownerIds.length > 0
+        ? await this.prisma.user.findMany({
+            where: { id: { in: ownerIds } },
+            select: { id: true, name: true },
+          })
+        : [];
+    const ownerNameById = new Map(owners.map((o) => [o.id, o.name]));
+
+    return rows.map((row) => ({
+      memberId: row.id,
+      projectId: row.project.id,
+      projectName: row.project.name,
+      email: row.email,
+      inviterName: ownerNameById.get(row.project.ownerId) ?? null,
+    }));
+  }
+
+  async acceptAllPendingInvitesForUser(userId: string, email: string): Promise<number> {
+    const normalizedEmail = email.trim().toLowerCase();
+    const pending = await this.prisma.projectMember.findMany({
+      where: {
+        email: normalizedEmail,
+        status: ProjectMemberStatus.PENDING,
+      },
+      select: { projectId: true },
+    });
+
+    let accepted = 0;
+    for (const row of pending) {
+      const alreadyActive = await this.isMember(row.projectId, userId);
+      if (alreadyActive) {
+        await this.prisma.projectMember.deleteMany({
+          where: {
+            projectId: row.projectId,
+            email: normalizedEmail,
+            status: ProjectMemberStatus.PENDING,
+          },
+        });
+        continue;
+      }
+      await this.acceptInvite(row.projectId, normalizedEmail, userId);
+      accepted += 1;
+    }
+    return accepted;
+  }
+
   async findProjectIdsWithGithubRepo(): Promise<string[]> {
     const projects = await this.prisma.project.findMany({
       where: { githubRepoUrl: { not: null } },

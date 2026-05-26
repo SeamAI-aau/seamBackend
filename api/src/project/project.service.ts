@@ -124,6 +124,15 @@ export class ProjectService {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+    const owner = await this.userRepo.findById(ownerId);
+    if (owner && owner.email.trim().toLowerCase() === normalizedEmail) {
+      throw new AppException(
+        ErrorCode.VALIDATION_ERROR,
+        'You cannot invite yourself to your own project',
+        400,
+      );
+    }
+
     const existingByEmail = await this.projectRepo.findMemberByProjectAndEmail(
       projectId,
       normalizedEmail,
@@ -152,21 +161,6 @@ export class ProjectService {
       normalizedEmail,
       undefined,
     );
-    this.activityLog
-      .log({
-        projectId,
-        userId: ownerId,
-        action: pending ? 'invitation.sent' : 'member.added',
-        entityType: 'ProjectMember',
-        entityId: member.id,
-        metadata: { email: normalizedEmail, pending },
-      })
-      .catch((error) => {
-        this.logger.warn(
-          { projectId, ownerId, err: error },
-          'Failed to write activity log for addMemberByEmail',
-        );
-      });
 
     if (pending && project) {
       const appUrl =
@@ -210,6 +204,22 @@ export class ProjectService {
           : 'Email is not configured on the server (SMTP_HOST / SMTP_USER / SMTP_PASS).';
         throw new AppException(ErrorCode.INTERNAL_SERVER_ERROR, smtpHint, 500);
       }
+
+      this.activityLog
+        .log({
+          projectId,
+          userId: ownerId,
+          action: 'invitation.sent',
+          entityType: 'ProjectMember',
+          entityId: member.id,
+          metadata: { email: normalizedEmail, pending: true },
+        })
+        .catch((error) => {
+          this.logger.warn(
+            { projectId, ownerId, err: error },
+            'Failed to write activity log for addMemberByEmail',
+          );
+        });
     }
     return {
       id: member.id,
@@ -286,6 +296,49 @@ export class ProjectService {
         });
     }
     return result;
+  }
+
+  async declineInvite(projectId: string, userId: string, inviteEmail: string) {
+    const normalizedEmail = inviteEmail.trim().toLowerCase();
+    const user = await this.userRepo.findById(userId);
+    if (!user || user.email.trim().toLowerCase() !== normalizedEmail) {
+      throw new AppException(
+        ErrorCode.FORBIDDEN,
+        'You can only decline an invitation sent to your own email',
+        403,
+      );
+    }
+
+    const pending = await this.projectRepo.findPendingInvite(projectId, normalizedEmail);
+    if (!pending) {
+      throw new AppException(
+        ErrorCode.NOT_FOUND,
+        'No pending invitation found for this email',
+        404,
+      );
+    }
+
+    await this.projectRepo.deleteMember(pending.id);
+    return { message: 'Invitation declined' };
+  }
+
+  async getMyInvitations(userId: string) {
+    const user = await this.userRepo.findById(userId);
+    if (!user?.email) {
+      return { items: [] };
+    }
+
+    const items = await this.projectRepo.findPendingInvitationsByEmail(user.email);
+    return {
+      items: items.map((row) => ({
+        projectId: row.projectId,
+        projectName: row.projectName,
+        email: row.email,
+        inviterName: row.inviterName,
+        memberId: row.memberId,
+        status: 'PENDING' as const,
+      })),
+    };
   }
 
   async removeMember(projectId: string, memberId: string, requesterId: string) {
@@ -486,6 +539,7 @@ export class ProjectService {
               githubUsername: owner.githubUsername ?? null,
               projectRole: 'owner' as const,
               status: 'ACTIVE' as const,
+              canAssignTasks: true,
               ...mapIntegrationFlags(owner.id, owner.githubUsername),
             },
           ]
@@ -501,6 +555,7 @@ export class ProjectService {
           githubUsername: row.user?.githubUsername ?? null,
           projectRole: 'member' as const,
           status: row.status,
+          canAssignTasks: row.status === 'ACTIVE' && row.userId != null,
           ...(row.userId
             ? mapIntegrationFlags(row.userId, row.user?.githubUsername ?? null)
             : { githubMapped: false, jiraMapped: false }),

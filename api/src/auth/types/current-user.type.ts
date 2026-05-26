@@ -4,4 +4,5 @@ export interface CurrentUserType {
   userId: string;
   email: string;
   role: Role;
+  emailVerified: boolean;
 }

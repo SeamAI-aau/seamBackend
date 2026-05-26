@@ -5,6 +5,8 @@
   "scripts": {
     "postinstall": "prisma generate --schema api/src/prisma/schema.prisma",
     "build:api": "nx run api:build",
+    "db:migrate:deploy": "cd api && prisma migrate deploy",
+    "start:api": "node api/dist/main.js",
     "serve:api": "nx serve api"
   },
   "private": true,
@@ -49,6 +51,7 @@
     "api-e2e"
   ],
   "dependencies": {
+    "@getbrevo/brevo": "^5.0.4",
     "@nestjs/bullmq": "^11.0.4",
     "@nestjs/common": "^11.0.0",
     "@nestjs/config": "^4.0.3",

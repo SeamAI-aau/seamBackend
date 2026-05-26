@@ -1,11 +1,11 @@
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import cookieParser from 'cookie-parser';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import type { ComponentsObject, SecuritySchemeObject } from 'openapi3-ts';
-import { buildHttpCorsOptions } from './common/config/cors.config';
+import { buildHttpCorsOptions, parseCorsOrigins } from './common/config/cors.config';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -15,6 +15,16 @@ async function bootstrap() {
   });
 
   app.set('trust proxy', 1);
+
+  const corsAllowlist = parseCorsOrigins(process.env.CORS_ORIGINS);
+  const devOpenCors =
+    corsAllowlist.length === 0 && process.env.NODE_ENV !== 'production';
+  Logger.log(
+    devOpenCors
+      ? 'CORS: allowing all origins (non-production, empty allowlist)'
+      : `CORS allowlist (${corsAllowlist.length}): ${corsAllowlist.join(', ')}`,
+    'Bootstrap',
+  );
 
   app.enableCors({
     ...buildHttpCorsOptions(process.env.CORS_ORIGINS),
@@ -41,7 +51,7 @@ async function bootstrap() {
         '',
         '- Set **`CORS_ORIGINS`** and **`FRONTEND_URL`** to your dashboard origin(s).',
         '- Set **`AUTH_COOKIE_CROSS_SITE=true`** when the API and dashboard are on different hosts (HTTPS required).',
-        '- Login/register/refresh set **httpOnly cookies** and return **tokens in the JSON body** for `Authorization: Bearer` on cross-origin clients.',
+        '- Login/register/refresh set **httpOnly cookies** (`accessToken`, `refreshToken`). Send requests with credentials so the browser includes them.',
         '',
         '### Chrome extension (Phase 9)',
         '',

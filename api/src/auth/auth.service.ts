@@ -26,6 +26,7 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { AuthMailService } from './auth-mail.service';
 import {
   EMAIL_VERIFICATION_TTL_MS,
+  EMAIL_VERIFICATION_MAX_ATTEMPTS,
   PASSWORD_RESET_TTL_MS,
 } from './constants/auth-token.constants';
 import { StringValue } from 'ms';
@@ -56,13 +57,16 @@ export class AuthService {
 
     const saltRounds = parseInt(this.configService.get<string>('BCRYPT_SALT_ROUNDS') ?? '10', 10);
     const passwordHash = await hash(dto.password, saltRounds);
+    const role =
+      dto.registrationIntent === 'scrum_master' ? Role.SCRUM_MASTER : Role.DEVELOPER;
+
     const user = await this.userRepo.create({
       email,
       name: dto.name,
       passwordHash,
-      ...(dto.role !== undefined ? { role: dto.role } : {}),
+      role,
     });
-    await this.issueAndStoreEmailVerificationToken(user.id, user.email, user.name);
+    await this.issueAndStoreEmailVerificationCode(user.id, user.email, user.name);
 
     this.logger.log('User registered successfully', { userId: user.id });
 
@@ -154,6 +158,19 @@ export class AuthService {
 
     this.logger.log({ email, userId: user.id, step: 'login.password_ok' }, 'Login: password valid');
 
+    if (!user.emailVerifiedAt) {
+      this.logger.warn(
+        { email, userId: user.id, step: 'login.email_not_verified' },
+        'Login blocked: email not verified',
+      );
+      await this.issueAndStoreEmailVerificationCode(user.id, user.email, user.name ?? '');
+      throw new UnauthorizedException({
+        code: ErrorCode.EMAIL_NOT_VERIFIED,
+        message: 'Please verify your email before signing in. A new code has been sent.',
+        details: { email: user.email, requiresVerification: true },
+      });
+    }
+
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
@@ -214,34 +231,47 @@ export class AuthService {
     this.logger.log('User logged out, all refresh tokens revoked', { userId });
   }
 
-  /** Verify email via link token; returns redirect path on frontend */
-  async verifyEmail(rawToken: string): Promise<{ redirectPath: string }> {
-    const userId = await this.consumeAuthToken(rawToken, AUTH_TOKEN_TYPE.EMAIL_VERIFICATION);
-    if (!userId) {
+  /** Verify email via 6-digit code */
+  async verifyEmailWithCode(email: string, code: string): Promise<{ message: string }> {
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await this.userRepo.findByEmail(normalizedEmail);
+    if (!user) {
       throw new BadRequestException({
         code: ErrorCode.INVALID_AUTH_TOKEN,
-        message: 'This verification link is invalid or has already been used.',
+        message: 'Invalid verification code.',
+      });
+    }
+
+    if (user.emailVerifiedAt) {
+      return { message: 'Email is already verified' };
+    }
+
+    const userId = await this.consumeAuthToken(code, AUTH_TOKEN_TYPE.EMAIL_VERIFICATION);
+    if (!userId || userId !== user.id) {
+      throw new BadRequestException({
+        code: ErrorCode.INVALID_AUTH_TOKEN,
+        message: 'Invalid or expired verification code. Please request a new one.',
       });
     }
 
     await this.userRepo.markEmailVerified(userId);
-    const redirectPath = await this.resolveDashboardPath(userId);
-    this.logger.log('Email verified', { userId, redirectPath });
-    return { redirectPath };
+    this.logger.log('Email verified via code', { userId });
+    return { message: 'Email verified successfully' };
   }
 
-  /** Resend verification email for authenticated user */
-  async resendVerificationEmail(userId: string): Promise<{ message: string }> {
-    const user = await this.userRepo.findById(userId);
+  /** Resend verification code for a given email (no auth required — used pre-login) */
+  async resendVerificationCode(email: string): Promise<{ message: string }> {
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await this.userRepo.findByEmail(normalizedEmail);
     if (!user) {
-      throw new UnauthorizedException({ code: ErrorCode.UNAUTHORIZED, message: 'Unauthorized' });
+      return { message: 'If an account exists, a verification code has been sent.' };
     }
     if (user.emailVerifiedAt) {
       return { message: 'Email is already verified' };
     }
 
-    await this.issueAndStoreEmailVerificationToken(user.id, user.email, user.name);
-    return { message: 'Verification email sent' };
+    await this.issueAndStoreEmailVerificationCode(user.id, user.email, user.name ?? '');
+    return { message: 'Verification code sent' };
   }
 
   /** Forgot password — always returns success message (no email enumeration) */
@@ -291,6 +321,13 @@ export class AuthService {
       throw new UnauthorizedException({ code: ErrorCode.UNAUTHORIZED, message: 'Unauthorized' });
     }
 
+    if (!user.passwordHash) {
+      throw new BadRequestException({
+        code: ErrorCode.VALIDATION_ERROR,
+        message: 'This account uses OAuth sign-in and has no password to change.',
+      });
+    }
+
     const valid = await compare(dto.currentPassword, user.passwordHash);
     if (!valid) {
       throw new UnauthorizedException({
@@ -307,21 +344,21 @@ export class AuthService {
     return { message: 'Password changed successfully. Please sign in again on other devices.' };
   }
 
-  private async issueAndStoreEmailVerificationToken(
+  private async issueAndStoreEmailVerificationCode(
     userId: string,
     email: string,
     name: string,
   ): Promise<void> {
-    const rawToken = randomBytes(32).toString('hex');
-    const tokenHash = await hash(rawToken, 10);
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const codeHash = await hash(code, 10);
     await this.userRepo.deleteAuthTokensByUserAndType(userId, AUTH_TOKEN_TYPE.EMAIL_VERIFICATION);
     await this.userRepo.createAuthToken({
       userId,
-      tokenHash,
+      tokenHash: codeHash,
       type: AUTH_TOKEN_TYPE.EMAIL_VERIFICATION,
       expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS),
     });
-    await this.authMail.sendEmailVerification(email, name, rawToken);
+    await this.authMail.sendEmailVerificationCode(email, name, code);
   }
 
   private async consumeAuthToken(rawToken: string, type: AuthTokenPurpose): Promise<string | null> {

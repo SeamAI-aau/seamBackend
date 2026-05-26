@@ -98,9 +98,10 @@
     "passport-jwt": "^4.0.1",
     "prisma": "^6.19.2",
     "reflect-metadata": "^0.1.13",
+    "resend": "^6.12.3",
     "rxjs": "^7.8.0",
-    "swagger-ui-express": "^5.0.1",
     "socket.io": "^4.8.1",
+    "swagger-ui-express": "^5.0.1",
     "tslib": "^2.3.0"
   },
   "devDependencies": {

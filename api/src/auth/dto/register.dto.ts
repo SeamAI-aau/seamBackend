@@ -1,10 +1,9 @@
-import { IsEmail, IsString, MinLength, IsOptional, Matches } from 'class-validator';
+import { IsEmail, IsString, MinLength, IsOptional, Matches, IsIn } from 'class-validator';
 import {
   PASSWORD_MIN_LENGTH,
   PASSWORD_PATTERN,
   PASSWORD_PATTERN_MESSAGE,
 } from '../constants/password.constants';
-import { Role } from '@prisma/client';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class RegisterDto {
@@ -33,10 +32,12 @@ export class RegisterDto {
   password!: string;
 
   @ApiPropertyOptional({
-    enum: Role,
-    example: Role.SCRUM_MASTER,
-    description: 'Optional role; defaults to DEVELOPER when omitted.',
+    enum: ['scrum_master'],
+    example: 'scrum_master',
+    description:
+      'Set to `scrum_master` only from the Scrum Master sign-up flow. All other registrations are developers.',
   })
   @IsOptional()
-  role?: Role;
+  @IsIn(['scrum_master'])
+  registrationIntent?: 'scrum_master';
 }
