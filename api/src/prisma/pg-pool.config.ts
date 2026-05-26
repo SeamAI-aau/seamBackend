@@ -77,7 +77,10 @@ export function createPgPoolConfig(): PoolConfig {
   }
 
   const { connectionString, sslmode } = stripSslQueryParams(rawUrl);
-  const config: PoolConfig = { connectionString };
+  const config: PoolConfig = {
+    connectionString,
+    max: parseInt(process.env.DATABASE_POOL_SIZE ?? '5', 10),
+  };
 
   if (!connectionUsesTls(sslmode)) {
     return config;

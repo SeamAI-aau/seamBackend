@@ -34,6 +34,8 @@ function resolveApiEnvFilePaths(): string[] {
         DATABASE_SSL_CA_PATH: Joi.string().optional().allow(''),
         DATABASE_SSL: Joi.string().valid('true', 'false').optional(),
         DATABASE_SSL_REJECT_UNAUTHORIZED: Joi.string().valid('true', 'false').optional(),
+        /** Max pg Pool connections per process. Keep total across all pods ≤ Aiven max_connections. Default 5. */
+        DATABASE_POOL_SIZE: Joi.number().integer().min(1).max(50).optional(),
 
         CLOUDINARY_CLOUD_NAME: Joi.string().required(),
         CLOUDINARY_API_KEY: Joi.string().required(),
