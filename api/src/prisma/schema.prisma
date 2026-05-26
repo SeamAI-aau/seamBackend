@@ -116,6 +116,8 @@ model Transcript {
   version     Int
   content     String
   diarization Json
+  insights    Json?
+  suggestedActions Json?
   createdAt   DateTime @default(now())
   tasks       Task[]
   meeting     Meeting  @relation(fields: [meetingId], references: [id])

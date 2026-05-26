@@ -67,7 +67,7 @@ function resolveApiEnvFilePaths(): string[] {
 
         /** Base URL of ai-engine-2 (e.g. `http://localhost:8000`). Required for meeting uploads. */
         AI_ENGINE_BASE_URL: Joi.string().trim().optional().allow(''),
-        /** Max time (ms) for meeting dispatch: Cloudinary download + multipart POST to ai-engine until 202. Not full pipeline (that runs on the engine and completes via webhook). Default 10 minutes for large uploads. */
+        /** Max time (ms) for meeting dispatch: request to ai-engine until 202. Not full pipeline (that runs on the engine and completes via webhook). Default 10 minutes for large uploads. */
         AI_ENGINE_REQUEST_TIMEOUT_MS: Joi.number().integer().min(5000).max(3_600_000).optional(),
 
         WORKER_SECRET: Joi.string().min(1).optional(),

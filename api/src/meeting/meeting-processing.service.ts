@@ -258,12 +258,19 @@ export class MeetingProcessingService {
       const nextVersion = latest ? latest.version + 1 : 1;
 
       const transcriptContent = typeof payload.transcript === 'string' ? payload.transcript : '';
+      const insights = this.normalizeStringList(payload.insights);
+      const suggestedActions = this.normalizeStringList(payload.suggested_actions);
       const transcript = await tx.transcript.create({
         data: {
           meetingId,
           version: nextVersion,
           content: transcriptContent,
           diarization: {} as Prisma.InputJsonValue,
+          insights: insights.length > 0 ? (insights as Prisma.InputJsonValue) : null,
+          suggestedActions:
+            suggestedActions.length > 0
+              ? (suggestedActions as Prisma.InputJsonValue)
+              : null,
         },
       });
 
@@ -431,6 +438,15 @@ export class MeetingProcessingService {
     }
     const parsed = Number(confidence);
     return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private normalizeStringList(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value
+      .map((item) => (item == null ? '' : String(item)).trim())
+      .filter((item) => item.length > 0);
   }
 
   private isUuid(value?: string): boolean {

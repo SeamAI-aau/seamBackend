@@ -6,21 +6,11 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const PROCESSING_ENGINE_AI = 'ai-engine-2';
 
-function filenameForAudioContentType(contentType: string): string {
-  const mime = (contentType || '').toLowerCase();
-  if (mime.includes('webm')) return 'meeting.webm';
-  if (mime.includes('mpeg') || mime.includes('mp3')) return 'meeting.mp3';
-  if (mime.includes('wav')) return 'meeting.wav';
-  if (mime.includes('mp4') || mime.includes('m4a')) return 'meeting.m4a';
-  if (mime.includes('ogg')) return 'meeting.ogg';
-  return 'meeting-audio.bin';
-}
-
 /**
  * Dispatches uploaded meeting audio to ai-engine-2
  * (`POST /api/v1/meetings/process-audio`). Requires `AI_ENGINE_BASE_URL`.
  *
- * The engine returns **202 Accepted** quickly after accepting the file; it runs
+ * The engine returns **202 Accepted** quickly after accepting the URL; it runs
  * transcription/NLP in the background and POSTs results to
  * `POST /internal/meetings/:id/result`. Nest only waits for download + upload
  * (bounded by `AI_ENGINE_REQUEST_TIMEOUT_MS`), not for full processing.
@@ -39,8 +29,8 @@ export class MeetingAiDispatchService {
   }
 
   /**
-   * Downloads audio from `audioUrl` (e.g. Cloudinary), POSTs multipart to ai-engine-2
-   * `POST /api/v1/meetings/process-audio` with `meeting_id`, `project_id`, `file`.
+   * Sends Cloudinary `audioUrl` to ai-engine-2 `POST /api/v1/meetings/process-audio`
+   * with `meeting_id`, `project_id`, `audio_url`.
    * Expects **HTTP 202** + JSON `{ status, meeting_id, project_id, job_id }`.
    * Sets meeting **PROCESSING**, `externalJobId` = `job_id`, handoff timestamps;
    * on failure sets **FAILED** and `lastProcessingError`.
@@ -51,7 +41,7 @@ export class MeetingAiDispatchService {
     audioUrl: string;
   }): Promise<void> {
     const baseUrl = this.config.get<string>('AI_ENGINE_BASE_URL')?.trim()?.replace(/\/$/, '');
-    /** Covers Cloudinary download + multipart upload to engine until 202 (not full AI runtime). */
+    /** Covers request to the engine until 202 (not full AI runtime). */
     const dispatchTimeoutMs = this.config.get<number>('AI_ENGINE_REQUEST_TIMEOUT_MS') ?? 600_000;
     if (!baseUrl) {
       return;
@@ -61,23 +51,10 @@ export class MeetingAiDispatchService {
     const startedAt = new Date();
 
     try {
-      const audioRes = await fetch(params.audioUrl, {
-        signal: AbortSignal.timeout(dispatchTimeoutMs),
-      });
-      if (!audioRes.ok) {
-        throw new Error(`Failed to download meeting audio: HTTP ${audioRes.status}`);
-      }
-
-      const arrayBuffer = await audioRes.arrayBuffer();
-      const contentType =
-        audioRes.headers.get('content-type') || 'application/octet-stream';
-      const filename = filenameForAudioContentType(contentType);
-      const blob = new Blob([arrayBuffer], { type: contentType });
-
       const form = new FormData();
       form.append('meeting_id', params.meetingId);
       form.append('project_id', params.projectId);
-      form.append('file', blob, filename);
+      form.append('audio_url', params.audioUrl);
 
       const postRes = await fetch(processUrl, {
         method: 'POST',

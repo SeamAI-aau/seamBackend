@@ -98,6 +98,8 @@ export interface WorkerResultPayload {
   /** Blockers extracted from transcript by NLP; persisted and exposed next to GitHub blockers. */
   blockers?: WorkerBlockerPayload[];
   summary?: WorkerSummaryPayload;
+  insights?: string[];
+  suggested_actions?: string[];
   error?: string;
 }
 
@@ -360,6 +362,24 @@ export class WorkerResultBodyDto {
   @ValidateNested()
   @Type(() => WorkerSummaryBodyDto)
   summary?: WorkerSummaryBodyDto;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'High-level insights derived from the meeting transcript.',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  insights?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Suggested next actions for the team based on the transcript.',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  suggested_actions?: string[];
 
   @ApiPropertyOptional({ description: 'Human-readable failure reason when status is failed.' })
   @ValidateIf((o: WorkerResultBodyDto) => o.status === 'failed')
