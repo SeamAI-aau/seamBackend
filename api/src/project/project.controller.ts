@@ -409,12 +409,10 @@ export class ProjectController {
   }
 
   @Get(':id/blockers')
-  @UseGuards(RolesGuard)
-  @Roles(Role.SCRUM_MASTER)
   @ApiOperation({
-    summary: 'List project blockers (Scrum Master only)',
+    summary: 'List project blockers',
     description:
-      'Unified, paginated list of GitHub and transcript blockers for the project, with optional filters.',
+      'Unified, paginated list of GitHub and transcript blockers for the project, with optional filters. Accessible to project owners and members.',
   })
   @ApiOkResponse({
     description: 'Paginated list of unified blockers.',

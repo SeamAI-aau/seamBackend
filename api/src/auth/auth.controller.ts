@@ -3,7 +3,6 @@ import {
   Controller,
   Get,
   Post,
-  Query,
   UseGuards,
   Res,
   Req,
@@ -285,30 +284,30 @@ export class AuthController {
     return { message: 'Session cleared' };
   }
 
-  @Get('verify-email')
-  @ApiOperation({ summary: 'Verify email from link and redirect to the dashboard' })
-  async verifyEmail(@Query('token') token: string, @Res() res: Response) {
-    if (!token?.trim()) {
+  @Post('verify-email')
+  @ApiOperation({ summary: 'Verify email with a 6-digit code' })
+  @UseGuards(new AuthThrottleGuard(10, 60_000))
+  verifyEmail(@Body() body: { email: string; code: string }) {
+    if (!body.email?.trim() || !body.code?.trim()) {
       throw new BadRequestException({
         code: ErrorCode.VALIDATION_ERROR,
-        message: 'Verification token is required',
+        message: 'Email and verification code are required',
       });
     }
-
-    const { redirectPath } = await this.authService.verifyEmail(token);
-    const base = this.authMail.getFrontendBaseUrl();
-    const separator = redirectPath.includes('?') ? '&' : '?';
-    res.redirect(`${base}${redirectPath}${separator}emailVerified=1`);
+    return this.authService.verifyEmailWithCode(body.email, body.code);
   }
 
   @Post('resend-verification')
-  @ApiOperation({ summary: 'Resend email verification for the current user' })
-  @ApiBearerAuth('access-token')
-  @ApiCookieAuth('access-cookie')
-  @UseGuards(JwtAuthGuard, new AuthThrottleGuard(5, 60_000))
-  @SkipEmailVerification()
-  resendVerification(@CurrentUser() user: CurrentUserType) {
-    return this.authService.resendVerificationEmail(user.userId);
+  @ApiOperation({ summary: 'Resend verification code to the given email' })
+  @UseGuards(new AuthThrottleGuard(3, 60_000))
+  resendVerification(@Body() body: { email: string }) {
+    if (!body.email?.trim()) {
+      throw new BadRequestException({
+        code: ErrorCode.VALIDATION_ERROR,
+        message: 'Email is required',
+      });
+    }
+    return this.authService.resendVerificationCode(body.email);
   }
 
   @Post('forgot-password')

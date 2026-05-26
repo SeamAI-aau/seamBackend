@@ -72,9 +72,7 @@ export class AuthMailService {
 
 
 
-  async sendEmailVerification(to: string, name: string, rawToken: string): Promise<boolean> {
-
-    const verifyUrl = `${this.getApiBaseUrl()}/auth/verify-email?token=${encodeURIComponent(rawToken)}`;
+  async sendEmailVerificationCode(to: string, name: string, code: string): Promise<boolean> {
 
     const appName = this.getAppName();
 
@@ -86,7 +84,7 @@ export class AuthMailService {
 
       to,
 
-      subject: `${appName}: Verify your email`,
+      subject: `${appName}: Your verification code is ${code}`,
 
       text: [
 
@@ -94,9 +92,11 @@ export class AuthMailService {
 
         '',
 
-        `Welcome to ${appName}. Tap the link in this email to verify your address (expires in 24 hours).`,
+        `Your ${appName} verification code is: ${code}`,
 
-        verifyUrl,
+        '',
+
+        'Enter this code in the app to verify your email address. It expires in 10 minutes.',
 
         '',
 
@@ -116,19 +116,13 @@ export class AuthMailService {
 
         greeting,
 
-        headline: 'Verify your email',
+        headline: 'Your verification code',
 
-        body: `Welcome to ${appName}. Confirm your email to secure your account and continue using the dashboard.`,
+        body: 'Enter the following code in the app to verify your email address:',
 
-        action: {
+        rawHtmlInsert: `<div style="margin: 24px 0; text-align: center;"><span style="display: inline-block; font-size: 32px; font-weight: 700; letter-spacing: 6px; padding: 16px 32px; background: #f0f4fa; border-radius: 8px; color: #1a2233;">${code}</span></div><p style="margin: 0; font-size: 14px; color: #6b7280;">This code expires in 10 minutes.</p>`,
 
-          label: 'Verify email',
-
-          href: verifyUrl,
-
-        },
-
-        footerNote: 'This link expires in 24 hours.',
+        footerNote: 'If you did not create this account, ignore this email.',
 
       }),
 

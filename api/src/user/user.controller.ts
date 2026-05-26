@@ -1,7 +1,10 @@
 import {
   Controller,
+  Delete,
   Get,
+  Param,
   Patch,
+  Post,
   Body,
   Query,
   UseGuards,
@@ -336,5 +339,45 @@ export class UserController {
   })
   getDevelopers(@CurrentUser() user: CurrentUserType, @Query() query: PaginationQueryDto) {
     return this.userService.getDevelopers(user, query.page ?? 1, query.limit ?? 20);
+  }
+
+  @Get('me/owned-projects')
+  @ApiOperation({ summary: 'List projects owned by the current user (with members for transfer)' })
+  @ApiOkResponse({ description: 'Owned projects with their active members.' })
+  getOwnedProjects(@CurrentUser() user: CurrentUserType) {
+    return this.userService.getOwnedProjects(user.userId);
+  }
+
+  @Post('me/transfer-ownership')
+  @ApiOperation({ summary: 'Transfer project ownership to another member' })
+  @ApiOkResponse({ description: 'Ownership transferred successfully.' })
+  @ApiBadRequestResponse({ description: 'New owner must be an active member.' })
+  transferOwnership(
+    @CurrentUser() user: CurrentUserType,
+    @Body() body: { projectId: string; newOwnerUserId: string },
+  ) {
+    return this.userService.transferOwnership(user.userId, body.projectId, body.newOwnerUserId);
+  }
+
+  @Post('me/leave-project/:projectId')
+  @ApiOperation({ summary: 'Leave a project' })
+  @ApiOkResponse({ description: 'Left the project successfully.' })
+  @ApiBadRequestResponse({ description: 'Cannot leave if you are the project owner.' })
+  leaveProject(
+    @CurrentUser() user: CurrentUserType,
+    @Param('projectId') projectId: string,
+  ) {
+    return this.userService.leaveProject(user.userId, projectId);
+  }
+
+  @Delete('me')
+  @ApiOperation({ summary: 'Permanently delete your account' })
+  @ApiOkResponse({ description: 'Account deleted.' })
+  @ApiBadRequestResponse({ description: 'Must transfer/leave all projects first.' })
+  deleteAccount(
+    @CurrentUser() user: CurrentUserType,
+    @Body() body: { password: string },
+  ) {
+    return this.userService.deleteAccount(user.userId, body.password);
   }
 }
