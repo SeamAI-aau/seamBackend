@@ -22,6 +22,9 @@ const disableQueues = process.env.DISABLE_QUEUES === 'true';
               ...(config.get<string>('REDIS_PASSWORD')
                 ? { password: config.get<string>('REDIS_PASSWORD') }
                 : {}),
+              ...(config.get<string>('REDIS_TLS') === 'true'
+                ? { tls: {} }
+                : {}),
             },
           }),
         }),
