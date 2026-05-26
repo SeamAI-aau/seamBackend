@@ -13,6 +13,8 @@ export interface TranscriptDto {
   version: number;
   content: string;
   diarization: unknown;
+  insights?: string[] | null;
+  suggestedActions?: string[] | null;
   createdAt: Date;
 }
 

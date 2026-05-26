@@ -144,6 +144,8 @@ export class MeetingController {
             version: 1,
             content: 'Speaker A: Hello...',
             diarization: { segments: [] },
+            insights: ['Delivery risk around OAuth fix', 'Team aligned on next sprint scope'],
+            suggestedActions: ['Confirm API contract with partner team', 'Assign QA owner for OAuth regression'],
             createdAt: '2026-05-14T12:05:00.000Z',
           },
         ],
