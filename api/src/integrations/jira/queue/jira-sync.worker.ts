@@ -9,6 +9,8 @@ const prisma = new PrismaClient();
 const connection = {
   host: process.env.REDIS_HOST ?? 'localhost',
   port: Number(process.env.REDIS_PORT ?? 6379),
+  ...(process.env.REDIS_PASSWORD ? { password: process.env.REDIS_PASSWORD } : {}),
+  ...(process.env.REDIS_TLS === 'true' ? { tls: {} } : {}),
 };
 
 new Worker(
@@ -50,13 +52,29 @@ new Worker(
 
     const projectKey = task.meeting.project.jiraProjectKey;
 
+    const descriptionAdf = {
+      type: 'doc',
+      version: 1,
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: task.description || 'No description provided.',
+            },
+          ],
+        },
+      ],
+    };
+
     const response = await axios.post(
       `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/issue`,
       {
         fields: {
           project: { key: projectKey },
           summary: task.title,
-          description: task.description || '',
+          description: descriptionAdf,
           issuetype: { name: 'Task' },
         },
       },

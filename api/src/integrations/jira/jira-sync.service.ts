@@ -95,13 +95,29 @@ export class JiraSyncService {
     const url = `https://api.atlassian.com/ex/jira/${cloudId}${JIRA_API_ISSUE_PATH}`;
 
     try {
+      const descriptionAdf = {
+        type: 'doc',
+        version: 1,
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: task.description || 'No description provided.',
+              },
+            ],
+          },
+        ],
+      };
+
       const response = await axios.post<JiraCreateIssueResponse>(
         url,
         {
           fields: {
             project: { key: projectKey },
             summary: task.title,
-            description: task.description ?? '',
+            description: descriptionAdf,
             issuetype: { name: 'Task' },
           },
         },
