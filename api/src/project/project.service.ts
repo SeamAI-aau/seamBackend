@@ -639,6 +639,7 @@ export class ProjectService {
       recentMeetingsData,
       githubBlockersData,
       transcriptBlockersData,
+      latestMeetingInsights,
     ] = await Promise.all([
       this.prisma.task.groupBy({
         by: ['status'],
@@ -696,6 +697,7 @@ export class ProjectService {
         }),
         this.prisma.transcriptBlocker.count({ where: { projectId } }),
       ]),
+      this.getLatestMeetingInsights(meetingWhere),
     ]);
 
     const [recentTasks, recentTasksTotal] = recentTasksData;
@@ -763,6 +765,7 @@ export class ProjectService {
           totalPages: Math.ceil(transcriptBlockersTotal / blockersLimit) || 1,
         },
       },
+      latestMeetingInsights,
     };
   }
 
@@ -813,6 +816,7 @@ export class ProjectService {
       recentMeetingsTotal,
       githubBlockers,
       transcriptBlockers,
+      latestMeetingInsights,
     ] = await Promise.all([
       this.prisma.task.groupBy({
         by: ['status'],
@@ -855,6 +859,7 @@ export class ProjectService {
         orderBy: { createdAt: 'desc' },
         take: blockersLimit,
       }),
+      this.getLatestMeetingInsights(meetingWhere),
     ]);
 
     const taskCounts: Record<string, number> = Object.fromEntries(
@@ -909,7 +914,49 @@ export class ProjectService {
         items: mergedBlockers,
         total: mergedBlockers.length,
       },
+      latestMeetingInsights,
     };
+  }
+
+  private async getLatestMeetingInsights(meetingWhere: Prisma.MeetingWhereInput) {
+    const meeting = await this.prisma.meeting.findFirst({
+      where: { ...meetingWhere, transcripts: { some: {} } },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        createdAt: true,
+        transcripts: {
+          orderBy: { version: 'desc' },
+          take: 1,
+          select: { id: true, insights: true, suggestedActions: true },
+        },
+      },
+    });
+
+    if (!meeting) {
+      return null;
+    }
+
+    const transcript = meeting.transcripts[0];
+    return {
+      meetingId: meeting.id,
+      meetingTitle: meeting.title,
+      meetingCreatedAt: meeting.createdAt,
+      transcriptId: transcript?.id ?? null,
+      insights: this.normalizeStringList(transcript?.insights),
+      suggestedActions: this.normalizeStringList(transcript?.suggestedActions),
+    };
+  }
+
+  private normalizeStringList(value: unknown): string[] | null {
+    if (!Array.isArray(value)) {
+      return null;
+    }
+    const items = value
+      .map((item) => (item == null ? '' : String(item)).trim())
+      .filter((item) => item.length > 0);
+    return items.length > 0 ? items : null;
   }
 
   /** Returns unified list of GitHub and transcript blockers for the project. Scrum Master only. */

@@ -221,6 +221,14 @@ export class ProjectController {
           limit: 10,
           totalPages: 1,
         },
+        latestMeetingInsights: {
+          meetingId: 'meeting_1',
+          meetingTitle: 'Daily standup',
+          meetingCreatedAt: '2026-03-10T09:00:00.000Z',
+          transcriptId: 'transcript_1',
+          insights: ['Delivery risk around OAuth fix'],
+          suggestedActions: ['Confirm API contract with partner team'],
+        },
         blockers: {
           github: {
             items: [
@@ -345,6 +353,14 @@ export class ProjectController {
             },
           ],
           total: 5,
+        },
+        latestMeetingInsights: {
+          meetingId: 'meeting-uuid',
+          meetingTitle: 'Daily standup',
+          meetingCreatedAt: '2026-04-10T09:00:00.000Z',
+          transcriptId: 'transcript-uuid',
+          insights: ['Delivery risk around OAuth fix'],
+          suggestedActions: ['Confirm API contract with partner team'],
         },
         blockers: {
           items: [
