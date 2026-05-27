@@ -8,6 +8,7 @@ import { GithubSyncService } from './github-sync.service';
 import { GithubWebhookService } from './github-webhook.service';
 import { BlockerDetectionService } from './blocker-detection.service';
 import { GithubSyncQueue } from './queue/github-sync.queue';
+import { NoopGithubSyncQueue } from './queue/noop-github-sync.queue';
 import { GithubSyncProcessor } from './queue/github-sync.processor';
 import { GITHUB_REPOSITORY } from './github.tokens';
 import { PrismaGithubRepository } from '../../prisma/repositories/prisma-github.repository';
@@ -17,18 +18,6 @@ import { QueueModule } from '../../infrastracture/queue/queue.module';
 import { NotificationModule } from '../../notification/notification.module';
 
 const queuesEnabled = process.env.DISABLE_QUEUES !== 'true';
-
-class NoopGithubSyncQueue {
-  async enqueueSyncProject(_projectId: string) {
-    return;
-  }
-  async enqueueSyncAll() {
-    return;
-  }
-  async registerRepeatableSyncAll(_repeatEveryMs: number) {
-    return;
-  }
-}
 
 @Module({
   imports: [

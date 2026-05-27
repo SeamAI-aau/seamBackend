@@ -6,9 +6,11 @@ import {
   OnGatewayInit,
 } from '@nestjs/websockets';
 import type { ExtendedError, Server, Socket } from 'socket.io';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeService } from './realtime.service';
+import { attachRedisSocketAdapter } from './realtime-redis.adapter';
 import { buildSocketIoCorsOptions } from '../../common/config/cors.config';
 
 type SocketJwtPayload = {
@@ -30,9 +32,11 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     private readonly jwt: JwtService,
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeService,
+    private readonly config: ConfigService,
   ) {}
 
   afterInit(server: Server) {
+    attachRedisSocketAdapter(server, this.config);
     const unauthorized = (): ExtendedError => {
       const err = new Error('Unauthorized') as ExtendedError;
       return err;

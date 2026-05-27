@@ -62,8 +62,13 @@ function resolveApiEnvFilePaths(): string[] {
         /** BullMQ repeatable GitHub `sync-all` interval in milliseconds. Default 600000 (10 min). */
         GITHUB_SYNC_REPEAT_MS: Joi.number().integer().min(60_000).max(86_400_000).optional(),
 
-        /** When `true`, BullMQ is not registered: meeting transcription jobs are skipped and Jira/GitHub sync queues are no-ops. */
+        /**
+         * When `true`, BullMQ is not registered and GitHub/Jira sync queues are no-ops.
+         * Meeting transcription still uses ai-engine-2 HTTP callbacks (not Bull).
+         */
         DISABLE_QUEUES: Joi.string().valid('true', 'false').optional(),
+        /** Socket.IO cross-instance adapter: `false` to disable, `force` to enable without DISABLE_QUEUES check. */
+        REALTIME_REDIS_ADAPTER: Joi.string().valid('false', 'force').optional(),
 
         /** Base URL of ai-engine-2 (e.g. `http://localhost:8000`). Required for meeting uploads. */
         AI_ENGINE_BASE_URL: Joi.string().trim().optional().allow(''),
