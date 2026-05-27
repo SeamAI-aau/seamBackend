@@ -14,11 +14,14 @@ export class JiraSyncQueue {
       'create-ticket',
       { taskId },
       {
+        jobId: `jira-sync:${taskId}`,
         attempts: 5,
         backoff: {
           type: 'exponential',
           delay: 5000,
         },
+        removeOnComplete: { age: 3600, count: 200 },
+        removeOnFail: { age: 7 * 24 * 3600, count: 500 },
       },
     );
   }

@@ -1,4 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { IGithubRepository } from './github.repository';
 import type { PullRequestUpsertData } from './github.repository';
 import { GITHUB_REPOSITORY } from './github.tokens';
@@ -10,6 +11,7 @@ import { PROJECT_REPOSITORY } from '../../project/types/project.tokens';
 import { PullRequestState } from '@prisma/client';
 import type { GitHubPullRequest } from './types/github-api.types';
 import { BlockerDetectionService } from './blocker-detection.service';
+import { GithubSyncQueue } from './queue/github-sync.queue';
 
 @Injectable()
 export class GithubSyncService {
@@ -20,6 +22,8 @@ export class GithubSyncService {
     private readonly projectRepo: IProjectRepository,
     private readonly githubService: GithubService,
     private readonly blockerDetection: BlockerDetectionService,
+    private readonly githubSyncQueue: GithubSyncQueue,
+    private readonly config: ConfigService,
   ) {}
 
   /**
@@ -35,6 +39,20 @@ export class GithubSyncService {
     await this.projectRepo.updateProject(projectId, {
       githubRepoUrl: repoUrl.trim().replace(/\/$/, ''),
     });
+  }
+
+  /**
+   * Enqueue PR sync (deduped per project) and wait for completion — used by manual API sync.
+   */
+  async syncPullRequestsViaQueue(projectId: string): Promise<{ synced: number }> {
+    if (this.config.get<string>('DISABLE_QUEUES') === 'true') {
+      return this.syncPullRequests(projectId);
+    }
+    const result = await this.githubSyncQueue.enqueueSyncProject(projectId, {
+      wait: true,
+      waitTimeoutMs: 120_000,
+    });
+    return { synced: result.synced ?? 0 };
   }
 
   /**

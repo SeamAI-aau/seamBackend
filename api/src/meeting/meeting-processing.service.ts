@@ -6,6 +6,7 @@ import {
   MeetingStatus,
   ProjectMemberStatus,
   Role,
+  TaskSource,
   TaskStatus,
   type Prisma,
 } from '@prisma/client';
@@ -275,7 +276,7 @@ export class MeetingProcessingService {
     await this.prisma.$transaction(async (tx) => {
       const meeting = await tx.meeting.findUnique({
         where: { id: meetingId },
-        select: { projectId: true },
+        select: { projectId: true, createdById: true },
       });
       if (!meeting) return;
       projectId = meeting.projectId;
@@ -313,6 +314,9 @@ export class MeetingProcessingService {
       if (normalizedTasks.length > 0) {
         await tx.task.createMany({
           data: normalizedTasks.map((task) => ({
+            projectId: meeting.projectId,
+            createdById: meeting.createdById,
+            source: TaskSource.MEETING_EXTRACTION,
             meetingId,
             transcriptId: transcript.id,
             title: task.title,

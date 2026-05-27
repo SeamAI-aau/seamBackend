@@ -1,5 +1,6 @@
 import { UnauthorizedException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
+import { timingSafeSecretEqual } from './timing-safe-secret.util';
 
 const WORKER_SECRET_HEADER = 'x-worker-secret';
 const INTERNAL_KEY_HEADER = 'x-internal-key';
@@ -19,17 +20,15 @@ export function ensureInternalServiceAuth(
   headers: InternalServiceHeaders,
 ): void {
   const workerSecret = config.get<string>('WORKER_SECRET');
-  if (workerSecret && headers[WORKER_SECRET_HEADER] === workerSecret) {
+  if (timingSafeSecretEqual(headers[WORKER_SECRET_HEADER], workerSecret)) {
     return;
   }
 
   const internalKey = config.get<string>('INTERNAL_API_KEY');
   const internalSecret = config.get<string>('INTERNAL_SECRET');
   if (
-    internalKey &&
-    internalSecret &&
-    headers[INTERNAL_KEY_HEADER] === internalKey &&
-    headers[INTERNAL_SECRET_HEADER] === internalSecret
+    timingSafeSecretEqual(headers[INTERNAL_KEY_HEADER], internalKey) &&
+    timingSafeSecretEqual(headers[INTERNAL_SECRET_HEADER], internalSecret)
   ) {
     return;
   }

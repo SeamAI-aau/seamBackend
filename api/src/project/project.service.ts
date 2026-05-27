@@ -17,6 +17,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { Prisma } from '@prisma/client';
 import type { DashboardFilterDto } from './dto/dashboard-filter.dto';
 import type { BlockersFilterDto } from './dto/blockers-filter.dto';
+import { MANUAL_TASK_PLACEHOLDER_AUDIO_URL } from '../tasks/constants/task.constants';
 
 function parseGithubRepoUrl(url: string | null): {
   repoUrl: string | null;
@@ -602,7 +603,7 @@ export class ProjectService {
     }
 
     const taskWhere: Prisma.TaskWhereInput = {
-      meeting: { projectId },
+      projectId,
     };
     if (filters.assigneeId) taskWhere.assigneeId = filters.assigneeId;
     if (filters.status) taskWhere.status = filters.status;
@@ -614,6 +615,7 @@ export class ProjectService {
 
     const meetingWhere: Prisma.MeetingWhereInput = {
       projectId,
+      NOT: { audioUrl: MANUAL_TASK_PLACEHOLDER_AUDIO_URL },
     };
     if (filters.fromDate || filters.toDate) {
       meetingWhere.createdAt = {};
@@ -651,6 +653,7 @@ export class ProjectService {
           take: recentTasksLimit,
           orderBy: { createdAt: 'desc' },
           include: {
+            project: { select: { id: true, name: true } },
             meeting: { select: { id: true, title: true } },
             assignee: { select: { id: true, email: true, name: true } },
           },
@@ -782,7 +785,7 @@ export class ProjectService {
     }
 
     const taskWhere: Prisma.TaskWhereInput = {
-      meeting: { projectId },
+      projectId,
       assigneeId: userId,
     };
     if (filters.fromDate || filters.toDate) {
@@ -791,7 +794,10 @@ export class ProjectService {
       if (filters.toDate) taskWhere.createdAt.lte = new Date(filters.toDate);
     }
 
-    const meetingWhere: Prisma.MeetingWhereInput = { projectId };
+    const meetingWhere: Prisma.MeetingWhereInput = {
+      projectId,
+      NOT: { audioUrl: MANUAL_TASK_PLACEHOLDER_AUDIO_URL },
+    };
     if (filters.fromDate || filters.toDate) {
       meetingWhere.createdAt = {};
       if (filters.fromDate) meetingWhere.createdAt.gte = new Date(filters.fromDate);
@@ -815,7 +821,7 @@ export class ProjectService {
       this.prisma.task.groupBy({
         by: ['status'],
         _count: { id: true },
-        where: { meeting: { projectId } },
+        where: { projectId, assigneeId: userId },
       }),
       this.prisma.task.findMany({
         where: taskWhere,

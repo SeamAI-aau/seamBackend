@@ -62,9 +62,9 @@ export class JiraSyncService {
     if (task.jiraIssueKey) return;
     if (task.status !== TaskStatus.APPROVED) return;
 
-    const projectId = task.meeting.project.id;
-    const ownerId = task.meeting.project.ownerId;
-    const projectKey = task.meeting.project.jiraProjectKey;
+    const projectId = task.project.id;
+    const ownerId = task.project.ownerId;
+    const projectKey = task.project.jiraProjectKey;
 
     if (!projectKey?.trim()) {
       const msg = `Project ${projectId} has no Jira project key configured`;

@@ -4,7 +4,9 @@ Manages the task lifecycle for stand-up action items: extraction → assignment 
 
 ## Lifecycle
 
-- **EXTRACTED** – From meeting transcription; not yet assigned (or assignee unknown). When the meeting callback saves unassigned tasks, the **project owner** and **Scrum Master** project members receive a **`tasks_pending_assignment`** notification so they can assign developers (`reassignTask` / assign flow).
+- **MANUAL** – Created via `POST /tasks` (Scrum Master flow); no meeting/transcript link.
+- **MEETING_EXTRACTION** – From meeting transcription (`meetingId` + `transcriptId` set).
+- **EXTRACTED** – Not yet assigned (or assignee unknown). When the meeting callback saves unassigned tasks, the **project owner** and **Scrum Master** project members receive a **`tasks_pending_assignment`** notification so they can assign developers (`reassignTask` / assign flow).
 - **SENT_TO_DEVELOPER** – Assigned to a developer (by NLP / ai-engine with `assigneeId` or by Scrum Master).
 - **APPROVED** / **REJECTED** – Developer accepts or declines.
 - **SYNCED** – Approved task synced to Jira: **create** new issue (default) or **transition** existing when the engine set `jiraProposalAction: TRANSITION` + `jiraProposalIssueKey`. If sync fails after approve, **`jiraSyncLastError`** holds the last error (Bull retries transient failures).
@@ -18,7 +20,7 @@ Transitions are enforced by `TaskStateMachine` in `task-state-machine.ts`.
 | ------ | ------------------------------ | -------------------------------------------------------- |
 | `PATCH` | `/tasks/:id`                  | Assignee: approve / decline / edit draft (`UpdateTaskOutcomeDto`). |
 | `PATCH` | `/tasks/:id/assign`           | Scrum Master or assignee: set `assigneeId` (UUID) or `null` to unassign. |
-| `POST` | `/tasks`                       | Create task (testing / admin flows).                     |
+| `POST` | `/tasks`                       | Create task manually (`source: MANUAL`, no meeting row). |
 | `GET`  | `/tasks/grouped`               | Current user’s tasks grouped active vs completed.      |
 | `GET`  | `/tasks`                        | List tasks (filters: `projectId`, `meetingId`, `assigneeId`, …). |
 | `GET`  | `/tasks/:id`                    | Get one task.                                           |

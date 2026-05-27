@@ -55,12 +55,7 @@ export class NotificationService {
     });
 
     this.realtime.emitToUser(input.userId, 'notification.created', notification);
-    this.repo
-      .count({ userId: input.userId, unreadOnly: true })
-      .then((count) =>
-        this.realtime.emitToUser(input.userId, 'notification.unreadCount', { count }),
-      )
-      .catch(() => undefined);
+    void this.emitUnreadCount(input.userId);
 
     const shouldSendEmail =
       input.sendEmail ??
@@ -174,7 +169,11 @@ export class NotificationService {
   }
 
   async markAsRead(id: string, userId: string): Promise<boolean> {
-    return this.repo.markAsRead(id, userId);
+    const updated = await this.repo.markAsRead(id, userId);
+    if (updated) {
+      void this.emitUnreadCount(userId);
+    }
+    return updated;
   }
 
   async deleteForUser(id: string, userId: string): Promise<{ success: boolean }> {
@@ -182,11 +181,15 @@ export class NotificationService {
     if (!deleted) {
       throw new AppException(ErrorCode.NOT_FOUND, 'Notification not found', 404);
     }
+    void this.emitUnreadCount(userId);
     return { success: true };
   }
 
   async markAllAsRead(userId: string): Promise<{ count: number }> {
     const count = await this.repo.markAllAsRead(userId);
+    if (count > 0) {
+      void this.emitUnreadCount(userId);
+    }
     return { count };
   }
 
@@ -209,6 +212,15 @@ export class NotificationService {
       fromDate: filters?.fromDate ? new Date(filters.fromDate) : undefined,
       toDate: filters?.toDate ? new Date(filters.toDate) : undefined,
     });
+  }
+
+  private async emitUnreadCount(userId: string): Promise<void> {
+    try {
+      const count = await this.repo.count({ userId, unreadOnly: true });
+      this.realtime.emitToUser(userId, 'notification.unreadCount', { count });
+    } catch {
+      // ignore realtime errors
+    }
   }
 
   private buildEmailContent(

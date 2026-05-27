@@ -20,6 +20,7 @@ import {
 } from '@nestjs/swagger';
 import { MeetingProcessingService } from './meeting-processing.service';
 import { WorkerResultBodyDto } from './dto/worker-result.dto';
+import { timingSafeSecretEqual } from '../common/utils/timing-safe-secret.util';
 
 const WORKER_SECRET_HEADER = 'x-worker-secret';
 
@@ -89,7 +90,7 @@ export class InternalMeetingController {
       throw new UnauthorizedException('Worker callback not configured');
     }
 
-    if (!secret || secret !== expected) {
+    if (!timingSafeSecretEqual(secret, expected)) {
       throw new UnauthorizedException('Invalid worker secret');
     }
 

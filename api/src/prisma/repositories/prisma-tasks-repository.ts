@@ -3,11 +3,15 @@ import { PrismaService } from '../prisma.service';
 import {
   ITaskRepository,
   TaskFilters,
-  TaskWithMeetingAndProject,
   TaskWithMeetingAndAssignee,
-  TaskWithMeetingProject,
+  TaskWithMeetingAndProject,
 } from '../../tasks/types/task.repository';
 import { TaskStatus, Prisma } from '@prisma/client';
+
+const taskWithProjectInclude = {
+  project: true,
+  meeting: { select: { id: true, title: true } },
+} as const;
 
 @Injectable()
 export class PrismaTaskRepository implements ITaskRepository {
@@ -19,28 +23,16 @@ export class PrismaTaskRepository implements ITaskRepository {
     });
   }
 
-  async findByIdWithProject(taskId: string): Promise<TaskWithMeetingProject | null> {
+  async findByIdWithProject(taskId: string): Promise<TaskWithMeetingAndProject | null> {
     const task = await this.prisma.task.findUnique({
       where: { id: taskId },
-      include: {
-        meeting: {
-          include: {
-            project: true,
-          },
-        },
-      },
+      include: taskWithProjectInclude,
     });
-    return task as TaskWithMeetingProject | null;
+    return task as TaskWithMeetingAndProject | null;
   }
 
   async findByIdWithMeetingAndProject(id: string): Promise<TaskWithMeetingAndProject | null> {
-    const task = await this.prisma.task.findUnique({
-      where: { id },
-      include: {
-        meeting: { include: { project: true } },
-      },
-    });
-    return task as TaskWithMeetingAndProject | null;
+    return this.findByIdWithProject(id);
   }
 
   async updateStatus(id: string, status: TaskStatus) {
@@ -83,26 +75,8 @@ export class PrismaTaskRepository implements ITaskRepository {
   }
 
   async findMany(filters: TaskFilters) {
-    const where: Prisma.TaskWhereInput = {};
-
-    if (filters.meetingId) {
-      where.meetingId = filters.meetingId;
-    }
-
-    if (filters.projectId) {
-      where.meeting = { projectId: filters.projectId };
-    }
-
-    if (filters.assigneeId) {
-      where.assigneeId = filters.assigneeId;
-    }
-
-    if (filters.status) {
-      where.status = filters.status;
-    }
-
     return this.prisma.task.findMany({
-      where,
+      where: this.buildWhere(filters),
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -111,13 +85,13 @@ export class PrismaTaskRepository implements ITaskRepository {
     filters: TaskFilters,
     options?: { skip?: number; take?: number },
   ): Promise<TaskWithMeetingAndAssignee[]> {
-    const where = this.buildWhere(filters);
     const rows = await this.prisma.task.findMany({
-      where,
+      where: this.buildWhere(filters),
       orderBy: { createdAt: 'desc' },
       skip: options?.skip,
       take: options?.take,
       include: {
+        project: { select: { id: true, name: true } },
         meeting: { select: { id: true, title: true } },
         assignee: { select: { id: true, email: true, name: true } },
       },
@@ -136,7 +110,7 @@ export class PrismaTaskRepository implements ITaskRepository {
   private buildWhere(filters: TaskFilters): Prisma.TaskWhereInput {
     const where: Prisma.TaskWhereInput = {};
     if (filters.meetingId) where.meetingId = filters.meetingId;
-    if (filters.projectId) where.meeting = { projectId: filters.projectId };
+    if (filters.projectId) where.projectId = filters.projectId;
     if (filters.assigneeId) where.assigneeId = filters.assigneeId;
     if (filters.status) where.status = filters.status;
     return where;

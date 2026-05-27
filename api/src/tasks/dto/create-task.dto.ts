@@ -4,8 +4,7 @@ import { IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-valida
 export class CreateTaskDto {
   @ApiProperty({
     example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-    description:
-      'Project ID to create the task under. Creates a placeholder meeting/transcript for Jira testing.',
+    description: 'Project ID to create the task under.',
   })
   @IsUUID()
   projectId!: string;

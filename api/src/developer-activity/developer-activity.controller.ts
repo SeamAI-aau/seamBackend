@@ -86,9 +86,10 @@ export class DeveloperActivityController {
     summary: 'Get developer activity feed for a project',
     description:
       'Paginated feed of synced GitHub and Jira activity (newest first). ' +
+      'Developers always receive only their own rows (userId query is ignored except own id). ' +
+      'Scrum Masters may omit userId for the whole team or filter to one member. ' +
       'GitHub types: commit_count, pr_opened, pr_merged. ' +
-      'Jira types: jira_status_change, jira_assignee_change, jira_comment, jira_worklog, jira_issue_created. ' +
-      'Requires project owner or active member. No request body.',
+      'Jira types: jira_status_change, jira_assignee_change, jira_comment, jira_worklog, jira_issue_created.',
   })
   @ApiParam({
     name: 'projectId',
@@ -123,7 +124,7 @@ export class DeveloperActivityController {
     @CurrentUser() user: CurrentUserType,
     @Query() query: DeveloperActivityQueryDto,
   ) {
-    return this.activityService.getActivityFeed(projectId, user.userId, {
+    return this.activityService.getActivityFeed(projectId, user, {
       source: query.source,
       userId: query.userId,
       fromDate: query.fromDate,
@@ -173,7 +174,7 @@ export class DeveloperActivityController {
     @CurrentUser() user: CurrentUserType,
     @Query() query: DeveloperActivityChartQueryDto,
   ) {
-    return this.activityService.getChartData(projectId, user.userId, {
+    return this.activityService.getChartData(projectId, user, {
       fromDate: query.fromDate,
       toDate: query.toDate,
       groupBy: query.groupBy ?? 'day',

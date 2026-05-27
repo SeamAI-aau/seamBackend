@@ -236,7 +236,7 @@ export class GithubController {
     @CurrentUser() user: CurrentUserType,
   ): Promise<{ synced: number }> {
     await this.ensureProjectAccess(projectId, user.userId, false);
-    return this.githubSyncService.syncPullRequests(projectId);
+    return this.githubSyncService.syncPullRequestsViaQueue(projectId);
   }
 
   @Get('prs/:projectId')
