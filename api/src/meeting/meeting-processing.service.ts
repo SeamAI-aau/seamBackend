@@ -14,6 +14,7 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 import { NotificationService } from '../notification/notification.service';
 import type {
   WorkerResultPayload,
+  WorkerSummaryPayload,
   WorkerTaskPayload,
   WorkerTransitionedTaskPayload,
 } from './dto/worker-result.dto';
@@ -22,6 +23,7 @@ import { WORKER_RESULT_STATUS_SUCCESS } from './constants/meeting.constants';
 import { NOTIFICATION_TYPES } from '../notification/constants/notification-types';
 import { PROJECT_REPOSITORY } from '../project/types/project.tokens';
 import type { IProjectRepository } from '../project/types/project.repository';
+
 
 /**
  * Persists callback results from ai-engine-2 (or bridge): transcript + extracted tasks,
@@ -63,23 +65,34 @@ export class MeetingProcessingService {
       (payload.error != null && payload.error !== '');
 
     if (isFailure) {
+      const failureReason =
+        typeof payload.error === 'string' && payload.error.trim()
+          ? payload.error.trim()
+          : 'AI engine reported failure';
       await this.prisma.meeting.update({
         where: { id: meetingId },
-        data: { status: MeetingStatus.FAILED },
+        data: {
+          status: MeetingStatus.FAILED,
+          lastProcessingError: failureReason.slice(0, 8000),
+        },
       });
       this.logger.warn(
-        { meetingId, error: payload.error },
+        { meetingId, error: failureReason },
         'Meeting processing failed; status set to FAILED',
       );
       return;
     }
 
     if (typeof payload.transcript !== 'string') {
+      const failureReason = 'Invalid worker payload: missing transcript string';
       await this.prisma.meeting.update({
         where: { id: meetingId },
-        data: { status: MeetingStatus.FAILED },
+        data: {
+          status: MeetingStatus.FAILED,
+          lastProcessingError: failureReason,
+        },
       });
-      this.logger.warn({ meetingId }, 'Invalid worker payload: missing transcript string');
+      this.logger.warn({ meetingId }, failureReason);
       return;
     }
 
@@ -88,6 +101,26 @@ export class MeetingProcessingService {
     const normalizedTasks = await this.filterAssignableTaskAssignees(
       meeting.projectId,
       normalizedPre,
+    );
+    this.logger.log(
+      {
+        meetingId,
+        incomingTasks: incomingTasks.length,
+        normalizedTasks: normalizedTasks.length,
+        assignedTasks: normalizedTasks.filter((t) => t.assigneeId).length,
+        unassignedTasks: normalizedTasks.filter((t) => !t.assigneeId).length,
+        hasSummary: Boolean(payload.summary),
+      },
+      'Worker payload normalized for persistence',
+    );
+
+    this.logger.log(
+      {
+        meetingId,
+        incomingTasksPayload: JSON.stringify(incomingTasks),
+        normalizedTasksPayload: JSON.stringify(normalizedTasks),
+      },
+      'Worker tasks payloads (normalized)'
     );
     const projectId = await this.persistTranscriptAndTasks(meetingId, payload, normalizedTasks);
     this.logger.log({ meetingId }, 'Transcript and tasks saved');
@@ -261,17 +294,19 @@ export class MeetingProcessingService {
       const transcriptContent = typeof payload.transcript === 'string' ? payload.transcript : '';
       const insights = this.normalizeStringList(payload.insights);
       const suggestedActions = this.normalizeStringList(payload.suggested_actions);
+      const summary = this.normalizeSummary(payload.summary);
       const transcript = await tx.transcript.create({
         data: {
           meetingId,
           version: nextVersion,
           content: transcriptContent,
           diarization: {} as Prisma.InputJsonValue,
-          insights: insights.length > 0 ? (insights as Prisma.InputJsonValue) : null,
+          summary: summary ? (summary as Prisma.InputJsonValue) : undefined,
+          insights: insights.length > 0 ? (insights as Prisma.InputJsonValue) : undefined,
           suggestedActions:
             suggestedActions.length > 0
               ? (suggestedActions as Prisma.InputJsonValue)
-              : null,
+              : undefined,
         },
       });
 
@@ -295,9 +330,17 @@ export class MeetingProcessingService {
       }
 
       const blockers = Array.isArray(payload.blockers) ? payload.blockers : [];
-      if (blockers.length > 0) {
+      const blockerRows = blockers
+        .map((b) => {
+          const description = typeof b?.description === 'string' ? b.description.trim() : '';
+          if (!description) return null;
+          const severity = typeof b?.severity === 'string' ? b.severity.trim() : null;
+          return { description, severity };
+        })
+        .filter((b): b is { description: string; severity: string | null } => Boolean(b));
+      if (blockerRows.length > 0) {
         await tx.transcriptBlocker.createMany({
-          data: blockers.map((b) => ({
+          data: blockerRows.map((b) => ({
             meetingId,
             projectId: meeting.projectId,
             category: b.severity ?? null,
@@ -308,8 +351,10 @@ export class MeetingProcessingService {
 
       const meetingUpdate: {
         status: MeetingStatus;
+        lastProcessingError: string | null;
       } = {
         status: MeetingStatus.TASKS_EXTRACTED,
+        lastProcessingError: null,
       };
 
       await tx.meeting.update({
@@ -417,7 +462,7 @@ export class MeetingProcessingService {
   private resolveIncomingTasks(
     payload: WorkerResultPayload,
   ): Array<WorkerTaskPayload | WorkerTransitionedTaskPayload> {
-    if (Array.isArray(payload.tasks)) {
+    if (Array.isArray(payload.tasks) && payload.tasks.length > 0) {
       return payload.tasks;
     }
     const merged: Array<WorkerTaskPayload | WorkerTransitionedTaskPayload> = [];
@@ -485,6 +530,48 @@ export class MeetingProcessingService {
     }
     const parsed = Number(confidence);
     return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private normalizeSummary(summary?: WorkerSummaryPayload | null): {
+    summary: string;
+    key_decisions?: string[];
+    meeting_sentiment?: string;
+    main_topic?: string;
+  } | null {
+    if (!summary || typeof summary !== 'object') {
+      return null;
+    }
+
+    const summaryText = typeof summary.summary === 'string' ? summary.summary.trim() : '';
+    const keyDecisions = this.normalizeStringList(summary.key_decisions);
+    const meetingSentiment =
+      typeof summary.meeting_sentiment === 'string' ? summary.meeting_sentiment.trim() : '';
+    const mainTopic = typeof summary.main_topic === 'string' ? summary.main_topic.trim() : '';
+
+    if (!summaryText && keyDecisions.length === 0 && !meetingSentiment && !mainTopic) {
+      return null;
+    }
+
+    const normalized: {
+      summary: string;
+      key_decisions?: string[];
+      meeting_sentiment?: string;
+      main_topic?: string;
+    } = {
+      summary: summaryText,
+    };
+
+    if (keyDecisions.length > 0) {
+      normalized.key_decisions = keyDecisions;
+    }
+    if (meetingSentiment) {
+      normalized.meeting_sentiment = meetingSentiment;
+    }
+    if (mainTopic) {
+      normalized.main_topic = mainTopic;
+    }
+
+    return normalized;
   }
 
   private normalizeStringList(value: unknown): string[] {
