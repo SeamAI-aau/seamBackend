@@ -16,7 +16,7 @@ export class JiraSyncQueue {
       'create-ticket',
       { taskId },
       {
-        jobId: `jira-sync:${taskId}`,
+        jobId: `jira-sync-${taskId}`,
         attempts: 5,
         backoff: {
           type: 'exponential',
@@ -26,7 +26,7 @@ export class JiraSyncQueue {
         removeOnFail: { age: 7 * 24 * 3600, count: 500 },
       },
     );
-    const jobId = job.id ?? `jira-sync:${taskId}`;
+    const jobId = job.id ?? `jira-sync-${taskId}`;
     this.logger.log(`[jira-sync] enqueued taskId=${taskId} jobId=${jobId}`);
     return jobId;
   }
