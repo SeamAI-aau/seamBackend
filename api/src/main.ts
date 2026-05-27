@@ -6,6 +6,9 @@ import cookieParser from 'cookie-parser';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import type { ComponentsObject, SecuritySchemeObject } from 'openapi3-ts';
 import { buildHttpCorsOptions, parseCorsOrigins } from './common/config/cors.config';
+import { installJsonBigIntSupport } from './common/utils/json-serialization.util';
+
+installJsonBigIntSupport();
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {

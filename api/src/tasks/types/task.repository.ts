@@ -7,34 +7,35 @@ export interface TaskFilters {
   status?: TaskStatus;
 }
 
-export interface TaskWithMeetingAndProject extends Task {
-  meeting: Meeting & { project: Project };
+/** Task with project (required) and optional meeting for list/detail views. */
+export interface TaskWithProject extends Task {
+  project: Project;
+  meeting?: Pick<Meeting, 'id' | 'title'> | null;
 }
 
-export interface TaskWithMeetingProject extends Task {
-  meeting: {
-    project: Project;
-  };
+export interface TaskWithMeetingAndProject extends Task {
+  project: Project;
+  meeting?: (Meeting & { project?: Project }) | null;
 }
 
 /** Task with meeting (id, title) and assignee (id, email, name) for list views. */
 export interface TaskWithMeetingAndAssignee extends Task {
-  meeting: { id: string; title: string };
+  meeting?: { id: string; title: string } | null;
   assignee: { id: string; email: string; name: string | null } | null;
 }
 
 export interface ITaskRepository {
   findById(id: string): Promise<Task | null>;
 
-  findByIdWithProject(taskId: string): Promise<TaskWithMeetingProject | null>;
+  findByIdWithProject(taskId: string): Promise<TaskWithMeetingAndProject | null>;
 
+  /** @deprecated Use findByIdWithProject */
   findByIdWithMeetingAndProject(id: string): Promise<TaskWithMeetingAndProject | null>;
 
   updateStatus(id: string, status: TaskStatus): Promise<Task>;
 
   markAsCreatedInJira(taskId: string, jiraIssueKey: string): Promise<Task>;
 
-  /** Persists last Jira sync error for SM visibility; truncated in service/repository as needed. */
   setJiraSyncLastError(taskId: string, message: string | null): Promise<Task>;
 
   updateAssigneeAndStatus(id: string, assigneeId: string, status: TaskStatus): Promise<Task>;

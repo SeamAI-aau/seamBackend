@@ -1,10 +1,10 @@
 import { Injectable, Inject } from '@nestjs/common';
-import type { ITaskRepository, TaskFilters, TaskWithMeetingProject } from './types/task.repository';
+import type { ITaskRepository, TaskFilters, TaskWithMeetingAndProject } from './types/task.repository';
 import { TASK_REPOSITORY } from './types/task.tokens';
 import { TaskStateMachine } from './task-state-machine';
 import { AppException } from '../common/errors/app.exception';
 import { ErrorCode } from '../common/errors/error-codes';
-import { TaskStatus, Role } from '@prisma/client';
+import { TaskSource, TaskStatus, Role } from '@prisma/client';
 import type { CurrentUserType } from '../auth/types/current-user.type';
 import { PROJECT_REPOSITORY } from '../project/types/project.tokens';
 import type { IProjectRepository } from '../project/types/project.repository';
@@ -16,9 +16,9 @@ import { RealtimeService } from '../infrastracture/realtime/realtime.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateTaskDto } from './dto/create-task.dto';
 import type { UpdateTaskOutcomeDto } from './dto/update-task-outcome.dto';
-import { MANUAL_TASK_PLACEHOLDER_AUDIO_URL } from './constants/task.constants';
 import { Logger } from 'nestjs-pino';
 import { assertProjectTaskAssignee } from '../project/project-membership.util';
+import { getTaskProject, getTaskProjectId } from './utils/task-project.util';
 
 @Injectable()
 export class TaskService {
@@ -36,7 +36,7 @@ export class TaskService {
     private readonly logger: Logger,
   ) {}
 
-  async createTask(userId: string, body: CreateTaskDto): Promise<TaskWithMeetingProject> {
+  async createTask(userId: string, body: CreateTaskDto): Promise<TaskWithMeetingAndProject> {
     const project = await this.projectRepo.findById(body.projectId);
     if (!project) {
       throw new AppException(ErrorCode.PROJECT_NOT_FOUND, 'Project not found', 404);
@@ -52,43 +52,20 @@ export class TaskService {
     }
 
     const status = body.assigneeId ? TaskStatus.SENT_TO_DEVELOPER : TaskStatus.EXTRACTED;
-    let createdTaskId: string | undefined;
 
-    await this.prisma.$transaction(async (tx) => {
-      const meeting = await tx.meeting.create({
-        data: {
-          title: 'Manual task',
-          audioUrl: MANUAL_TASK_PLACEHOLDER_AUDIO_URL,
-          projectId: body.projectId,
-          createdById: userId,
-        },
-      });
-      const transcript = await tx.transcript.create({
-        data: {
-          meetingId: meeting.id,
-          version: 1,
-          content: '',
-          diarization: {},
-        },
-      });
-      const task = await tx.task.create({
-        data: {
-          meetingId: meeting.id,
-          transcriptId: transcript.id,
-          title: body.title,
-          description: body.description ?? null,
-          status,
-          assigneeId: body.assigneeId ?? null,
-        },
-      });
-      createdTaskId = task.id;
+    const created = await this.prisma.task.create({
+      data: {
+        projectId: body.projectId,
+        createdById: userId,
+        source: TaskSource.MANUAL,
+        title: body.title,
+        description: body.description ?? null,
+        status,
+        assigneeId: body.assigneeId ?? null,
+      },
     });
 
-    if (!createdTaskId) {
-      throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
-    }
-
-    const task = await this.taskRepo.findByIdWithMeetingAndProject(createdTaskId);
+    const task = await this.taskRepo.findByIdWithProject(created.id);
     if (!task) {
       throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
     }
@@ -156,7 +133,7 @@ export class TaskService {
    * - Draft only: send title/description when status is SENT_TO_DEVELOPER and not yet synced.
    */
   async updateTaskOutcome(taskId: string, userId: string, body: UpdateTaskOutcomeDto) {
-    const task = await this.taskRepo.findByIdWithMeetingAndProject(taskId);
+    const task = await this.taskRepo.findByIdWithProject(taskId);
     if (!task) {
       throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
     }
@@ -216,10 +193,11 @@ export class TaskService {
         }
 
         const approvedTask = await this.taskRepo.updateStatus(taskId, TaskStatus.APPROVED);
-        const finalTask = await this.taskRepo.findByIdWithMeetingAndProject(taskId);
-        this.realtime.emitToProject(task.meeting.projectId, 'task.updated', {
+        const finalTask = await this.taskRepo.findByIdWithProject(taskId);
+        const projectId = getTaskProjectId(task);
+        this.realtime.emitToProject(projectId, 'task.updated', {
           taskId,
-          projectId: task.meeting.projectId,
+          projectId,
           status: approvedTask.status,
           assigneeId: approvedTask.assigneeId ?? null,
           updatedAt: (approvedTask as unknown as { updatedAt?: Date }).updatedAt ?? new Date(),
@@ -229,7 +207,7 @@ export class TaskService {
         }
         this.activityLog
           .log({
-            projectId: task.meeting.projectId,
+            projectId: getTaskProjectId(task),
             userId,
             action: 'task.approved',
             entityType: 'Task',
@@ -241,10 +219,10 @@ export class TaskService {
               `Failed to log activity for task approval: ${
                 err instanceof Error ? err.message : String(err)
               }`,
-              { taskId, projectId: task.meeting.projectId, userId },
+              { taskId, projectId: getTaskProjectId(task), userId },
             );
           });
-        const ownerId = task.meeting.project.ownerId;
+        const ownerId = getTaskProject(task).ownerId;
         if (ownerId && ownerId !== userId) {
           this.notification
             .notify({
@@ -252,14 +230,14 @@ export class TaskService {
               type: 'task_approved',
               title: `Task approved: ${approvedTask.title}`,
               body: `A developer approved the task "${approvedTask.title}".`,
-              metadata: { taskId, projectId: task.meeting.projectId },
+              metadata: { taskId, projectId: getTaskProjectId(task) },
             })
             .catch((err) => {
               this.logger.error(
                 `Failed to send notification for task approval: ${
                   err instanceof Error ? err.message : String(err)
                 }`,
-                { userId: ownerId, taskId, projectId: task.meeting.projectId },
+                { userId: ownerId, taskId, projectId: getTaskProjectId(task) },
               );
             });
         }
@@ -274,16 +252,16 @@ export class TaskService {
           );
         }
         const result = await this.taskRepo.updateStatus(taskId, TaskStatus.REJECTED);
-        this.realtime.emitToProject(task.meeting.projectId, 'task.updated', {
+        this.realtime.emitToProject(getTaskProjectId(task), 'task.updated', {
           taskId,
-          projectId: task.meeting.projectId,
+          projectId: getTaskProjectId(task),
           status: result.status,
           assigneeId: result.assigneeId ?? null,
           updatedAt: (result as unknown as { updatedAt?: Date }).updatedAt ?? new Date(),
         });
         this.activityLog
           .log({
-            projectId: task.meeting.projectId,
+            projectId: getTaskProjectId(task),
             userId,
             action: 'task.declined',
             entityType: 'Task',
@@ -295,10 +273,10 @@ export class TaskService {
               `Failed to log activity for task decline: ${
                 err instanceof Error ? err.message : String(err)
               }`,
-              { taskId, projectId: task.meeting.projectId, userId },
+              { taskId, projectId: getTaskProjectId(task), userId },
             );
           });
-        const ownerId = task.meeting.project.ownerId;
+        const ownerId = getTaskProject(task).ownerId;
         if (ownerId && ownerId !== userId) {
           this.notification
             .notify({
@@ -306,14 +284,14 @@ export class TaskService {
               type: 'task_declined',
               title: `Task declined: ${result.title}`,
               body: `A developer declined the task "${result.title}".`,
-              metadata: { taskId, projectId: task.meeting.projectId },
+              metadata: { taskId, projectId: getTaskProjectId(task) },
             })
             .catch((err) => {
               this.logger.error(
                 `Failed to send notification for task decline: ${
                   err instanceof Error ? err.message : String(err)
                 }`,
-                { userId: ownerId, taskId, projectId: task.meeting.projectId },
+                { userId: ownerId, taskId, projectId: getTaskProjectId(task) },
               );
             });
         }
@@ -347,7 +325,7 @@ export class TaskService {
       });
       this.activityLog
         .log({
-          projectId: task.meeting.projectId,
+          projectId: getTaskProjectId(task),
           userId,
           action: 'task.draft.updated',
           entityType: 'Task',
@@ -359,12 +337,12 @@ export class TaskService {
             `Failed to log activity for task draft update: ${
               err instanceof Error ? err.message : String(err)
             }`,
-            { taskId, projectId: task.meeting.projectId, userId },
+            { taskId, projectId: getTaskProjectId(task), userId },
           );
         });
-      this.realtime.emitToProject(task.meeting.projectId, 'task.updated', {
+      this.realtime.emitToProject(getTaskProjectId(task), 'task.updated', {
         taskId,
-        projectId: task.meeting.projectId,
+        projectId: getTaskProjectId(task),
         status: updated.status,
         assigneeId: updated.assigneeId ?? null,
         title: updated.title,
@@ -385,7 +363,7 @@ export class TaskService {
     currentUser: CurrentUserType,
     assigneeId: string | null | undefined,
   ) {
-    const task = await this.taskRepo.findByIdWithMeetingAndProject(taskId);
+    const task = await this.taskRepo.findByIdWithProject(taskId);
     if (!task) {
       throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
     }
@@ -404,16 +382,16 @@ export class TaskService {
         throw new AppException(ErrorCode.INVALID_STATE, `Cannot unassign from ${task.status}`, 400);
       }
       const result = await this.taskRepo.clearAssigneeAndStatus(taskId, TaskStatus.EXTRACTED);
-      this.realtime.emitToProject(task.meeting.projectId, 'task.updated', {
+      this.realtime.emitToProject(getTaskProjectId(task), 'task.updated', {
         taskId,
-        projectId: task.meeting.projectId,
+        projectId: getTaskProjectId(task),
         status: result.status,
         assigneeId: null,
         updatedAt: (result as unknown as { updatedAt?: Date }).updatedAt ?? new Date(),
       });
       this.activityLog
         .log({
-          projectId: task.meeting.projectId,
+          projectId: getTaskProjectId(task),
           userId: currentUser.userId,
           action: 'task.unassigned',
           entityType: 'Task',
@@ -425,7 +403,7 @@ export class TaskService {
             `Failed to log activity for task unassignment: ${
               err instanceof Error ? err.message : String(err)
             }`,
-            { taskId, projectId: task.meeting.projectId, userId: currentUser.userId },
+            { taskId, projectId: getTaskProjectId(task), userId: currentUser.userId },
           );
         });
       return result;
@@ -435,29 +413,29 @@ export class TaskService {
       throw new AppException(ErrorCode.INVALID_STATE, `Cannot assign from ${task.status}`, 400);
     }
 
-    await assertProjectTaskAssignee(this.projectRepo, task.meeting.projectId, assigneeId);
+    await assertProjectTaskAssignee(this.projectRepo, getTaskProjectId(task), assigneeId);
 
     const result = await this.taskRepo.updateAssigneeAndStatus(
       taskId,
       assigneeId,
       TaskStatus.SENT_TO_DEVELOPER,
     );
-    this.realtime.emitToProject(task.meeting.projectId, 'task.updated', {
+    this.realtime.emitToProject(getTaskProjectId(task), 'task.updated', {
       taskId,
-      projectId: task.meeting.projectId,
+      projectId: getTaskProjectId(task),
       status: result.status,
       assigneeId: result.assigneeId ?? assigneeId,
       updatedAt: (result as unknown as { updatedAt?: Date }).updatedAt ?? new Date(),
     });
     this.realtime.emitToUser(assigneeId, 'task.assigned', {
       taskId,
-      projectId: task.meeting.projectId,
+      projectId: getTaskProjectId(task),
       title: task.title,
       status: result.status,
     });
     this.activityLog
       .log({
-        projectId: task.meeting.projectId,
+        projectId: getTaskProjectId(task),
         userId: currentUser.userId,
         action: 'task.assigned',
         entityType: 'Task',
@@ -469,7 +447,7 @@ export class TaskService {
           `Failed to log activity for task assignment: ${
             err instanceof Error ? err.message : String(err)
           }`,
-          { taskId, projectId: task.meeting.projectId, userId: currentUser.userId },
+          { taskId, projectId: getTaskProjectId(task), userId: currentUser.userId },
         );
       });
     this.notification
@@ -478,26 +456,26 @@ export class TaskService {
         type: 'task_assigned',
         title: `New task: ${task.title}`,
         body: `You have been assigned the task "${task.title}".`,
-        metadata: { taskId, projectId: task.meeting.projectId },
+        metadata: { taskId, projectId: getTaskProjectId(task) },
       })
       .catch((err) => {
         this.logger.error(
           `Failed to send notification for task assignment: ${
             err instanceof Error ? err.message : String(err)
           }`,
-          { userId: assigneeId, taskId, projectId: task.meeting.projectId },
+          { userId: assigneeId, taskId, projectId: getTaskProjectId(task) },
         );
       });
     return result;
   }
 
   async deleteTask(taskId: string, user: CurrentUserType) {
-    const task = await this.taskRepo.findByIdWithMeetingAndProject(taskId);
+    const task = await this.taskRepo.findByIdWithProject(taskId);
     if (!task) {
       throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
     }
 
-    const projectId = task.meeting.projectId;
+    const projectId = getTaskProjectId(task);
     const isOwner = await this.projectRepo.isOwner(projectId, user.userId);
     const isMember = await this.projectRepo.isMember(projectId, user.userId);
     const canDelete =
@@ -532,13 +510,13 @@ export class TaskService {
   }
 
   async getById(taskId: string, userId: string) {
-    const task = await this.taskRepo.findByIdWithMeetingAndProject(taskId);
+    const task = await this.taskRepo.findByIdWithProject(taskId);
 
     if (!task) {
       throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
     }
 
-    const projectId = task.meeting.projectId;
+    const projectId = getTaskProjectId(task);
     const isOwner = await this.projectRepo.isOwner(projectId, userId);
     const isMember = await this.projectRepo.isMember(projectId, userId);
     const isAssignee = task.assigneeId === userId;
@@ -565,7 +543,7 @@ export class TaskService {
       );
     }
     const transitions = await this.jiraIssueService.getTransitions(
-      task.meeting.project.id,
+      getTaskProjectId(task),
       issueKey,
       userId,
     );
@@ -592,7 +570,7 @@ export class TaskService {
       );
     }
     return this.jiraIssueService.getTransitions(
-      task.meeting.project.id,
+      getTaskProjectId(task),
       task.jiraIssueKey,
       userId,
     );
@@ -616,7 +594,7 @@ export class TaskService {
       );
     }
     return this.jiraIssueService.transitionIssue(
-      task.meeting.project.id,
+      getTaskProjectId(task),
       task.jiraIssueKey,
       transitionId,
       userId,
@@ -624,10 +602,10 @@ export class TaskService {
   }
 
   private async assertTaskProjectAccess(
-    task: TaskWithMeetingProject,
+    task: TaskWithMeetingAndProject,
     userId: string,
   ): Promise<void> {
-    const projectId = task.meeting.project.id;
+    const projectId = getTaskProjectId(task);
     const isOwner = await this.projectRepo.isOwner(projectId, userId);
     const isMember = await this.projectRepo.isMember(projectId, userId);
     const isAssignee = task.assigneeId === userId;

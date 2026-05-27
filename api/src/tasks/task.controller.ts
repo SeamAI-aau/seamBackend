@@ -32,9 +32,9 @@ export class TaskController {
 
   @Post()
   @ApiOperation({
-    summary: 'Create a task (testing only)',
+    summary: 'Create a task manually',
     description:
-      'Creates a task with a placeholder meeting and transcript. For Jira integration testing only; in production tasks are created from the meeting extractor. No role restriction: any authenticated user with project access can create. Not intended for production use.',
+      'Creates a task directly in the project (no meeting upload). Scrum Masters typically assign developers; unassigned tasks stay EXTRACTED. Tasks from meeting recordings are created by the AI extractor instead.',
   })
   @ApiCreatedResponse({
     description: 'Task created. Same shape as GET /tasks/:id.',

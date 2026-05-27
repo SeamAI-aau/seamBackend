@@ -21,11 +21,7 @@ new Worker(
     const task = await prisma.task.findUnique({
       where: { id: taskId },
       include: {
-        meeting: {
-          include: {
-            project: true,
-          },
-        },
+        project: true,
       },
     });
 
@@ -36,7 +32,7 @@ new Worker(
 
     if (task.status !== 'APPROVED') return;
 
-    const ownerId = task.meeting.project.ownerId;
+    const ownerId = task.project.ownerId;
 
     const jiraAccount = await prisma.jiraAccount.findUnique({
       where: { userId: ownerId },
@@ -50,7 +46,7 @@ new Worker(
 
     const cloudId = jiraAccount.cloudId;
 
-    const projectKey = task.meeting.project.jiraProjectKey;
+    const projectKey = task.project.jiraProjectKey;
 
     const descriptionAdf = {
       type: 'doc',

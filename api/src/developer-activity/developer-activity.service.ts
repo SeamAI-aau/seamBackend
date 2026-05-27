@@ -1,9 +1,14 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { IDeveloperActivityRepository } from './developer-activity.repository';
 import { DEVELOPER_ACTIVITY_REPOSITORY } from './developer-activity.tokens';
 import { AppException } from '../common/errors/app.exception';
 import { ErrorCode } from '../common/errors/error-codes';
+import type { CurrentUserType } from '../auth/types/current-user.type';
+import {
+  resolvePerformanceActivityUserId,
+  type ProjectActivityAccess,
+} from '../common/utils/activity-access.util';
 
 @Injectable()
 export class DeveloperActivityService {
@@ -15,7 +20,7 @@ export class DeveloperActivityService {
 
   async getActivityFeed(
     projectId: string,
-    userId: string,
+    user: CurrentUserType,
     filters: {
       source?: 'GITHUB' | 'JIRA';
       userId?: string;
@@ -25,7 +30,9 @@ export class DeveloperActivityService {
       limit?: number;
     },
   ) {
-    await this.ensureProjectAccess(projectId, userId);
+    const access = await this.assertProjectAccess(projectId, user.userId);
+    const scopedUserId = resolvePerformanceActivityUserId(user, access, filters.userId);
+    await this.validateScopedMember(projectId, access.ownerId, scopedUserId);
 
     const page = filters.page ?? 1;
     const limit = Math.min(filters.limit ?? 50, 100);
@@ -33,7 +40,7 @@ export class DeveloperActivityService {
 
     const filterInput = {
       projectId,
-      userId: filters.userId,
+      userId: scopedUserId,
       source: filters.source,
       fromDate: filters.fromDate ? new Date(filters.fromDate) : undefined,
       toDate: filters.toDate ? new Date(filters.toDate) : undefined,
@@ -55,7 +62,7 @@ export class DeveloperActivityService {
 
   async getChartData(
     projectId: string,
-    userId: string,
+    user: CurrentUserType,
     filters: {
       fromDate?: string;
       toDate?: string;
@@ -63,7 +70,9 @@ export class DeveloperActivityService {
       userId?: string;
     },
   ) {
-    await this.ensureProjectAccess(projectId, userId);
+    const access = await this.assertProjectAccess(projectId, user.userId);
+    const scopedUserId = resolvePerformanceActivityUserId(user, access, filters.userId);
+    await this.validateScopedMember(projectId, access.ownerId, scopedUserId);
 
     const toDate = filters.toDate ? new Date(filters.toDate) : new Date();
     const fromDate = filters.fromDate
@@ -71,15 +80,24 @@ export class DeveloperActivityService {
       : new Date(toDate.getTime() - 30 * 24 * 60 * 60 * 1000);
     const groupBy = filters.groupBy ?? 'day';
 
-    return this.activityRepo.getChartData(projectId, fromDate, toDate, groupBy, filters.userId);
+    return this.activityRepo.getChartData(
+      projectId,
+      fromDate,
+      toDate,
+      groupBy,
+      scopedUserId,
+    );
   }
 
-  private async ensureProjectAccess(projectId: string, userId: string): Promise<void> {
+  private async assertProjectAccess(
+    projectId: string,
+    userId: string,
+  ): Promise<ProjectActivityAccess> {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
       select: {
         ownerId: true,
-        members: { where: { userId, status: 'ACTIVE' }, take: 1 },
+        members: { where: { userId, status: 'ACTIVE' }, take: 1, select: { userId: true } },
       },
     });
     if (!project) {
@@ -89,6 +107,31 @@ export class DeveloperActivityService {
     const isMember = project.members.length > 0;
     if (!isOwner && !isMember) {
       throw new AppException(ErrorCode.FORBIDDEN, 'Access denied', 403);
+    }
+    return { ownerId: project.ownerId, isOwner, isMember };
+  }
+
+  private async validateScopedMember(
+    projectId: string,
+    ownerId: string,
+    scopedUserId?: string,
+  ): Promise<void> {
+    if (!scopedUserId) {
+      return;
+    }
+    if (scopedUserId === ownerId) {
+      return;
+    }
+    const member = await this.prisma.projectMember.findFirst({
+      where: { projectId, userId: scopedUserId, status: 'ACTIVE' },
+      select: { userId: true },
+    });
+    if (!member) {
+      throw new AppException(
+        ErrorCode.VALIDATION_ERROR,
+        'userId must be the project owner or an active member',
+        400,
+      );
     }
   }
 }
