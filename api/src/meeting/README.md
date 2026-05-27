@@ -20,6 +20,7 @@ Meeting upload → **ai-engine-2** over HTTP; results return via **`POST /intern
 3. **Persistence** – `MeetingProcessingService` saves transcript + tasks (+ optional transcript blockers), sets status → `TASKS_EXTRACTED`, or `FAILED` on error/invalid payload. Tasks **with** NLP `assigneeId` → `task_assigned` to the developer; tasks **without** assignee → **`tasks_pending_assignment`** to project **owner** and **Scrum Master** members (so they can assign before approve/decline). Optional per-task Jira proposal fields (`task_id`, `suggested_status`, `jiraAction`) are stored for post-approve create/transition (no Jira writes on callback).
 
 **Jira context for ai-engine:** `GET /internal/jira/context?project_id=<uuid>` → `{ tasks, statuses }`. Set engine `JIRA_CONTEXT_URL` to that URL (auth: `x-worker-secret` or internal key pair).
+**Project member directory for assignee IDs:** `GET /internal/projects/members?project_id=<uuid>` → `{ members: [{ id, name, email, role, aliases[] }] }`. Use this to map diarized speakers/LLM assignees to canonical `assigneeId` before callback.
 
 ## Ops
 
