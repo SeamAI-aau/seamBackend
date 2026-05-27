@@ -104,10 +104,10 @@ export class AuthService {
     if (!user) {
       this.logger.warn({ email, step: 'login.user_not_found' }, 'Login failed: user not found');
       throw new UnauthorizedException({
-        code: ErrorCode.INVALID_CREDENTIALS,
-        message: 'Invalid email or password.',
+        code: ErrorCode.USER_NOT_FOUND,
+        message: 'No account found with this email.',
         details: {
-          hint: 'Check that your email and password are correct.',
+          hint: 'Check the email address or sign up for a new account.',
         },
       });
     }
@@ -150,8 +150,8 @@ export class AuthService {
       );
       throw new UnauthorizedException({
         code: ErrorCode.INVALID_CREDENTIALS,
-        message: 'Invalid email or password.',
-        details: { hint: 'Check that your email and password are correct.' },
+        message: 'Incorrect password.',
+        details: { hint: 'Check your password and try again.' },
       });
     }
 
