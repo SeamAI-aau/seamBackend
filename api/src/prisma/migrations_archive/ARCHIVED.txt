@@ -1,0 +1,2 @@
+Legacy Prisma migrations (pre-2026-05-28 baseline v2).
+Do not run against a new database — use migrations/ instead.

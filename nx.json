@@ -59,5 +59,8 @@
       "dependsOn": ["^build"]
     }
   },
+  "sync": {
+    "applyChanges": true
+  },
   "analytics": false
 }

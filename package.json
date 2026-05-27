@@ -6,6 +6,8 @@
     "postinstall": "prisma generate --schema api/src/prisma/schema.prisma",
     "build:api": "nx run api:build",
     "db:migrate:deploy": "cd api && prisma migrate deploy",
+    "docker:up": "docker compose --env-file .env.docker up --build",
+    "docker:down": "docker compose down",
     "start:api": "node api/dist/main.js",
     "serve:api": "nx serve api"
   },

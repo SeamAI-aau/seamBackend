@@ -1,0 +1,10 @@
+node_modules
+api/dist
+api/node_modules
+.git
+.nx
+**/*.md
+**/.env
+**/.env.*
+!**/.env.docker.example
+**/migrations_archive
