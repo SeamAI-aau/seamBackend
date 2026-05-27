@@ -424,6 +424,9 @@ export class MeetingProcessingService {
       jiraProposalTransitionId: string | null;
       jiraProposalTargetStatus: string | null;
     }> = [];
+    const assigneeDirectory = projectId
+      ? await this.loadAssigneeDirectory(projectId)
+      : [];
 
     for (const task of tasks) {
       if (!task || typeof task !== 'object') continue;
@@ -435,6 +438,7 @@ export class MeetingProcessingService {
         taskPayload.assigneeId,
         taskPayload.assignee,
         projectId,
+        assigneeDirectory,
       );
       const confidenceScore = this.normalizeConfidence(taskPayload.confidence);
       const jiraIssueKey =
@@ -483,6 +487,7 @@ export class MeetingProcessingService {
     assigneeId?: string,
     assignee?: string,
     projectId?: string,
+    assigneeDirectory?: AssigneeDirectoryEntry[],
   ): Promise<string | null> {
     if (this.isUuid(assigneeId)) {
       return assigneeId!.trim();
@@ -497,29 +502,11 @@ export class MeetingProcessingService {
     if (!target) return null;
 
     try {
-      const members = await this.projectRepo.findMembersByProject(projectId);
-      // First pass: exact name or exact email
-      for (const m of members) {
-        const user = (m as any).user;
-        if (!user) continue;
-        const name = (user.name || '').trim().toLowerCase();
-        const email = (user.email || '').trim().toLowerCase();
-        if (name && name === target) return user.id;
-        if (email && email === target) return user.id;
-      }
-
-      // Second pass: contains / token match (first/last or nickname)
-      for (const m of members) {
-        const user = (m as any).user;
-        if (!user) continue;
-        const name = (user.name || '').trim().toLowerCase();
-        const email = (user.email || '').trim().toLowerCase();
-        if (name && name.includes(target)) return user.id;
-        if (email && email.includes(target)) return user.id;
-        // match local-part of email (alice@ → 'alice')
-        const local = (email || '').split('@')[0];
-        if (local && local === target) return user.id;
-      }
+      const members = assigneeDirectory ?? (await this.loadAssigneeDirectory(projectId));
+      const exact = this.matchAssigneeByExactToken(target, members);
+      if (exact) return exact;
+      const fuzzy = this.matchAssigneeByUniqueContains(target, members);
+      if (fuzzy) return fuzzy;
     } catch (err) {
       this.logger.warn({ projectId, assignee, err }, 'Failed to resolve assignee name to project member');
       return null;
@@ -593,4 +580,66 @@ export class MeetingProcessingService {
       value.trim(),
     );
   }
+
+  private async loadAssigneeDirectory(projectId: string): Promise<AssigneeDirectoryEntry[]> {
+    const members = await this.projectRepo.findMembersByProject(projectId);
+    const directory: AssigneeDirectoryEntry[] = [];
+    for (const member of members) {
+      const user = member.user;
+      if (!member.userId || !user) continue;
+      directory.push({
+        id: user.id,
+        name: (user.name ?? '').trim().toLowerCase(),
+        email: (user.email ?? '').trim().toLowerCase(),
+        emailLocalPart: (user.email ?? '').split('@')[0]?.trim().toLowerCase() ?? '',
+      });
+    }
+    return directory;
+  }
+
+  private matchAssigneeByExactToken(
+    target: string,
+    directory: AssigneeDirectoryEntry[],
+  ): string | null {
+    for (const entry of directory) {
+      if (entry.name && entry.name === target) return entry.id;
+      if (entry.email && entry.email === target) return entry.id;
+      if (entry.emailLocalPart && entry.emailLocalPart === target) return entry.id;
+    }
+    return null;
+  }
+
+  private matchAssigneeByUniqueContains(
+    target: string,
+    directory: AssigneeDirectoryEntry[],
+  ): string | null {
+    const matches = directory.filter((entry) => {
+      if (entry.name && entry.name.includes(target)) return true;
+      if (entry.email && entry.email.includes(target)) return true;
+      return false;
+    });
+
+    if (matches.length === 1) {
+      return matches[0].id;
+    }
+
+    if (matches.length > 1) {
+      this.logger.warn(
+        {
+          assignee: target,
+          candidateUserIds: matches.map((m) => m.id),
+        },
+        'Assignee resolution ambiguous; leaving task unassigned',
+      );
+    }
+
+    return null;
+  }
 }
+
+type AssigneeDirectoryEntry = {
+  id: string;
+  name: string;
+  email: string;
+  emailLocalPart: string;
+};

@@ -50,6 +50,7 @@ export interface WorkerTransitionedTaskPayload {
   title: string;
   description: string;
   assignee: string;
+  assigneeId?: string;
   confidence: number;
   transcript_reference: string;
   deadline?: string;
@@ -200,6 +201,14 @@ export class WorkerTransitionedTaskBodyDto {
   @IsString()
   @IsNotEmpty()
   assignee!: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Optional canonical assignee id resolved by the worker.',
+  })
+  @IsOptional()
+  @IsUUID()
+  assigneeId?: string;
 
   @ApiProperty({ example: 0.9 })
   @IsNumber()
