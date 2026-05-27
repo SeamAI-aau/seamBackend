@@ -8,6 +8,8 @@ import { AppException } from '../../common/errors/app.exception';
 import { TASK_REPOSITORY } from '../../tasks/types/task.tokens';
 import type { ITaskRepository } from '../../tasks/types/task.repository';
 import type { JiraCreateIssueResponse } from './types/jira-api.types';
+import { JIRA_REPOSITORY } from './jira.tokens';
+import type { IJiraRepository } from './jira.repository';
 
 const JIRA_API_ISSUE_PATH = '/rest/api/3/issue';
 const MAX_ERROR_LEN = 8000;
@@ -46,6 +48,8 @@ export class JiraSyncService {
   constructor(
     @Inject(TASK_REPOSITORY)
     private readonly taskRepo: ITaskRepository,
+    @Inject(JIRA_REPOSITORY)
+    private readonly jiraRepo: IJiraRepository,
     private readonly jiraService: JiraService,
     private readonly jiraIssueService: JiraIssueService,
   ) {}
@@ -121,6 +125,17 @@ export class JiraSyncService {
     const url = `https://api.atlassian.com/ex/jira/${cloudId}${JIRA_API_ISSUE_PATH}`;
 
     try {
+      let jiraAssigneeAccountId: string | null = null;
+      if (task.assigneeId) {
+        const assigneeAccount = await this.jiraRepo.findAccountByUserId(task.assigneeId);
+        jiraAssigneeAccountId = assigneeAccount?.accountId?.trim() ? assigneeAccount.accountId.trim() : null;
+        if (!jiraAssigneeAccountId) {
+          this.logger.warn(
+            `[jira-sync] create assignee skipped taskId=${taskId} reason=assignee_not_connected assigneeId=${task.assigneeId}`,
+          );
+        }
+      }
+
       const descriptionAdf = {
         type: 'doc',
         version: 1,
@@ -145,6 +160,7 @@ export class JiraSyncService {
             summary: task.title,
             description: descriptionAdf,
             issuetype: { name: 'Task' },
+            ...(jiraAssigneeAccountId ? { assignee: { id: jiraAssigneeAccountId } } : {}),
           },
         },
         {

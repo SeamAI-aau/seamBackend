@@ -11,6 +11,7 @@ import type { IProjectRepository } from '../project/types/project.repository';
 import { JiraSyncQueue } from '../integrations/jira/queue/jira-sync.queue';
 import { JiraIssueService } from '../integrations/jira/jira-issue.service';
 import { JiraSyncService } from '../integrations/jira/jira-sync.service';
+import { JiraContextService } from '../integrations/jira/jira-context.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { NotificationService } from '../notification/notification.service';
 import { RealtimeService } from '../infrastracture/realtime/realtime.service';
@@ -31,6 +32,7 @@ export class TaskService {
     private readonly jiraSyncQueue: JiraSyncQueue,
     private readonly jiraSyncService: JiraSyncService,
     private readonly jiraIssueService: JiraIssueService,
+    private readonly jiraContextService: JiraContextService,
     private readonly activityLog: ActivityLogService,
     private readonly notification: NotificationService,
     private readonly realtime: RealtimeService,
@@ -38,13 +40,21 @@ export class TaskService {
     private readonly logger: Logger,
   ) {}
 
-  async createTask(userId: string, body: CreateTaskDto): Promise<TaskWithMeetingAndProject> {
+  async createTask(user: CurrentUserType, body: CreateTaskDto): Promise<TaskWithMeetingAndProject> {
+    if (user.role !== Role.SCRUM_MASTER) {
+      throw new AppException(
+        ErrorCode.FORBIDDEN,
+        'Only Scrum Masters can create tasks manually',
+        403,
+      );
+    }
+
     const project = await this.projectRepo.findById(body.projectId);
     if (!project) {
       throw new AppException(ErrorCode.PROJECT_NOT_FOUND, 'Project not found', 404);
     }
-    const isOwner = await this.projectRepo.isOwner(body.projectId, userId);
-    const isMember = await this.projectRepo.isMember(body.projectId, userId);
+    const isOwner = await this.projectRepo.isOwner(body.projectId, user.userId);
+    const isMember = await this.projectRepo.isMember(body.projectId, user.userId);
     if (!isOwner && !isMember) {
       throw new AppException(ErrorCode.FORBIDDEN, 'Access denied to this project', 403);
     }
@@ -58,7 +68,7 @@ export class TaskService {
     const created = await this.prisma.task.create({
       data: {
         projectId: body.projectId,
-        createdById: userId,
+        createdById: user.userId,
         source: TaskSource.MANUAL,
         title: body.title,
         description: body.description ?? null,
@@ -83,7 +93,7 @@ export class TaskService {
     this.activityLog
       .log({
         projectId: body.projectId,
-        userId,
+        userId: user.userId,
         action: 'task.created',
         entityType: 'Task',
         entityId: task.id,
@@ -95,7 +105,7 @@ export class TaskService {
           `Failed to log activity for task creation: ${
             err instanceof Error ? err.message : String(err)
           }`,
-          { taskId: task.id, projectId: body.projectId, userId },
+          { taskId: task.id, projectId: body.projectId, userId: user.userId },
         );
       });
 
@@ -552,15 +562,20 @@ export class TaskService {
     const projectId = getTaskProjectId(task);
     const isOwner = await this.projectRepo.isOwner(projectId, user.userId);
     const isMember = await this.projectRepo.isMember(projectId, user.userId);
-    const canDelete =
-      isOwner || (user.role === Role.SCRUM_MASTER && (isOwner || isMember));
+    const canDelete = user.role === Role.SCRUM_MASTER && (isOwner || isMember);
 
     if (!canDelete) {
       throw new AppException(
         ErrorCode.FORBIDDEN,
-        'Only project owner or Scrum Master can delete tasks',
+        'Only Scrum Masters can delete tasks',
         403,
       );
+    }
+
+    if (task.jiraIssueKey?.trim()) {
+      // If the task created a Jira ticket, delete the ticket first to avoid leaving an orphan.
+      // If Jira deletion fails, we intentionally abort task deletion so the user can retry.
+      await this.jiraIssueService.deleteIssue(projectId, task.jiraIssueKey, user.userId);
     }
 
     await this.taskRepo.delete(taskId);
@@ -581,6 +596,115 @@ export class TaskService {
       });
 
     return { id: taskId, deleted: true };
+  }
+
+  async getJiraIssueDetailsForTask(taskId: string, userId: string) {
+    const task = await this.taskRepo.findByIdWithProject(taskId);
+    if (!task) {
+      throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
+    }
+    await this.assertTaskProjectAccess(task, userId);
+    if (!task.jiraIssueKey?.trim()) {
+      throw new AppException(ErrorCode.VALIDATION_ERROR, 'Task is not synced to Jira yet', 400);
+    }
+    return this.jiraIssueService.getIssueDetails(getTaskProjectId(task), task.jiraIssueKey, userId);
+  }
+
+  async getJiraOverviewForTask(taskId: string, userId: string) {
+    const task = await this.taskRepo.findByIdWithProject(taskId);
+    if (!task) {
+      throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
+    }
+    await this.assertTaskProjectAccess(task, userId);
+    if (!task.jiraIssueKey?.trim()) {
+      throw new AppException(ErrorCode.VALIDATION_ERROR, 'Task is not synced to Jira yet', 400);
+    }
+
+    const projectId = getTaskProjectId(task);
+    const issueKey = task.jiraIssueKey.trim().toUpperCase();
+
+    const [issue, transitions, priorities, users, browse] = await Promise.all([
+      this.jiraIssueService.getIssueDetails(projectId, issueKey, userId),
+      this.jiraIssueService.getTransitions(projectId, issueKey, userId),
+      this.jiraIssueService.getPriorities(projectId, userId),
+      this.jiraIssueService.getAssignableUsers(projectId, issueKey, userId),
+      this.jiraIssueService.getBrowseUrl(projectId, issueKey, userId),
+    ]);
+
+    return {
+      issue,
+      transitions: transitions.transitions ?? [],
+      priorities: priorities.priorities ?? [],
+      assignableUsers: users.users ?? [],
+      browseUrl: browse.browseUrl,
+    };
+  }
+
+  async importJiraIssuesToTasks(projectId: string, user: CurrentUserType) {
+    const isOwner = await this.projectRepo.isOwner(projectId, user.userId);
+    const isMember = await this.projectRepo.isMember(projectId, user.userId);
+    const canImport = user.role === Role.SCRUM_MASTER && (isOwner || isMember);
+    if (!canImport) {
+      throw new AppException(ErrorCode.FORBIDDEN, 'Only Scrum Masters can import Jira tasks', 403);
+    }
+
+    const context = await this.jiraContextService.getBoardContext(projectId);
+    const issues = context.tasks ?? [];
+
+    let upserted = 0;
+    for (const issue of issues) {
+      const issueKey = issue.task_id?.trim();
+      if (!issueKey) continue;
+
+      const assigneeAccountId = issue.assigneeAccountId?.trim() ?? null;
+      const assignee = assigneeAccountId
+        ? await this.prisma.jiraAccount.findFirst({
+            where: { accountId: assigneeAccountId },
+            select: { userId: true },
+          })
+        : null;
+
+      await this.prisma.task.upsert({
+        where: { projectId_jiraIssueKey: { projectId, jiraIssueKey: issueKey } },
+        update: {
+          title: issue.title?.trim() || issueKey,
+          status: TaskStatus.SYNCED,
+          source: TaskSource.JIRA_IMPORT,
+          assigneeId: assignee?.userId ?? null,
+        },
+        create: {
+          projectId,
+          jiraIssueKey: issueKey,
+          title: issue.title?.trim() || issueKey,
+          description: null,
+          status: TaskStatus.SYNCED,
+          source: TaskSource.JIRA_IMPORT,
+          createdById: user.userId,
+          assigneeId: assignee?.userId ?? null,
+        },
+      });
+      upserted += 1;
+    }
+
+    return { imported: issues.length, upserted };
+  }
+
+  async updateJiraIssueForTask(
+    taskId: string,
+    userId: string,
+    patch: { summary?: string; priorityName?: string; assigneeAccountId?: string | null },
+  ) {
+    const task = await this.taskRepo.findByIdWithProject(taskId);
+    if (!task) {
+      throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
+    }
+    await this.assertTaskProjectAccess(task, userId);
+    if (!task.jiraIssueKey?.trim()) {
+      throw new AppException(ErrorCode.VALIDATION_ERROR, 'Task is not synced to Jira yet', 400);
+    }
+    const projectId = getTaskProjectId(task);
+    const issueKey = task.jiraIssueKey.trim().toUpperCase();
+    return this.jiraIssueService.updateIssueFields(projectId, issueKey, userId, patch);
   }
 
   async getById(taskId: string, userId: string) {

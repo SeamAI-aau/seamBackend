@@ -12,6 +12,10 @@ export interface JiraContextTaskDto {
   task_id: string;
   title: string;
   current_status: string;
+  priority?: string | null;
+  assigneeAccountId?: string | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
 }
 
 export interface JiraBoardContextResponse {
@@ -24,6 +28,10 @@ interface JiraSearchIssue {
   fields?: {
     summary?: string;
     status?: { name?: string };
+    priority?: { name?: string };
+    assignee?: { accountId?: string };
+    updated?: string;
+    created?: string;
   };
 }
 
@@ -72,7 +80,7 @@ export class JiraContextService {
         params: {
           jql,
           maxResults: DEFAULT_MAX_ISSUES,
-          fields: 'summary,status',
+          fields: 'summary,status,priority,assignee,updated,created',
         },
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -91,6 +99,10 @@ export class JiraContextService {
           task_id: issue.key,
           title: issue.fields?.summary ?? issue.key,
           current_status: statusName,
+          priority: issue.fields?.priority?.name ?? null,
+          assigneeAccountId: issue.fields?.assignee?.accountId ?? null,
+          updatedAt: issue.fields?.updated ?? null,
+          createdAt: issue.fields?.created ?? null,
         });
       }
 

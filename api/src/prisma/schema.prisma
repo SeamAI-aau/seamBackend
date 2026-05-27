@@ -136,6 +136,7 @@ enum JiraProposalAction {
 enum TaskSource {
   MANUAL
   MEETING_EXTRACTION
+  JIRA_IMPORT
 }
 
 model Task {
@@ -168,6 +169,7 @@ model Task {
 
   @@index([projectId])
   @@index([meetingId])
+  @@unique([projectId, jiraIssueKey])
 }
 
 model RefreshToken {
@@ -186,6 +188,8 @@ model JiraAccount {
   refreshToken String
   expiresAt    DateTime
   cloudId      String
+  /// Human Jira site base URL (e.g. https://your-tenant.atlassian.net) used for opening issues in browser.
+  siteUrl      String?
   /// Atlassian account id (from /rest/api/3/myself) for changelog author mapping.
   accountId    String?
   displayName  String?
