@@ -22,7 +22,7 @@ async function bootstrap() {
   // === ADD THESE LINES ===
   app.set('trust proxy', 1); // Important for Render / proxies
 
-  const allowedOrigins = ['http://localhost:8080', 'http://192.168.1.3:8080'];
+  const allowedOrigins = ['http://localhost:8080', 'http://192.168.1.3:8080', 'http://64.227.118.58:3000'];
 
   app.enableCors({
     origin: allowedOrigins, // ← Use array instead of function for now
