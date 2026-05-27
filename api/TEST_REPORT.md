@@ -95,15 +95,6 @@ This report covers backend tests implemented and validated for the `@org/api` pr
 - Additional blocker when starting API manually without project env values: strict config validation requires `DATABASE_URL`, Cloudinary keys, and `TOKEN_ENCRYPTION_SECRET`.
 - Impact: existing e2e tests (`api.spec.ts`, `realtime.spec.ts`) could not be fully executed in this environment.
 
-## Implemented Test Artifacts
-
-- `api/src/common/utils/encryption.util.spec.ts` (unit)
-- `api/src/auth/jwt.cookie-extractor.spec.ts` (unit)
-- `api/src/auth/auth.controller.spec.ts` (unit/controller)
-- `api/src/project/project-membership.util.spec.ts` (unit)
-- `api/src/project/project.controller.spec.ts` (unit/controller)
-- `api/src/health/health.integration.spec.ts` (integration)
-
 ## Extracted Backend Test Cases
 
 | ID | Type | Feature/Area | Description | Preconditions | Steps/Action | Expected Result | Status |
