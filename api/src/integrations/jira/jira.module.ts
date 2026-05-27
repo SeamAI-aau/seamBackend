@@ -9,6 +9,7 @@ import { JiraContextService } from './jira-context.service';
 import { InternalJiraController } from './internal-jira.controller';
 import { JiraSyncQueue } from './queue/jira-sync.queue';
 import { JiraSyncProcessor } from './queue/jira.sync.processor';
+import { NoopJiraSyncQueue } from './queue/noop-jira-sync.queue';
 import { JIRA_REPOSITORY } from './jira.tokens';
 import { PrismaJiraRepository } from '../../prisma/repositories/prisma-jira.repository';
 import { PrismaModule } from '../../prisma/prisma.module';
@@ -17,13 +18,6 @@ import { QueueModule } from '../../infrastracture/queue/queue.module';
 import { ProjectModule } from '../../project/project.module';
 
 const queuesEnabled = process.env.DISABLE_QUEUES !== 'true';
-
-class NoopJiraSyncQueue {
-  async enqueue(_taskId: string) {
-    // no-op when queues are disabled
-    return;
-  }
-}
 
 @Module({
   imports: [

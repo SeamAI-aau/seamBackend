@@ -73,6 +73,31 @@ export class GithubWebhookService {
     return secret;
   }
 
+  /** Setup metadata for the dashboard (does not expose the webhook secret). */
+  getWebhookSetup() {
+    const apiBase = this.getPublicApiBaseUrl();
+    const secretConfigured = Boolean(this.config.get<string>('GITHUB_WEBHOOK_SECRET')?.trim());
+
+    return {
+      payloadUrl: `${apiBase}/integrations/github/webhook`,
+      secretConfigured,
+      contentType: 'application/json',
+      events: ['pull_request'],
+      instructions:
+        'In GitHub, open the repository linked to this Seam workspace → Settings → Webhooks → Add webhook. ' +
+        'Use the payload URL below, content type application/json, event Pull requests, and the same secret as GITHUB_WEBHOOK_SECRET on the API host.',
+    };
+  }
+
+  private getPublicApiBaseUrl(): string {
+    const explicit = this.config.get<string>('API_URL')?.trim();
+    if (explicit) {
+      return explicit.replace(/\/+$/, '');
+    }
+    const port = this.config.get<string>('PORT') ?? '3000';
+    return `http://localhost:${port}`;
+  }
+
   async handleWebhook(params: {
     rawBody: Buffer;
     signature256: string | undefined;

@@ -206,7 +206,10 @@ export class TaskService {
         });
         if (!approvedTask.jiraIssueKey) {
           try {
-            await this.jiraSyncQueue.enqueue(task.id);
+            const jobId = await this.jiraSyncQueue.enqueue(task.id);
+            this.logger.log(
+              `[jira-sync] approve enqueue ok taskId=${task.id} projectId=${projectId} jobId=${jobId}`,
+            );
           } catch (err) {
             const msg =
               err instanceof Error
@@ -214,8 +217,8 @@ export class TaskService {
                 : `Failed to enqueue Jira sync: ${String(err)}`;
             await this.taskRepo.setJiraSyncLastError(task.id, msg);
             this.logger.error(
-              msg,
-              { taskId: task.id, projectId: getTaskProjectId(task), userId },
+              `[jira-sync] approve enqueue failed taskId=${task.id} projectId=${projectId}: ${msg}`,
+              { taskId: task.id, projectId, userId },
             );
           }
         }
@@ -405,12 +408,14 @@ export class TaskService {
 
     if (process.env.DISABLE_QUEUES === 'true') {
       // Local/dev fallback: run inline when BullMQ is disabled.
+      this.logger.log(`[jira-sync] manual retry inline taskId=${taskId} (DISABLE_QUEUES=true)`);
       await this.jiraSyncService.syncTaskToJira(taskId);
       return { enqueued: true };
     }
 
     try {
-      await this.jiraSyncQueue.enqueue(taskId);
+      const jobId = await this.jiraSyncQueue.enqueue(taskId);
+      this.logger.log(`[jira-sync] manual retry enqueued taskId=${taskId} jobId=${jobId}`);
       return { enqueued: true };
     } catch (err) {
       const msg =
@@ -418,6 +423,7 @@ export class TaskService {
           ? `Failed to enqueue Jira sync: ${err.message}`
           : `Failed to enqueue Jira sync: ${String(err)}`;
       await this.taskRepo.setJiraSyncLastError(taskId, msg);
+      this.logger.error(`[jira-sync] manual retry enqueue failed taskId=${taskId}: ${msg}`);
       throw err;
     }
   }

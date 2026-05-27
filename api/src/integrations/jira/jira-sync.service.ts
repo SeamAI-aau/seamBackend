@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, Logger } from '@nestjs/common';
 import axios, { isAxiosError } from 'axios';
 import { UnrecoverableError } from 'bullmq';
 import { JiraProposalAction, TaskStatus } from '@prisma/client';
@@ -41,6 +41,8 @@ function httpStatus(err: unknown): number | undefined {
 
 @Injectable()
 export class JiraSyncService {
+  private readonly logger = new Logger(JiraSyncService.name);
+
   constructor(
     @Inject(TASK_REPOSITORY)
     private readonly taskRepo: ITaskRepository,
@@ -56,11 +58,25 @@ export class JiraSyncService {
    * Uses BullMQ `UnrecoverableError` for non-retryable cases (missing config, HTTP 400/404).
    */
   async syncTaskToJira(taskId: string): Promise<void> {
+    this.logger.log(`[jira-sync] sync start taskId=${taskId}`);
     const task = await this.taskRepo.findByIdWithProject(taskId);
 
-    if (!task) return;
-    if (task.jiraIssueKey) return;
-    if (task.status !== TaskStatus.APPROVED) return;
+    if (!task) {
+      this.logger.warn(`[jira-sync] sync skip taskId=${taskId} reason=task_not_found`);
+      return;
+    }
+    if (task.jiraIssueKey) {
+      this.logger.log(
+        `[jira-sync] sync skip taskId=${taskId} reason=already_synced jiraIssueKey=${task.jiraIssueKey}`,
+      );
+      return;
+    }
+    if (task.status !== TaskStatus.APPROVED) {
+      this.logger.warn(
+        `[jira-sync] sync skip taskId=${taskId} reason=status_not_approved status=${task.status}`,
+      );
+      return;
+    }
 
     const projectId = task.project.id;
     const ownerId = task.project.ownerId;
@@ -68,6 +84,7 @@ export class JiraSyncService {
 
     if (!projectKey?.trim()) {
       const msg = `Project ${projectId} has no Jira project key configured`;
+      this.logger.warn(`[jira-sync] sync fail taskId=${taskId} reason=no_project_key projectId=${projectId}`);
       await this.taskRepo.setJiraSyncLastError(taskId, msg);
       throw new UnrecoverableError(msg);
     }
@@ -76,9 +93,16 @@ export class JiraSyncService {
       task.jiraProposalAction === JiraProposalAction.TRANSITION &&
       task.jiraProposalIssueKey?.trim()
     ) {
+      this.logger.log(
+        `[jira-sync] sync transition taskId=${taskId} issueKey=${task.jiraProposalIssueKey.trim()}`,
+      );
       await this.syncApprovedTransition(taskId, projectId, ownerId, task);
       return;
     }
+
+    this.logger.log(
+      `[jira-sync] sync create taskId=${taskId} projectId=${projectId} projectKey=${projectKey} ownerId=${ownerId}`,
+    );
 
     let accessToken: string;
     let cloudId: string;
@@ -86,8 +110,10 @@ export class JiraSyncService {
       const tokens = await this.jiraService.getValidAccessToken(ownerId);
       accessToken = tokens.accessToken;
       cloudId = tokens.cloudId;
+      this.logger.log(`[jira-sync] token ok taskId=${taskId} cloudId=${cloudId}`);
     } catch (err) {
       const msg = formatJiraApiError(err);
+      this.logger.warn(`[jira-sync] token fail taskId=${taskId}: ${msg}`);
       await this.taskRepo.setJiraSyncLastError(taskId, msg);
       throw err;
     }
@@ -132,10 +158,14 @@ export class JiraSyncService {
 
       const issueKey = response.data.key;
       await this.taskRepo.markAsCreatedInJira(taskId, issueKey);
+      this.logger.log(`[jira-sync] sync success taskId=${taskId} jiraIssueKey=${issueKey}`);
     } catch (err) {
       const msg = formatJiraApiError(err);
-      await this.taskRepo.setJiraSyncLastError(taskId, msg);
       const status = httpStatus(err);
+      this.logger.warn(
+        `[jira-sync] create fail taskId=${taskId} httpStatus=${status ?? 'n/a'}: ${msg}`,
+      );
+      await this.taskRepo.setJiraSyncLastError(taskId, msg);
       if (status === 400 || status === 404) {
         throw new UnrecoverableError(msg);
       }
@@ -168,9 +198,13 @@ export class JiraSyncService {
       );
       await this.jiraIssueService.transitionIssue(projectId, issueKey, transitionId, ownerId);
       await this.taskRepo.markAsCreatedInJira(taskId, issueKey);
+      this.logger.log(
+        `[jira-sync] transition success taskId=${taskId} jiraIssueKey=${issueKey}`,
+      );
     } catch (err) {
       const msg =
         err instanceof AppException ? err.message : formatJiraApiError(err);
+      this.logger.warn(`[jira-sync] transition fail taskId=${taskId}: ${msg}`);
       await this.taskRepo.setJiraSyncLastError(taskId, msg);
       if (err instanceof UnrecoverableError) throw err;
       if (err instanceof AppException && err.getStatus() < 500) {
