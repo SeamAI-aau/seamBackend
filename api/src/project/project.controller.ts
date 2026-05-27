@@ -226,6 +226,12 @@ export class ProjectController {
           meetingTitle: 'Daily standup',
           meetingCreatedAt: '2026-03-10T09:00:00.000Z',
           transcriptId: 'transcript_1',
+          summary: {
+            summary: 'Reviewed sprint blockers and delivery risks.',
+            key_decisions: ['Escalate partner API request'],
+            meeting_sentiment: 'Neutral',
+            main_topic: 'Sprint delivery risks',
+          },
           insights: ['Delivery risk around OAuth fix'],
           suggestedActions: ['Confirm API contract with partner team'],
         },

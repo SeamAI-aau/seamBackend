@@ -929,7 +929,7 @@ export class ProjectService {
         transcripts: {
           orderBy: { version: 'desc' },
           take: 1,
-          select: { id: true, insights: true, suggestedActions: true },
+          select: { id: true, insights: true, suggestedActions: true, summary: true },
         },
       },
     });
@@ -944,6 +944,7 @@ export class ProjectService {
       meetingTitle: meeting.title,
       meetingCreatedAt: meeting.createdAt,
       transcriptId: transcript?.id ?? null,
+      summary: this.normalizeSummary(transcript?.summary),
       insights: this.normalizeStringList(transcript?.insights),
       suggestedActions: this.normalizeStringList(transcript?.suggestedActions),
     };
@@ -957,6 +958,57 @@ export class ProjectService {
       .map((item) => (item == null ? '' : String(item)).trim())
       .filter((item) => item.length > 0);
     return items.length > 0 ? items : null;
+  }
+
+  private normalizeSummary(value: unknown): {
+    summary: string;
+    key_decisions?: string[];
+    meeting_sentiment?: string;
+    main_topic?: string;
+  } | null {
+    if (!value || typeof value !== 'object') {
+      return null;
+    }
+
+    const summaryValue = value as {
+      summary?: unknown;
+      key_decisions?: unknown;
+      meeting_sentiment?: unknown;
+      main_topic?: unknown;
+    };
+
+    const summaryText =
+      typeof summaryValue.summary === 'string' ? summaryValue.summary.trim() : '';
+    const keyDecisions = this.normalizeStringList(summaryValue.key_decisions) ?? [];
+    const meetingSentiment =
+      typeof summaryValue.meeting_sentiment === 'string'
+        ? summaryValue.meeting_sentiment.trim()
+        : '';
+    const mainTopic =
+      typeof summaryValue.main_topic === 'string' ? summaryValue.main_topic.trim() : '';
+
+    if (!summaryText && keyDecisions.length === 0 && !meetingSentiment && !mainTopic) {
+      return null;
+    }
+
+    const normalized: {
+      summary: string;
+      key_decisions?: string[];
+      meeting_sentiment?: string;
+      main_topic?: string;
+    } = { summary: summaryText };
+
+    if (keyDecisions.length > 0) {
+      normalized.key_decisions = keyDecisions;
+    }
+    if (meetingSentiment) {
+      normalized.meeting_sentiment = meetingSentiment;
+    }
+    if (mainTopic) {
+      normalized.main_topic = mainTopic;
+    }
+
+    return normalized;
   }
 
   /** Returns unified list of GitHub and transcript blockers for the project. Scrum Master only. */

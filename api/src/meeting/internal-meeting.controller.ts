@@ -94,7 +94,29 @@ export class InternalMeetingController {
       throw new UnauthorizedException('Invalid worker secret');
     }
 
-    this.logger.log({ meetingId, payload }, 'Received worker callback payload');
+    this.logger.log(
+      {
+        meetingId,
+        status: payload.status,
+        transcriptLength: (payload.transcript || '').length,
+        tasksCount: payload.tasks?.length ?? 0,
+        newTasksCount: payload.new_tasks?.length ?? 0,
+        transitionedTasksCount: payload.transitioned_tasks?.length ?? 0,
+        blockersCount: payload.blockers?.length ?? 0,
+        hasSummary: Boolean(payload.summary),
+      },
+      'Received worker callback payload',
+    );
+
+    this.logger.log(
+      {
+        meetingId,
+        tasksPayload: JSON.stringify(payload.tasks ?? []),
+        newTasksPayload: JSON.stringify(payload.new_tasks ?? []),
+        transitionedTasksPayload: JSON.stringify(payload.transitioned_tasks ?? []),
+      },
+      'Worker callback task payloads (raw)'
+    );
 
     await this.meetingProcessingService.handleWorkerResult(meetingId, payload);
     const result = { message: 'Received' };

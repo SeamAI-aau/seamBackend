@@ -144,6 +144,12 @@ export class MeetingController {
             version: 1,
             content: 'Speaker A: Hello...',
             diarization: { segments: [] },
+            summary: {
+              summary: 'Reviewed sprint progress and next steps.',
+              key_decisions: ['Freeze scope for sprint 12'],
+              meeting_sentiment: 'Positive',
+              main_topic: 'Sprint 12 delivery',
+            },
             insights: ['Delivery risk around OAuth fix', 'Team aligned on next sprint scope'],
             suggestedActions: ['Confirm API contract with partner team', 'Assign QA owner for OAuth regression'],
             createdAt: '2026-05-14T12:05:00.000Z',

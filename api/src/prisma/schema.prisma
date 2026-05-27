@@ -118,6 +118,7 @@ model Transcript {
   version     Int
   content     String
   diarization Json
+  summary     Json?
   insights    Json?
   suggestedActions Json?
   createdAt   DateTime @default(now())
