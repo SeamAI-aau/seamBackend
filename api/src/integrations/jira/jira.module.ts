@@ -58,6 +58,12 @@ class NoopJiraSyncQueue {
       useClass: PrismaJiraRepository,
     },
   ],
-  exports: [JiraSyncQueue, JiraService, JiraIssueService, JiraContextService],
+  exports: [
+    JiraSyncQueue,
+    JiraSyncService,
+    JiraService,
+    JiraIssueService,
+    JiraContextService,
+  ],
 })
 export class JiraModule {}
