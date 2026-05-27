@@ -7,8 +7,10 @@ This report covers backend tests implemented and validated for the `@org/api` pr
 ## Features to Be Tested
 
 - Security and auth token extraction logic (`auth`).
+- Auth session lifecycle (`register`, `login`, `refresh`, `logout`).
 - Encryption/decryption utility correctness and safety (`common/utils`).
 - Project assignment authorization rules (`project`).
+- Project management flows (`create`, `update`, member invitation lifecycle).
 - Health API availability and response contract (`health`).
 - Application bootstrap and docs endpoint availability (`api-e2e` existing).
 - Realtime socket authentication behavior (`api-e2e` existing).
@@ -80,9 +82,9 @@ This report covers backend tests implemented and validated for the `@org/api` pr
 
 - Command run: `npx nx test api`
 - Result: **PASS**
-- Suites: **4 passed / 4 total**
-- Tests: **9 passed / 9 total**
-- Duration: ~1.8s
+- Suites: **6 passed / 6 total**
+- Tests: **20 passed / 20 total**
+- Duration: ~2.8s
 
 ## E2E Execution Summary
 
@@ -97,7 +99,9 @@ This report covers backend tests implemented and validated for the `@org/api` pr
 
 - `api/src/common/utils/encryption.util.spec.ts` (unit)
 - `api/src/auth/jwt.cookie-extractor.spec.ts` (unit)
+- `api/src/auth/auth.controller.spec.ts` (unit/controller)
 - `api/src/project/project-membership.util.spec.ts` (unit)
+- `api/src/project/project.controller.spec.ts` (unit/controller)
 - `api/src/health/health.integration.spec.ts` (integration)
 
 ## Extracted Backend Test Cases
@@ -110,12 +114,29 @@ This report covers backend tests implemented and validated for the `@org/api` pr
 | UT-AUTH-001 | Unit | Auth Cookies | Extract valid `accessToken` cookie | Request has non-empty string cookie | Call `cookieTokenExtractor(req)` | Returns token string | Passed |
 | UT-AUTH-002 | Unit | Auth Cookies | Handle missing cookies safely | Request has no `cookies` | Call extractor | Returns `null` | Passed |
 | UT-AUTH-003 | Unit | Auth Cookies | Reject empty/non-string token values | Cookie is empty string or object | Call extractor | Returns `null` | Passed |
+| UT-AUTH-004 | Unit/Controller | Auth Register | Register flow sets auth cookies and returns user payload | Valid register DTO and mocked auth service | Call `AuthController.register` | `authService.register` called, cookies set, message+user returned | Passed |
+| UT-AUTH-005 | Unit/Controller | Auth Login | Login flow sets auth cookies | Valid login DTO and mocked auth service | Call `AuthController.login` | `authService.login` called, cookies set, success message returned | Passed |
+| UT-AUTH-006 | Unit/Controller | Auth Refresh | Refresh uses token from body or cookie | Refresh token in request body or cookie | Call `AuthController.refresh` | Token rotated, cookies set, refresh message returned | Passed |
+| UT-AUTH-007 | Unit/Controller | Auth Refresh Validation | Refresh requires token | No token in body and no cookie token | Call `AuthController.refresh` | `BadRequestException` thrown | Passed |
+| UT-AUTH-008 | Unit/Controller | Auth Logout | Logout revokes session and clears cookies | Authenticated user context | Call `AuthController.logout` | `authService.logout` called, cookies cleared, success message returned | Passed |
 | UT-PROJ-001 | Unit | Project Membership | Allow assignment for valid member | Repository returns `true` for assignment check | Call `assertProjectTaskAssignee` | Resolves with no exception | Passed |
 | UT-PROJ-002 | Unit | Project Membership | Block assignment for invalid member | Repository returns `false` | Call `assertProjectTaskAssignee` | Throws `AppException` with `FORBIDDEN` | Passed |
+| UT-PROJ-003 | Unit/Controller | Project Create | Create project delegates to service | Authenticated owner context and valid DTO | Call `ProjectController.createProject` | `projectService.createProject` called with user and payload | Passed |
+| UT-PROJ-004 | Unit/Controller | Project Update | Update project delegates to service | Authenticated owner context and valid update DTO | Call `ProjectController.updateProject` | `projectService.updateProject` called with `projectId`, `userId`, payload | Passed |
+| UT-PROJ-005 | Unit/Controller | Project Invite | Invite member by email delegates correctly | Owner context and invite email | Call `ProjectController.addMemberByEmail` | `projectService.addMemberByEmail` called with project/user/email | Passed |
+| UT-PROJ-006 | Unit/Controller | Project Invite Accept | Accept invitation delegates correctly | Authenticated invited user and email payload | Call `ProjectController.acceptInvite` | `projectService.acceptInvite` called with project/user/email | Passed |
+| UT-PROJ-007 | Unit/Controller | Project Invite Decline | Decline invitation delegates correctly | Authenticated invited user and email payload | Call `ProjectController.declineInvite` | `projectService.declineInvite` called with project/user/email | Passed |
 | IT-HEALTH-001 | Integration | Health Endpoint | Validate `/health` response contract | Nest testing app initialized with `HealthModule` | HTTP GET `/health` | Status `200`, `status: "ok"`, parseable ISO `timestamp` | Passed |
 | E2E-APP-001 | E2E (Existing) | App Bootstrap | API docs endpoint availability | Running backend instance | GET `/api-docs` in e2e context | Status `200` | Blocked (API not reachable) |
 | E2E-RT-001 | E2E (Existing) | Realtime Auth | Socket connect with valid JWT | `JWT_SECRET` configured and backend running | Connect with signed token | Connection established | Blocked (API not reachable) |
 | E2E-RT-002 | E2E (Existing) | Realtime Auth | Socket reject invalid JWT | Backend running | Connect with invalid token | `connect_error` emitted, not connected | Blocked (API not reachable) |
+
+## What Restricts Full System E2E Today
+
+- `api-e2e` setup waits for `localhost:3000`, but the dependent API process is not consistently staying up in this environment (`ECONNREFUSED` seen during global setup).
+- API boot has strict required configuration, and startup fails if any required variables are missing (`DATABASE_URL`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `TOKEN_ENCRYPTION_SECRET`, plus auth settings).
+- Full flow E2E needs infrastructure dependencies reachable and valid (database and redis), not only app code.
+- Because of the above environment readiness gaps, current e2e status is **blocked at setup/runtime**, not failing business assertions.
 
 ## Recommended Additional Coverage (Next Iteration)
 
