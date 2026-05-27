@@ -10,6 +10,7 @@ import { PROJECT_REPOSITORY } from '../project/types/project.tokens';
 import type { IProjectRepository } from '../project/types/project.repository';
 import { JiraSyncQueue } from '../integrations/jira/queue/jira-sync.queue';
 import { JiraIssueService } from '../integrations/jira/jira-issue.service';
+import { JiraSyncService } from '../integrations/jira/jira-sync.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { NotificationService } from '../notification/notification.service';
 import { RealtimeService } from '../infrastracture/realtime/realtime.service';
@@ -28,6 +29,7 @@ export class TaskService {
     @Inject(PROJECT_REPOSITORY)
     private readonly projectRepo: IProjectRepository,
     private readonly jiraSyncQueue: JiraSyncQueue,
+    private readonly jiraSyncService: JiraSyncService,
     private readonly jiraIssueService: JiraIssueService,
     private readonly activityLog: ActivityLogService,
     private readonly notification: NotificationService,
@@ -203,7 +205,19 @@ export class TaskService {
           updatedAt: (approvedTask as unknown as { updatedAt?: Date }).updatedAt ?? new Date(),
         });
         if (!approvedTask.jiraIssueKey) {
-          await this.jiraSyncQueue.enqueue(task.id);
+          try {
+            await this.jiraSyncQueue.enqueue(task.id);
+          } catch (err) {
+            const msg =
+              err instanceof Error
+                ? `Failed to enqueue Jira sync: ${err.message}`
+                : `Failed to enqueue Jira sync: ${String(err)}`;
+            await this.taskRepo.setJiraSyncLastError(task.id, msg);
+            this.logger.error(
+              msg,
+              { taskId: task.id, projectId: getTaskProjectId(task), userId },
+            );
+          }
         }
         this.activityLog
           .log({
@@ -352,6 +366,60 @@ export class TaskService {
     }
 
     return task;
+  }
+
+  /**
+   * Manual Jira retry: Scrum Master or project owner can re-enqueue Jira sync
+   * for an APPROVED task with no jiraIssueKey.
+   */
+  async retryJiraSync(taskId: string, user: CurrentUserType): Promise<{ enqueued: boolean }> {
+    const task = await this.taskRepo.findByIdWithProject(taskId);
+    if (!task) {
+      throw new AppException(ErrorCode.TASK_NOT_FOUND, 'Task not found', 404);
+    }
+
+    const projectId = getTaskProjectId(task);
+    const isOwner = await this.projectRepo.isOwner(projectId, user.userId);
+    const isSm = user.role === Role.SCRUM_MASTER;
+    if (!isOwner && !isSm) {
+      throw new AppException(
+        ErrorCode.FORBIDDEN,
+        'Only Scrum Master or project owner can retry Jira sync',
+        403,
+      );
+    }
+
+    if (task.jiraIssueKey) {
+      throw new AppException(ErrorCode.VALIDATION_ERROR, 'Task already synced to Jira', 409);
+    }
+    if (task.status !== TaskStatus.APPROVED) {
+      throw new AppException(
+        ErrorCode.VALIDATION_ERROR,
+        `Task must be APPROVED to sync to Jira (current: ${task.status})`,
+        400,
+      );
+    }
+
+    // Clear any stale error before retry so UI reflects the latest attempt.
+    await this.taskRepo.setJiraSyncLastError(taskId, null);
+
+    if (process.env.DISABLE_QUEUES === 'true') {
+      // Local/dev fallback: run inline when BullMQ is disabled.
+      await this.jiraSyncService.syncTaskToJira(taskId);
+      return { enqueued: true };
+    }
+
+    try {
+      await this.jiraSyncQueue.enqueue(taskId);
+      return { enqueued: true };
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? `Failed to enqueue Jira sync: ${err.message}`
+          : `Failed to enqueue Jira sync: ${String(err)}`;
+      await this.taskRepo.setJiraSyncLastError(taskId, msg);
+      throw err;
+    }
   }
 
   /**

@@ -14,6 +14,7 @@ import {
   ApiNotFoundResponse,
   ApiBody,
   ApiParam,
+  ApiConflictResponse,
 } from '@nestjs/swagger';
 
 import { TaskService } from './task.service';
@@ -259,6 +260,24 @@ export class TaskController {
     @Body() body: ReassignTaskDto,
   ) {
     return this.taskService.reassignTask(id, user, body.assigneeId ?? null);
+  }
+
+  @Post(':id/jira/sync')
+  @ApiOperation({
+    summary: 'Retry Jira sync for an approved task',
+    description:
+      'Re-enqueues Jira sync when a task is APPROVED but not yet SYNCED. Intended for Scrum Master / project owner to manually retry after fixing Jira config or outages.',
+  })
+  @ApiParam({ name: 'id', description: 'Task UUID.' })
+  @ApiOkResponse({
+    schema: { example: { enqueued: true } },
+  })
+  @ApiBadRequestResponse({ description: 'Task is not eligible for Jira sync retry.' })
+  @ApiForbiddenResponse({ description: 'Only Scrum Master or project owner can retry Jira sync.' })
+  @ApiNotFoundResponse({ description: 'Task not found.' })
+  @ApiConflictResponse({ description: 'Task already synced to Jira.' })
+  retryJiraSync(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
+    return this.taskService.retryJiraSync(id, user);
   }
 
   @Get(':id/jira/proposed-transitions')
