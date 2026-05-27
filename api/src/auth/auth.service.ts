@@ -26,7 +26,6 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { AuthMailService } from './auth-mail.service';
 import {
   EMAIL_VERIFICATION_TTL_MS,
-  EMAIL_VERIFICATION_MAX_ATTEMPTS,
   PASSWORD_RESET_TTL_MS,
 } from './constants/auth-token.constants';
 import { StringValue } from 'ms';
@@ -310,6 +309,16 @@ export class AuthService {
     const passwordHash = await hash(dto.newPassword, saltRounds);
     await this.userRepo.updatePassword(userId, passwordHash);
     await this.userRepo.deleteAllUserRefreshTokens(userId);
+
+    // Mark email as verified when the password is reset via email link.
+    // Resetting password via the email link proves ownership of the email,
+    // so we should not require a separate email verification step afterwards.
+    try {
+      await this.userRepo.markEmailVerified(userId);
+      this.logger.log('Email marked verified via password reset', { userId });
+    } catch (err) {
+      this.logger.warn('Failed to mark email verified after password reset', { userId, err });
+    }
 
     return { message: 'Password updated successfully. You can sign in with your new password.' };
   }
