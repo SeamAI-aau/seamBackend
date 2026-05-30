@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { User } from '@prisma/client';
 import type { AuthTokenPurpose } from '../../auth/constants/auth-token.constants';
 import {
   IAuthRepository,
@@ -12,22 +13,34 @@ import { PrismaService } from '../prisma.service';
 export class PrismaAuthRepository implements IAuthRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findByEmail(email: string) {
+  findByEmail(email: string): Promise<User | null> {
     const normalized = email.trim().toLowerCase();
     return this.prisma.user.findFirst({
       where: { email: { equals: normalized, mode: 'insensitive' } },
     });
   }
 
-  findById(userId: string) {
+  findById(userId: string): Promise<User | null> {
     return this.prisma.user.findUnique({ where: { id: userId } });
   }
 
-  create(data: CreateUserInput) {
+  findByGoogleId(googleId: string): Promise<User | null> {
+    const id = googleId?.trim();
+    if (!id) return Promise.resolve(null);
+
+    return this.prisma.user.findUnique({ where: { googleId: id } });
+  }
+
+  create(data: CreateUserInput): Promise<User> {
     return this.prisma.user.create({
       data: {
-        ...data,
         email: data.email.trim().toLowerCase(),
+        name: data.name,
+        passwordHash: data.passwordHash ?? null,
+        ...(data.googleId ? { googleId: data.googleId } : {}),
+        ...(data.emailVerifiedAt ? { emailVerifiedAt: data.emailVerifiedAt } : {}),
+        ...(data.avatarUrl ? { avatarUrl: data.avatarUrl } : {}),
+        ...(data.role !== undefined ? { role: data.role } : {}),
       },
     });
   }
@@ -46,7 +59,27 @@ export class PrismaAuthRepository implements IAuthRepository {
     });
   }
 
-  async createRefreshToken(data: { userId: string; token: string; expiresAt: Date }) {
+  updateGoogleLink(
+    userId: string,
+    data: {
+      googleId: string;
+      emailVerifiedAt?: Date;
+      name?: string;
+      avatarUrl?: string;
+    },
+  ): Promise<User> {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        googleId: data.googleId,
+        ...(data.emailVerifiedAt ? { emailVerifiedAt: data.emailVerifiedAt } : {}),
+        ...(data.name ? { name: data.name } : {}),
+        ...(data.avatarUrl !== undefined ? { avatarUrl: data.avatarUrl } : {}),
+      },
+    });
+  }
+
+  async createRefreshToken(data: { userId: string; token: string; expiresAt: Date }): Promise<void> {
     await this.prisma.refreshToken.create({ data });
   }
 
@@ -64,15 +97,15 @@ export class PrismaAuthRepository implements IAuthRepository {
     });
   }
 
-  async deleteRefreshToken(token: string) {
+  async deleteRefreshToken(token: string): Promise<void> {
     await this.prisma.refreshToken.deleteMany({ where: { token } });
   }
 
-  async deleteAllUserRefreshTokens(userId: string) {
+  async deleteAllUserRefreshTokens(userId: string): Promise<void> {
     await this.prisma.refreshToken.deleteMany({ where: { userId } });
   }
 
-  async deleteAuthTokensByUserAndType(userId: string, type: AuthTokenPurpose) {
+  async deleteAuthTokensByUserAndType(userId: string, type: AuthTokenPurpose): Promise<void> {
     await this.prisma.userAuthToken.deleteMany({ where: { userId, type } });
   }
 
@@ -81,7 +114,7 @@ export class PrismaAuthRepository implements IAuthRepository {
     tokenHash: string;
     type: AuthTokenPurpose;
     expiresAt: Date;
-  }) {
+  }): Promise<void> {
     await this.prisma.userAuthToken.create({ data });
   }
 
@@ -92,15 +125,15 @@ export class PrismaAuthRepository implements IAuthRepository {
     });
   }
 
-  async deleteAuthTokenById(id: string) {
-    await this.prisma.userAuthToken.delete({ where: { id } });
-  }
-
   findValidAuthTokensByType(type: AuthTokenPurpose): Promise<AuthTokenCandidate[]> {
     return this.prisma.userAuthToken.findMany({
       where: { type, expiresAt: { gt: new Date() } },
       select: { id: true, userId: true, tokenHash: true },
     });
+  }
+
+  async deleteAuthTokenById(id: string): Promise<void> {
+    await this.prisma.userAuthToken.delete({ where: { id } });
   }
 
   async findPostAuthRouteContext(userId: string): Promise<PostAuthRouteContext | null> {

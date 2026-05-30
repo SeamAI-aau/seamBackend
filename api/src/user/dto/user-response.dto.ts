@@ -51,7 +51,7 @@ export class UserResponseDto {
 
   @ApiProperty({
     example: true,
-    description: 'True after the user completes email verification.',
+    description: 'True after the user verifies their email or signs in with Google.',
   })
   emailVerified!: boolean;
 

@@ -46,10 +46,13 @@ export class AuthService {
     const existing = await this.userRepo.findByEmail(email);
     if (existing) {
       this.logger.warn('Registration failed: email exists', { email });
+      const message =
+        existing.googleId && !existing.passwordHash
+          ? 'This email is registered with Google. Sign in with Google instead.'
+          : 'A user with this email already exists. Please log in instead or use a different email address.';
       throw new ConflictException({
         code: ErrorCode.EMAIL_ALREADY_EXISTS,
-        message:
-          'A user with this email already exists. Please log in instead or use a different email address.',
+        message,
         details: { field: 'email' },
       });
     }
@@ -112,37 +115,18 @@ export class AuthService {
       });
     }
 
-    this.logger.log(
-      {
-        email,
-        userId: user.id,
-        role: user.role,
-        hasPasswordHash: !!user.passwordHash,
-        step: 'login.user_loaded',
-      },
-      'Login: user found',
-    );
-
     if (!user.passwordHash) {
-      this.logger.warn(
-        { email, userId: user.id, step: 'login.no_password_hash' },
-        'Login failed: account has no password (OAuth-only user)',
-      );
+      this.logger.warn('Login failed: passwordless account', { email: dto.email });
       throw new UnauthorizedException({
         code: ErrorCode.INVALID_CREDENTIALS,
-        message: 'This account cannot sign in with a password. Use your OAuth provider instead.',
-        details: { reason: 'missing_password_hash' },
+        message: 'This account uses Google sign-in. Continue with Google instead.',
+        details: {
+          hint: 'Use the Sign in with Google button on the sign-in page.',
+        },
       });
     }
 
-    let valid = false;
-    try {
-      valid = await compare(dto.password, user.passwordHash);
-    } catch (err) {
-      this.logLoginFailure('password_compare', email, err, { userId: user.id });
-      throw err;
-    }
-
+    const valid = await compare(dto.password, user.passwordHash);
     if (!valid) {
       this.logger.warn(
         { email, userId: user.id, step: 'login.invalid_password' },
@@ -331,9 +315,10 @@ export class AuthService {
     }
 
     if (!user.passwordHash) {
-      throw new BadRequestException({
-        code: ErrorCode.VALIDATION_ERROR,
-        message: 'This account uses OAuth sign-in and has no password to change.',
+      throw new UnauthorizedException({
+        code: ErrorCode.INVALID_CREDENTIALS,
+        message: 'This account uses Google sign-in and has no password to change.',
+        details: { hint: 'Use Google sign-in or set a password via forgot-password first.' },
       });
     }
 

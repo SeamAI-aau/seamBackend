@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Post,
+  Query,
   UseGuards,
   Res,
   Req,
@@ -10,7 +11,10 @@ import {
 } from '@nestjs/common';
 import type { Response, Request } from 'express';
 import { AuthService } from './auth.service';
-import { AuthMailService } from './auth-mail.service';
+import { GoogleAuthService } from './google-auth.service';
+import type { GoogleOAuthIntent } from './types/google-oauth.types';
+import { Role } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -41,8 +45,84 @@ import { SkipEmailVerification } from '../common/decorators/skip-email-verificat
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
-    private readonly authMail: AuthMailService,
+    private readonly googleAuthService: GoogleAuthService,
+    private readonly config: ConfigService,
   ) {}
+
+  @Get('google')
+  @ApiOperation({
+    summary: 'Start Google OAuth for sign-in or sign-up',
+    description:
+      'Redirects the browser to Google. Use `intent=login` or `intent=signup`. ' +
+      'Optional `role=DEVELOPER` for invite-based developer registration.',
+  })
+  async googleConnect(
+    @Query('intent') intent: GoogleOAuthIntent | undefined,
+    @Query('role') role: string | undefined,
+    @Res() res: Response,
+  ): Promise<void> {
+    const resolvedIntent: GoogleOAuthIntent = intent === 'signup' ? 'signup' : 'login';
+    const resolvedRole =
+      role === Role.DEVELOPER
+        ? Role.DEVELOPER
+        : role === Role.SCRUM_MASTER
+          ? Role.SCRUM_MASTER
+          : undefined;
+
+    const url = await this.googleAuthService.getAuthorizationUrl(resolvedIntent, resolvedRole);
+    res.redirect(url);
+  }
+
+  @Get('google/callback')
+  @ApiOperation({
+    summary: 'Google OAuth callback',
+    description:
+      'Exchanges the authorization code, creates or links the user, sets auth cookies, and redirects to the frontend.',
+  })
+  async googleCallback(
+    @Query('code') code: string | undefined,
+    @Query('state') state: string | undefined,
+    @Query('error') error: string | undefined,
+    @Res() res: Response,
+  ): Promise<void> {
+    if (error) {
+      const redirectUrl = this.buildGoogleErrorRedirect(error);
+      res.redirect(redirectUrl);
+      return;
+    }
+
+    const { accessToken, refreshToken, accessExpiresMs, refreshExpiresMs, isNewUser } =
+      await this.googleAuthService.authenticateCallback(code ?? '', state ?? '');
+
+    setAuthCookies(res, {
+      accessToken,
+      refreshToken,
+      accessExpiresMs,
+      refreshExpiresMs,
+    });
+
+    const redirectUrl =
+      this.config.get<string>('GOOGLE_OAUTH_SUCCESS_REDIRECT_URL') ??
+      'http://localhost:8080/auth/google/success';
+
+    const url = new URL(redirectUrl);
+    if (isNewUser) {
+      url.searchParams.set('new', '1');
+    }
+
+    res.redirect(url.toString());
+  }
+
+  private buildGoogleErrorRedirect(error: string): string {
+    const base =
+      this.config.get<string>('GOOGLE_OAUTH_ERROR_REDIRECT_URL') ??
+      this.config.get<string>('GOOGLE_OAUTH_SUCCESS_REDIRECT_URL') ??
+      'http://localhost:8080/auth/google/success';
+
+    const url = new URL(base);
+    url.searchParams.set('error', error);
+    return url.toString();
+  }
 
   @Post('register')
   @ApiOperation({ summary: 'Register a new user' })

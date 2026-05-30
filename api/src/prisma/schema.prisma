@@ -11,14 +11,15 @@ model User {
   id                  String              @id @default(uuid())
   email               String              @unique
   name                String
-  passwordHash        String
-  role                Role                @default(DEVELOPER)
+  passwordHash        String?
+  googleId            String?             @unique
   emailVerifiedAt     DateTime?
+  role                Role                @default(DEVELOPER)
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
-  githubUsername      String?
   avatarUrl           String?
   avatarPublicId      String?
+  githubUsername      String?
   voiceSampleUrl      String?
   voiceSamplePublicId String?
   activityLogs        ActivityLog[]

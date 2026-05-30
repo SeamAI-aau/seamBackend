@@ -2,8 +2,8 @@ import { Global, Module, forwardRef } from '@nestjs/common';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
+import { GoogleAuthService } from './google-auth.service';
 import { AuthController } from './auth.controller';
-import { PrismaService } from '../prisma/prisma.service';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './jwt.strategy';
@@ -35,7 +35,7 @@ import { ProjectModule } from '../project/project.module';
   providers: [
     AuthService,
     AuthMailService,
-    PrismaService,
+    GoogleAuthService,
     JwtStrategy,
     JwtAuthGuard,
     { provide: AUTH_REPOSITORY, useClass: PrismaAuthRepository },
