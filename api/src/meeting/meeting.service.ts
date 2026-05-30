@@ -12,6 +12,7 @@ import type { IMeetingRepository } from './types/meeting.repository';
 import { MEETING_REPOSITORY } from './types/meeting.token';
 import type { IProjectRepository } from '../project/types/project.repository';
 import { PROJECT_REPOSITORY } from '../project/types/project.tokens';
+import { buildDefaultMeetingTitle } from '../common/utils/meeting-title.util';
 
 @Injectable()
 export class MeetingService {
@@ -41,7 +42,7 @@ export class MeetingService {
       });
 
     const meeting = await this.meetingRepo.create({
-      title: `Meeting - ${new Date().toISOString()}`,
+      title: buildDefaultMeetingTitle(),
       audioUrl,
       audioPublicId,
       projectId,
