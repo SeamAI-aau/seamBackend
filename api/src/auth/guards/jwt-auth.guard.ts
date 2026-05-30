@@ -16,7 +16,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     super();
   }
 
-  handleRequest<TUser = CurrentUserType>(
+  override handleRequest<TUser = CurrentUserType>(
     err: unknown,
     user: TUser | false,
     info: unknown,
@@ -31,7 +31,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       [context.getHandler(), context.getClass()],
     );
 
-    const currentUser = user as CurrentUserType & { emailVerified?: boolean };
+    const currentUser = user as unknown as CurrentUserType & { emailVerified?: boolean };
     if (!skipVerification && currentUser.emailVerified === false) {
       throw new ForbiddenException({
         code: ErrorCode.EMAIL_NOT_VERIFIED,

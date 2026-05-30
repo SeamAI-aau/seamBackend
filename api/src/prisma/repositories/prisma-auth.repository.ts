@@ -14,7 +14,6 @@ export class PrismaAuthRepository implements IAuthRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   findByEmail(email: string): Promise<User | null> {
-  findByEmail(email: string): Promise<User | null> {
     const normalized = email.trim().toLowerCase();
     return this.prisma.user.findFirst({
       where: { email: { equals: normalized, mode: 'insensitive' } },
@@ -33,23 +32,9 @@ export class PrismaAuthRepository implements IAuthRepository {
   }
 
   create(data: CreateUserInput): Promise<User> {
-  findByGoogleId(googleId: string): Promise<User | null> {
-    const id = googleId?.trim();
-    if (!id) return Promise.resolve(null);
-
-    return this.prisma.user.findUnique({ where: { googleId: id } });
-  }
-
-  create(data: CreateUserInput): Promise<User> {
     return this.prisma.user.create({
       data: {
         email: data.email.trim().toLowerCase(),
-        name: data.name,
-        passwordHash: data.passwordHash ?? null,
-        ...(data.googleId ? { googleId: data.googleId } : {}),
-        ...(data.emailVerifiedAt ? { emailVerifiedAt: data.emailVerifiedAt } : {}),
-        ...(data.avatarUrl ? { avatarUrl: data.avatarUrl } : {}),
-        ...(data.role !== undefined ? { role: data.role } : {}),
         name: data.name,
         passwordHash: data.passwordHash ?? null,
         ...(data.googleId ? { googleId: data.googleId } : {}),
@@ -93,7 +78,8 @@ export class PrismaAuthRepository implements IAuthRepository {
       },
     });
   }
-  async createRefreshToken(data: { userId: string; token: string; expiresAt: Date }) {
+
+  async createRefreshToken(data: { userId: string; token: string; expiresAt: Date }): Promise<void> {
     await this.prisma.refreshToken.create({ data });
   }
 
