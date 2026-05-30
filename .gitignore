@@ -8,6 +8,11 @@ out-tsc
 # dependencies
 node_modules
 
+.nx/
+dist/
+tmp/
+*.log
+
 .env
 .env.*
 !.env.render.example
