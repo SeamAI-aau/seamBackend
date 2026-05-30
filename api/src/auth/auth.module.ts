@@ -12,6 +12,7 @@ import { AUTH_REPOSITORY, JWT_SERVICE } from './auth.tokens';
 import { JwtServiceAdapter } from './jwt.service';
 import { MailModule } from '../infrastracture/mail/mail.module';
 import { AuthMailService } from './auth-mail.service';
+import { GoogleAuthService } from './google-auth.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ProjectModule } from '../project/project.module';
 
@@ -35,6 +36,7 @@ import { ProjectModule } from '../project/project.module';
   providers: [
     AuthService,
     AuthMailService,
+    GoogleAuthService,
     PrismaService,
     JwtStrategy,
     JwtAuthGuard,

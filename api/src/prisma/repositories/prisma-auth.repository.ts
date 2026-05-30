@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { User } from '@prisma/client';
 import type { AuthTokenPurpose } from '../../auth/constants/auth-token.constants';
 import {
   IAuthRepository,
@@ -12,22 +13,34 @@ import { PrismaService } from '../prisma.service';
 export class PrismaAuthRepository implements IAuthRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findByEmail(email: string) {
+  findByEmail(email: string): Promise<User | null> {
     const normalized = email.trim().toLowerCase();
     return this.prisma.user.findFirst({
       where: { email: { equals: normalized, mode: 'insensitive' } },
     });
   }
 
-  findById(userId: string) {
+  findById(userId: string): Promise<User | null> {
     return this.prisma.user.findUnique({ where: { id: userId } });
   }
 
-  create(data: CreateUserInput) {
+  findByGoogleId(googleId: string): Promise<User | null> {
+    const id = googleId?.trim();
+    if (!id) return Promise.resolve(null);
+
+    return this.prisma.user.findUnique({ where: { googleId: id } });
+  }
+
+  create(data: CreateUserInput): Promise<User> {
     return this.prisma.user.create({
       data: {
-        ...data,
         email: data.email.trim().toLowerCase(),
+        name: data.name,
+        passwordHash: data.passwordHash ?? null,
+        ...(data.googleId ? { googleId: data.googleId } : {}),
+        ...(data.emailVerifiedAt ? { emailVerifiedAt: data.emailVerifiedAt } : {}),
+        ...(data.avatarUrl ? { avatarUrl: data.avatarUrl } : {}),
+        ...(data.role !== undefined ? { role: data.role } : {}),
       },
     });
   }
@@ -46,6 +59,25 @@ export class PrismaAuthRepository implements IAuthRepository {
     });
   }
 
+  updateGoogleLink(
+    userId: string,
+    data: {
+      googleId: string;
+      emailVerifiedAt?: Date;
+      name?: string;
+      avatarUrl?: string;
+    },
+  ): Promise<User> {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        googleId: data.googleId,
+        ...(data.emailVerifiedAt ? { emailVerifiedAt: data.emailVerifiedAt } : {}),
+        ...(data.name ? { name: data.name } : {}),
+        ...(data.avatarUrl !== undefined ? { avatarUrl: data.avatarUrl } : {}),
+      },
+    });
+  }
   async createRefreshToken(data: { userId: string; token: string; expiresAt: Date }) {
     await this.prisma.refreshToken.create({ data });
   }

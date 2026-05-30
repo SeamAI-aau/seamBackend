@@ -46,10 +46,13 @@ export class AuthService {
     const existing = await this.userRepo.findByEmail(email);
     if (existing) {
       this.logger.warn('Registration failed: email exists', { email });
+      const message =
+        existing.googleId && !existing.passwordHash
+          ? 'This email is registered with Google. Sign in with Google instead.'
+          : 'A user with this email already exists. Please log in instead or use a different email address.';
       throw new ConflictException({
         code: ErrorCode.EMAIL_ALREADY_EXISTS,
-        message:
-          'A user with this email already exists. Please log in instead or use a different email address.',
+        message,
         details: { field: 'email' },
       });
     }

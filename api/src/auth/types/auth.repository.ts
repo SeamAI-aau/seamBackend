@@ -4,7 +4,10 @@ import type { AuthTokenPurpose } from '../constants/auth-token.constants';
 export type CreateUserInput = {
   name: string;
   email: string;
-  passwordHash: string;
+  passwordHash?: string | null;
+  googleId?: string;
+  emailVerifiedAt?: Date;
+  avatarUrl?: string;
   role?: Role;
 };
 
@@ -22,9 +25,19 @@ export type PostAuthRouteContext = {
 export interface IAuthRepository {
   findByEmail(email: string): Promise<User | null>;
   findById(userId: string): Promise<User | null>;
+  findByGoogleId(googleId: string): Promise<User | null>;
   create(data: CreateUserInput): Promise<User>;
   updatePassword(userId: string, passwordHash: string): Promise<void>;
   markEmailVerified(userId: string): Promise<void>;
+  updateGoogleLink(
+    userId: string,
+    data: {
+      googleId: string;
+      emailVerifiedAt?: Date;
+      name?: string;
+      avatarUrl?: string;
+    },
+  ): Promise<User>;
 
   createRefreshToken(data: { userId: string; token: string; expiresAt: Date }): Promise<void>;
   findRefreshToken(token: string): Promise<{
