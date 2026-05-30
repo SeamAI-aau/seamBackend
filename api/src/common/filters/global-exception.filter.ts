@@ -9,6 +9,13 @@ import {
 import { Request, Response } from 'express';
 import { Logger } from 'nestjs-pino';
 
+type StructuredHttpError = {
+  message?: string | string[];
+  code?: string;
+  error?: string;
+  details?: Record<string, unknown>;
+};
+
 @Catch()
 @Injectable()
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -21,15 +28,21 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Internal server error';
+    let code: string | undefined;
+    let details: Record<string, unknown> | undefined;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
-      const response = exception.getResponse();
-      if (typeof response === 'string') {
-        message = response;
-      } else if (response && typeof response === 'object' && 'message' in response) {
-        const msg = (response as { message?: string | string[] }).message;
+      const exceptionResponse = exception.getResponse();
+
+      if (typeof exceptionResponse === 'string') {
+        message = exceptionResponse;
+      } else if (exceptionResponse && typeof exceptionResponse === 'object') {
+        const body = exceptionResponse as StructuredHttpError;
+        const msg = body.message;
         message = Array.isArray(msg) ? msg.join('; ') : (msg ?? exception.message);
+        code = body.code ?? (typeof body.error === 'string' ? body.error : undefined);
+        details = body.details;
       } else {
         message = exception.message;
       }
@@ -64,6 +77,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     response.status(status).json({
       statusCode: status,
       message,
+      ...(code ? { code } : {}),
+      ...(details ? { details } : {}),
       path: request.url,
       timestamp: new Date().toISOString(),
     });

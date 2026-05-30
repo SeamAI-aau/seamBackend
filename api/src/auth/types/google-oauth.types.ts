@@ -1,5 +1,4 @@
 import type { Role } from '@prisma/client';
-
 export type GoogleOAuthIntent = 'login' | 'signup';
 
 export type GoogleOAuthStatePayload = {
@@ -11,9 +10,11 @@ export type GoogleOAuthStatePayload = {
 
 export type GoogleTokenResponse = {
   access_token?: string;
-  token_type?: string;
+  id_token?: string;
   expires_in?: number;
+  token_type?: string;
   scope?: string;
+  refresh_token?: string;
 };
 
 export type GoogleUserInfo = {
@@ -25,3 +26,7 @@ export type GoogleUserInfo = {
   family_name?: string;
   picture?: string;
 };
+
+
+
+
