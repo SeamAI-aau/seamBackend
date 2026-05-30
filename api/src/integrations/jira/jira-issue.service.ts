@@ -11,7 +11,7 @@ type JiraIssueDetailsResponse = {
   key: string;
   fields?: {
     summary?: string;
-    status?: { name?: string };
+    status?: { name?: string; statusCategory?: { name?: string } };
     priority?: { name?: string };
     assignee?: { displayName?: string; emailAddress?: string };
     updated?: string;
@@ -122,6 +122,7 @@ export class JiraIssueService {
     issueKey: string;
     summary: string | null;
     status: string | null;
+    statusCategory: string | null;
     priority: string | null;
     assignee: string | null;
     updatedAt: string | null;
@@ -147,6 +148,7 @@ export class JiraIssueService {
         issueKey: key,
         summary: res.data.fields?.summary ?? null,
         status: res.data.fields?.status?.name ?? null,
+        statusCategory: res.data.fields?.status?.statusCategory?.name ?? null,
         priority: res.data.fields?.priority?.name ?? null,
         assignee:
           res.data.fields?.assignee?.displayName ??
