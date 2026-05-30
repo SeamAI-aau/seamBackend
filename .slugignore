@@ -1,0 +1,8 @@
+# Exclude Nx cache/logs from Heroku/DO buildpack slug (prevents huge daemon.log in image layers)
+.nx/
+dist/
+tmp/
+out-tsc/
+coverage/
+*.log
+.git/

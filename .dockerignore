@@ -1,0 +1,10 @@
+.nx/
+node_modules/
+dist/
+tmp/
+out-tsc/
+coverage/
+*.log
+.git/
+.env
+.env.*

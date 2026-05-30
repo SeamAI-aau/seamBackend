@@ -4,8 +4,9 @@
   "license": "MIT",
   "scripts": {
     "postinstall": "prisma generate --schema api/src/prisma/schema.prisma",
-    "build:api": "nx run api:build",
+    "build:api": "NX_DAEMON=false nx run api:build && node -e \"try{require('fs').rmSync('.nx',{recursive:true,force:true})}catch(e){}\"",
     "db:migrate:deploy": "cd api && prisma migrate deploy",
+    "db:migrate:resolve-failed-google-id": "cd api && prisma migrate resolve --rolled-back 20260528120000_add_user_google_id",
     "start:api": "node api/dist/main.js",
     "serve:api": "nx serve api"
   },
