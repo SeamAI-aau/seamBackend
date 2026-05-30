@@ -9,6 +9,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { timingSafeSecretEqual } from '../common/utils/timing-safe-secret.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { TaskStatus } from '@prisma/client';
 
@@ -116,7 +117,7 @@ export class InternalProjectBlockersController {
       throw new BadRequestException('Worker secret not configured');
     }
 
-    if (!secret || secret !== expected) {
+    if (!timingSafeSecretEqual(secret, expected)) {
       throw new BadRequestException('Invalid worker secret');
     }
   }

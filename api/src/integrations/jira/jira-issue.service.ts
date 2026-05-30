@@ -7,6 +7,18 @@ import { AppException } from '../../common/errors/app.exception';
 import { ErrorCode } from '../../common/errors/error-codes';
 import type { JiraTransition, JiraTransitionsResponse } from './types/jira-myself.types';
 
+type JiraIssueDetailsResponse = {
+  key: string;
+  fields?: {
+    summary?: string;
+    status?: { name?: string };
+    priority?: { name?: string };
+    assignee?: { displayName?: string; emailAddress?: string };
+    updated?: string;
+    created?: string;
+  };
+};
+
 @Injectable()
 export class JiraIssueService {
   constructor(
@@ -102,6 +114,157 @@ export class JiraIssueService {
     }
   }
 
+  async getIssueDetails(
+    projectId: string,
+    issueKey: string,
+    callerUserId: string,
+  ): Promise<{
+    issueKey: string;
+    summary: string | null;
+    status: string | null;
+    priority: string | null;
+    assignee: string | null;
+    updatedAt: string | null;
+    createdAt: string | null;
+  }> {
+    await this.ensureProjectAccess(projectId, callerUserId);
+    const { accessToken, cloudId } = await this.getOwnerTokens(projectId);
+    const base = this.jiraService.getApiBaseUrl(cloudId);
+    const key = issueKey.trim().toUpperCase();
+
+    try {
+      const res = await axios.get<JiraIssueDetailsResponse>(
+        `${base}/issue/${encodeURIComponent(key)}`,
+        {
+          params: {
+            fields: 'summary,status,priority,assignee,updated,created',
+          },
+          headers: this.authHeaders(accessToken),
+        },
+      );
+
+      return {
+        issueKey: key,
+        summary: res.data.fields?.summary ?? null,
+        status: res.data.fields?.status?.name ?? null,
+        priority: res.data.fields?.priority?.name ?? null,
+        assignee:
+          res.data.fields?.assignee?.displayName ??
+          res.data.fields?.assignee?.emailAddress ??
+          null,
+        updatedAt: res.data.fields?.updated ?? null,
+        createdAt: res.data.fields?.created ?? null,
+      };
+    } catch (err) {
+      throw this.toAppException(err, 'Failed to load Jira issue details');
+    }
+  }
+
+  async getPriorities(
+    projectId: string,
+    callerUserId: string,
+  ): Promise<{ priorities: Array<{ id?: string; name?: string }> }> {
+    await this.ensureProjectAccess(projectId, callerUserId);
+    const { accessToken, cloudId } = await this.getOwnerTokens(projectId);
+    const base = this.jiraService.getApiBaseUrl(cloudId);
+
+    try {
+      const res = await axios.get<Array<{ id?: string; name?: string }>>(`${base}/priority`, {
+        headers: this.authHeaders(accessToken),
+      });
+      return { priorities: res.data ?? [] };
+    } catch (err) {
+      throw this.toAppException(err, 'Failed to load Jira priorities');
+    }
+  }
+
+  async getAssignableUsers(
+    projectId: string,
+    issueKey: string,
+    callerUserId: string,
+  ): Promise<{ users: Array<{ accountId: string; displayName?: string; emailAddress?: string }> }> {
+    await this.ensureProjectAccess(projectId, callerUserId);
+    const { accessToken, cloudId } = await this.getOwnerTokens(projectId);
+    const base = this.jiraService.getApiBaseUrl(cloudId);
+    const key = issueKey.trim().toUpperCase();
+
+    try {
+      const res = await axios.get<
+        Array<{ accountId: string; displayName?: string; emailAddress?: string }>
+      >(`${base}/user/assignable/search`, {
+        params: { issueKey: key, maxResults: 50 },
+        headers: this.authHeaders(accessToken),
+      });
+      return { users: res.data ?? [] };
+    } catch (err) {
+      throw this.toAppException(err, 'Failed to load Jira assignable users');
+    }
+  }
+
+  async updateIssueFields(
+    projectId: string,
+    issueKey: string,
+    callerUserId: string,
+    patch: { summary?: string; priorityName?: string; assigneeAccountId?: string | null },
+  ): Promise<{ issueKey: string; updated: true }> {
+    await this.ensureProjectAccess(projectId, callerUserId);
+    const { accessToken, cloudId } = await this.getOwnerTokens(projectId);
+    const base = this.jiraService.getApiBaseUrl(cloudId);
+    const key = issueKey.trim().toUpperCase();
+
+    const fields: Record<string, unknown> = {};
+    if (typeof patch.summary === 'string') {
+      fields.summary = patch.summary;
+    }
+    if (typeof patch.priorityName === 'string' && patch.priorityName.trim()) {
+      fields.priority = { name: patch.priorityName.trim() };
+    }
+
+    try {
+      if (Object.keys(fields).length > 0) {
+        await axios.put(
+          `${base}/issue/${encodeURIComponent(key)}`,
+          { fields },
+          { headers: this.authHeaders(accessToken) },
+        );
+      }
+
+      if (patch.assigneeAccountId !== undefined) {
+        await axios.put(
+          `${base}/issue/${encodeURIComponent(key)}/assignee`,
+          patch.assigneeAccountId === null || patch.assigneeAccountId === ''
+            ? { accountId: null }
+            : { accountId: patch.assigneeAccountId },
+          { headers: this.authHeaders(accessToken) },
+        );
+      }
+
+      return { issueKey: key, updated: true };
+    } catch (err) {
+      throw this.toAppException(err, 'Failed to update Jira issue');
+    }
+  }
+
+  async deleteIssue(
+    projectId: string,
+    issueKey: string,
+    callerUserId: string,
+  ): Promise<{ issueKey: string; deleted: true }> {
+    await this.ensureProjectAccess(projectId, callerUserId);
+    const { accessToken, cloudId } = await this.getOwnerTokens(projectId);
+    const base = this.jiraService.getApiBaseUrl(cloudId);
+    const key = issueKey.trim().toUpperCase();
+
+    try {
+      await axios.delete(`${base}/issue/${encodeURIComponent(key)}`, {
+        headers: this.authHeaders(accessToken),
+      });
+      return { issueKey: key, deleted: true };
+    } catch (err) {
+      throw this.toAppException(err, 'Failed to delete Jira issue');
+    }
+  }
+
   private async getOwnerTokens(projectId: string) {
     const project = await this.projectRepo.findById(projectId);
     if (!project) {
@@ -123,6 +286,20 @@ export class JiraIssueService {
         400,
       );
     }
+  }
+
+  async getBrowseUrl(
+    projectId: string,
+    issueKey: string,
+    callerUserId: string,
+  ): Promise<{ browseUrl: string | null; issueKey: string }> {
+    await this.ensureProjectAccess(projectId, callerUserId);
+    const { siteUrl } = await this.getOwnerTokens(projectId);
+    const key = issueKey.trim().toUpperCase();
+    if (!siteUrl?.trim()) {
+      return { browseUrl: null, issueKey: key };
+    }
+    return { browseUrl: `${siteUrl.replace(/\/$/, '')}/browse/${key}`, issueKey: key };
   }
 
   private async ensureProjectAccess(projectId: string, userId: string): Promise<void> {
@@ -158,7 +335,7 @@ export class JiraIssueService {
         return new AppException(ErrorCode.NOT_FOUND, message, 404);
       }
       if (status === 400 || status === 403) {
-        return new AppException(ErrorCode.BAD_REQUEST, message, 400);
+        return new AppException(ErrorCode.VALIDATION_ERROR, message, 400);
       }
       return new AppException(ErrorCode.VALIDATION_ERROR, message, status >= 500 ? 502 : 400);
     }

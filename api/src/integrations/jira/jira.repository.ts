@@ -5,6 +5,7 @@ export interface JiraAccountUpsertData {
   refreshToken: string;
   expiresAt: Date;
   cloudId: string;
+  siteUrl?: string | null;
   accountId?: string | null;
   displayName?: string | null;
   emailAddress?: string | null;

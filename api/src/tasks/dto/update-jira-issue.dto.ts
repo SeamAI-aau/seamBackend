@@ -1,22 +1,22 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class UpdateJiraIssueDto {
   @ApiPropertyOptional({
-    example: 'Implement retry backoff for Stripe webhooks',
-    description: 'Optional new Jira issue summary (and task title).',
+    description: 'New issue summary/title in Jira.',
+    example: 'Fix upload retry logic',
   })
-  @IsOptional()
-  @IsString()
-  @MaxLength(255)
-  title?: string;
+  summary?: string;
 
   @ApiPropertyOptional({
-    example:
-      'Please add exponential backoff with jitter for webhook retries. Ensure idempotency keys are used.',
-    description: 'Optional new Jira issue description (and task description).',
+    description: 'Priority name (as shown in Jira), e.g. Highest/High/Medium/Low/Lowest.',
+    example: 'High',
   })
-  @IsOptional()
-  @IsString()
-  description?: string;
+  priorityName?: string;
+
+  @ApiPropertyOptional({
+    description: 'Jira assignee accountId. Set null to unassign (when permitted by Jira).',
+    example: '557058:abc123',
+    nullable: true,
+  })
+  assigneeAccountId?: string | null;
 }

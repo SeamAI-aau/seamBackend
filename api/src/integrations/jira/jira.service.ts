@@ -75,6 +75,7 @@ export class JiraService {
     });
 
     const cloudId = resourcesResponse.data[0]?.id;
+    const siteUrl = resourcesResponse.data[0]?.url;
     if (!cloudId) {
       throw new Error('No Jira cloud resource returned');
     }
@@ -86,6 +87,7 @@ export class JiraService {
       refreshToken: encrypt(refresh_token, secret),
       expiresAt: new Date(Date.now() + expires_in * 1000),
       cloudId,
+      siteUrl: typeof siteUrl === 'string' && siteUrl.trim() ? siteUrl.trim() : null,
     });
 
     await this.refreshMyselfProfile(userId, access_token, cloudId);
@@ -120,7 +122,6 @@ export class JiraService {
       const account = await this.jiraRepo.findAccountByUserId(userId);
       if (!account) return null;
 
-      const secret = this.config.get<string>('TOKEN_ENCRYPTION_SECRET') || 'this is a secret';
       await this.jiraRepo.upsertAccount(userId, {
         accessToken: account.accessToken,
         refreshToken: account.refreshToken,
@@ -211,6 +212,7 @@ export class JiraService {
   async getValidAccessToken(userId: string): Promise<{
     accessToken: string;
     cloudId: string;
+    siteUrl?: string;
   }> {
     const account = await this.jiraRepo.findAccountByUserId(userId);
     if (!account) {
@@ -225,6 +227,7 @@ export class JiraService {
       return {
         accessToken: decrypt(account.accessToken, secret),
         cloudId: account.cloudId,
+        siteUrl: (account as unknown as { siteUrl?: string | null }).siteUrl ?? undefined,
       };
     }
 
@@ -232,6 +235,7 @@ export class JiraService {
     return {
       accessToken: refreshed.accessToken,
       cloudId: account.cloudId,
+      siteUrl: (account as unknown as { siteUrl?: string | null }).siteUrl ?? undefined,
     };
   }
 

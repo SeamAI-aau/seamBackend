@@ -35,7 +35,24 @@ export interface IProjectRepository {
 
   deleteProject(projectId: string): Promise<Project>;
 
-  /** Add active member (user exists) or create pending invite (user not found). */
+  /** True when user is project owner or an ACTIVE member (not pending invite). */
+  canAssignTasksToUser(projectId: string, userId: string): Promise<boolean>;
+
+  findPendingInvitationsByEmail(
+    email: string,
+  ): Promise<
+    Array<{
+      memberId: string;
+      projectId: string;
+      projectName: string;
+      email: string;
+      inviterName: string | null;
+    }>
+  >;
+
+  acceptAllPendingInvitesForUser(userId: string, email: string): Promise<number>;
+
+  /** Always creates a pending invite; membership becomes ACTIVE after accept. */
   addMemberByEmail(
     projectId: string,
     email: string,

@@ -30,6 +30,12 @@ function resolveApiEnvFilePaths(): string[] {
         BCRYPT_SALT_ROUNDS: Joi.number().default(10),
 
         DATABASE_URL: Joi.string().required(),
+        /** Path to CA PEM for managed Postgres (Aiven verify-full). Defaults to api/certs/ca.pem when present. */
+        DATABASE_SSL_CA_PATH: Joi.string().optional().allow(''),
+        DATABASE_SSL: Joi.string().valid('true', 'false').optional(),
+        DATABASE_SSL_REJECT_UNAUTHORIZED: Joi.string().valid('true', 'false').optional(),
+        /** Max pg Pool connections per process. Keep total across all pods ≤ Aiven max_connections. Default 5. */
+        DATABASE_POOL_SIZE: Joi.number().integer().min(1).max(50).optional(),
 
         CLOUDINARY_CLOUD_NAME: Joi.string().required(),
         CLOUDINARY_API_KEY: Joi.string().required(),
@@ -56,12 +62,17 @@ function resolveApiEnvFilePaths(): string[] {
         /** BullMQ repeatable GitHub `sync-all` interval in milliseconds. Default 600000 (10 min). */
         GITHUB_SYNC_REPEAT_MS: Joi.number().integer().min(60_000).max(86_400_000).optional(),
 
-        /** When `true`, BullMQ is not registered: meeting transcription jobs are skipped and Jira/GitHub sync queues are no-ops. */
+        /**
+         * When `true`, BullMQ is not registered and GitHub/Jira sync queues are no-ops.
+         * Meeting transcription still uses ai-engine-2 HTTP callbacks (not Bull).
+         */
         DISABLE_QUEUES: Joi.string().valid('true', 'false').optional(),
+        /** Socket.IO cross-instance adapter: `false` to disable, `force` to enable without DISABLE_QUEUES check. */
+        REALTIME_REDIS_ADAPTER: Joi.string().valid('false', 'force').optional(),
 
         /** Base URL of ai-engine-2 (e.g. `http://localhost:8000`). Required for meeting uploads. */
         AI_ENGINE_BASE_URL: Joi.string().trim().optional().allow(''),
-        /** Max time (ms) for meeting dispatch: Cloudinary download + multipart POST to ai-engine until 202. Not full pipeline (that runs on the engine and completes via webhook). Default 10 minutes for large uploads. */
+        /** Max time (ms) for meeting dispatch: request to ai-engine until 202. Not full pipeline (that runs on the engine and completes via webhook). Default 10 minutes for large uploads. */
         AI_ENGINE_REQUEST_TIMEOUT_MS: Joi.number().integer().min(5000).max(3_600_000).optional(),
 
         WORKER_SECRET: Joi.string().min(1).optional(),

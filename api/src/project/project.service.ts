@@ -17,6 +17,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { Prisma } from '@prisma/client';
 import type { DashboardFilterDto } from './dto/dashboard-filter.dto';
 import type { BlockersFilterDto } from './dto/blockers-filter.dto';
+import { MANUAL_TASK_PLACEHOLDER_AUDIO_URL } from '../tasks/constants/task.constants';
 
 function parseGithubRepoUrl(url: string | null): {
   repoUrl: string | null;
@@ -124,6 +125,15 @@ export class ProjectService {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+    const owner = await this.userRepo.findById(ownerId);
+    if (owner && owner.email.trim().toLowerCase() === normalizedEmail) {
+      throw new AppException(
+        ErrorCode.VALIDATION_ERROR,
+        'You cannot invite yourself to your own project',
+        400,
+      );
+    }
+
     const existingByEmail = await this.projectRepo.findMemberByProjectAndEmail(
       projectId,
       normalizedEmail,
@@ -152,21 +162,6 @@ export class ProjectService {
       normalizedEmail,
       undefined,
     );
-    this.activityLog
-      .log({
-        projectId,
-        userId: ownerId,
-        action: pending ? 'invitation.sent' : 'member.added',
-        entityType: 'ProjectMember',
-        entityId: member.id,
-        metadata: { email: normalizedEmail, pending },
-      })
-      .catch((error) => {
-        this.logger.warn(
-          { projectId, ownerId, err: error },
-          'Failed to write activity log for addMemberByEmail',
-        );
-      });
 
     if (pending && project) {
       const appUrl =
@@ -174,9 +169,11 @@ export class ProjectService {
         this.config.get<string>('FRONTEND_URL') ??
         'https://app.seam.dev';
       const baseUrl = appUrl.replace(/\/+$/, '');
+      const existingUser = await this.userRepo.findByEmail(normalizedEmail);
+      const authMode = existingUser ? 'sign-in' : 'sign-up';
       const acceptUrl = `${baseUrl}/auth/invite?projectId=${project.id}&email=${encodeURIComponent(
         normalizedEmail,
-      )}`;
+      )}&auth=${authMode}`;
 
       const emailSent = await this.notification
         .notifyEmailOnly({
@@ -208,6 +205,22 @@ export class ProjectService {
           : 'Email is not configured on the server (SMTP_HOST / SMTP_USER / SMTP_PASS).';
         throw new AppException(ErrorCode.INTERNAL_SERVER_ERROR, smtpHint, 500);
       }
+
+      this.activityLog
+        .log({
+          projectId,
+          userId: ownerId,
+          action: 'invitation.sent',
+          entityType: 'ProjectMember',
+          entityId: member.id,
+          metadata: { email: normalizedEmail, pending: true },
+        })
+        .catch((error) => {
+          this.logger.warn(
+            { projectId, ownerId, err: error },
+            'Failed to write activity log for addMemberByEmail',
+          );
+        });
     }
     return {
       id: member.id,
@@ -284,6 +297,49 @@ export class ProjectService {
         });
     }
     return result;
+  }
+
+  async declineInvite(projectId: string, userId: string, inviteEmail: string) {
+    const normalizedEmail = inviteEmail.trim().toLowerCase();
+    const user = await this.userRepo.findById(userId);
+    if (!user || user.email.trim().toLowerCase() !== normalizedEmail) {
+      throw new AppException(
+        ErrorCode.FORBIDDEN,
+        'You can only decline an invitation sent to your own email',
+        403,
+      );
+    }
+
+    const pending = await this.projectRepo.findPendingInvite(projectId, normalizedEmail);
+    if (!pending) {
+      throw new AppException(
+        ErrorCode.NOT_FOUND,
+        'No pending invitation found for this email',
+        404,
+      );
+    }
+
+    await this.projectRepo.deleteMember(pending.id);
+    return { message: 'Invitation declined' };
+  }
+
+  async getMyInvitations(userId: string) {
+    const user = await this.userRepo.findById(userId);
+    if (!user?.email) {
+      return { items: [] };
+    }
+
+    const items = await this.projectRepo.findPendingInvitationsByEmail(user.email);
+    return {
+      items: items.map((row) => ({
+        projectId: row.projectId,
+        projectName: row.projectName,
+        email: row.email,
+        inviterName: row.inviterName,
+        memberId: row.memberId,
+        status: 'PENDING' as const,
+      })),
+    };
   }
 
   async removeMember(projectId: string, memberId: string, requesterId: string) {
@@ -484,6 +540,7 @@ export class ProjectService {
               githubUsername: owner.githubUsername ?? null,
               projectRole: 'owner' as const,
               status: 'ACTIVE' as const,
+              canAssignTasks: true,
               ...mapIntegrationFlags(owner.id, owner.githubUsername),
             },
           ]
@@ -499,6 +556,7 @@ export class ProjectService {
           githubUsername: row.user?.githubUsername ?? null,
           projectRole: 'member' as const,
           status: row.status,
+          canAssignTasks: row.status === 'ACTIVE' && row.userId != null,
           ...(row.userId
             ? mapIntegrationFlags(row.userId, row.user?.githubUsername ?? null)
             : { githubMapped: false, jiraMapped: false }),
@@ -545,7 +603,7 @@ export class ProjectService {
     }
 
     const taskWhere: Prisma.TaskWhereInput = {
-      meeting: { projectId },
+      projectId,
     };
     if (filters.assigneeId) taskWhere.assigneeId = filters.assigneeId;
     if (filters.status) taskWhere.status = filters.status;
@@ -557,6 +615,7 @@ export class ProjectService {
 
     const meetingWhere: Prisma.MeetingWhereInput = {
       projectId,
+      NOT: { audioUrl: MANUAL_TASK_PLACEHOLDER_AUDIO_URL },
     };
     if (filters.fromDate || filters.toDate) {
       meetingWhere.createdAt = {};
@@ -580,6 +639,7 @@ export class ProjectService {
       recentMeetingsData,
       githubBlockersData,
       transcriptBlockersData,
+      latestMeetingInsights,
     ] = await Promise.all([
       this.prisma.task.groupBy({
         by: ['status'],
@@ -593,6 +653,7 @@ export class ProjectService {
           take: recentTasksLimit,
           orderBy: { createdAt: 'desc' },
           include: {
+            project: { select: { id: true, name: true } },
             meeting: { select: { id: true, title: true } },
             assignee: { select: { id: true, email: true, name: true } },
           },
@@ -636,6 +697,7 @@ export class ProjectService {
         }),
         this.prisma.transcriptBlocker.count({ where: { projectId } }),
       ]),
+      this.getLatestMeetingInsights(meetingWhere),
     ]);
 
     const [recentTasks, recentTasksTotal] = recentTasksData;
@@ -703,6 +765,7 @@ export class ProjectService {
           totalPages: Math.ceil(transcriptBlockersTotal / blockersLimit) || 1,
         },
       },
+      latestMeetingInsights,
     };
   }
 
@@ -722,7 +785,7 @@ export class ProjectService {
     }
 
     const taskWhere: Prisma.TaskWhereInput = {
-      meeting: { projectId },
+      projectId,
       assigneeId: userId,
     };
     if (filters.fromDate || filters.toDate) {
@@ -731,7 +794,10 @@ export class ProjectService {
       if (filters.toDate) taskWhere.createdAt.lte = new Date(filters.toDate);
     }
 
-    const meetingWhere: Prisma.MeetingWhereInput = { projectId };
+    const meetingWhere: Prisma.MeetingWhereInput = {
+      projectId,
+      NOT: { audioUrl: MANUAL_TASK_PLACEHOLDER_AUDIO_URL },
+    };
     if (filters.fromDate || filters.toDate) {
       meetingWhere.createdAt = {};
       if (filters.fromDate) meetingWhere.createdAt.gte = new Date(filters.fromDate);
@@ -750,11 +816,12 @@ export class ProjectService {
       recentMeetingsTotal,
       githubBlockers,
       transcriptBlockers,
+      latestMeetingInsights,
     ] = await Promise.all([
       this.prisma.task.groupBy({
         by: ['status'],
         _count: { id: true },
-        where: { meeting: { projectId } },
+        where: { projectId, assigneeId: userId },
       }),
       this.prisma.task.findMany({
         where: taskWhere,
@@ -792,6 +859,7 @@ export class ProjectService {
         orderBy: { createdAt: 'desc' },
         take: blockersLimit,
       }),
+      this.getLatestMeetingInsights(meetingWhere),
     ]);
 
     const taskCounts: Record<string, number> = Object.fromEntries(
@@ -846,7 +914,101 @@ export class ProjectService {
         items: mergedBlockers,
         total: mergedBlockers.length,
       },
+      latestMeetingInsights,
     };
+  }
+
+  private async getLatestMeetingInsights(meetingWhere: Prisma.MeetingWhereInput) {
+    const meeting = await this.prisma.meeting.findFirst({
+      where: { ...meetingWhere, transcripts: { some: {} } },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        createdAt: true,
+        transcripts: {
+          orderBy: { version: 'desc' },
+          take: 1,
+          select: { id: true, insights: true, suggestedActions: true, summary: true },
+        },
+      },
+    });
+
+    if (!meeting) {
+      return null;
+    }
+
+    const transcript = meeting.transcripts[0];
+    return {
+      meetingId: meeting.id,
+      meetingTitle: meeting.title,
+      meetingCreatedAt: meeting.createdAt,
+      transcriptId: transcript?.id ?? null,
+      summary: this.normalizeSummary(transcript?.summary),
+      insights: this.normalizeStringList(transcript?.insights),
+      suggestedActions: this.normalizeStringList(transcript?.suggestedActions),
+    };
+  }
+
+  private normalizeStringList(value: unknown): string[] | null {
+    if (!Array.isArray(value)) {
+      return null;
+    }
+    const items = value
+      .map((item) => (item == null ? '' : String(item)).trim())
+      .filter((item) => item.length > 0);
+    return items.length > 0 ? items : null;
+  }
+
+  private normalizeSummary(value: unknown): {
+    summary: string;
+    key_decisions?: string[];
+    meeting_sentiment?: string;
+    main_topic?: string;
+  } | null {
+    if (!value || typeof value !== 'object') {
+      return null;
+    }
+
+    const summaryValue = value as {
+      summary?: unknown;
+      key_decisions?: unknown;
+      meeting_sentiment?: unknown;
+      main_topic?: unknown;
+    };
+
+    const summaryText =
+      typeof summaryValue.summary === 'string' ? summaryValue.summary.trim() : '';
+    const keyDecisions = this.normalizeStringList(summaryValue.key_decisions) ?? [];
+    const meetingSentiment =
+      typeof summaryValue.meeting_sentiment === 'string'
+        ? summaryValue.meeting_sentiment.trim()
+        : '';
+    const mainTopic =
+      typeof summaryValue.main_topic === 'string' ? summaryValue.main_topic.trim() : '';
+
+    if (!summaryText && keyDecisions.length === 0 && !meetingSentiment && !mainTopic) {
+      return null;
+    }
+
+    const normalized: {
+      summary: string;
+      key_decisions?: string[];
+      meeting_sentiment?: string;
+      main_topic?: string;
+    } = { summary: summaryText };
+
+    if (keyDecisions.length > 0) {
+      normalized.key_decisions = keyDecisions;
+    }
+    if (meetingSentiment) {
+      normalized.meeting_sentiment = meetingSentiment;
+    }
+    if (mainTopic) {
+      normalized.main_topic = mainTopic;
+    }
+
+    return normalized;
   }
 
   /** Returns unified list of GitHub and transcript blockers for the project. Scrum Master only. */

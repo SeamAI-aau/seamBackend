@@ -10,6 +10,8 @@ export type BrandedEmailOptions = {
   greeting: string;
   headline?: string;
   body: string;
+  /** Raw HTML inserted after body paragraphs (not escaped). Use for styled blocks like verification codes. */
+  rawHtmlInsert?: string;
   /** Primary CTA — omit for text-only emails */
   action?: {
     label: string;
@@ -115,6 +117,7 @@ export function buildBrandedEmailHtml(options: BrandedEmailOptions): string {
             <td style="padding:16px 32px 0;">
               <p style="margin:0 0 12px;font-size:15px;line-height:1.5;color:${COLORS.muted};">${greeting}</p>
               ${bodyToHtmlParagraphs(options.body)}
+              ${options.rawHtmlInsert ?? ''}
             </td>
           </tr>
           ${actionBlock}

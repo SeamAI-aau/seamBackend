@@ -20,6 +20,7 @@ import {
 } from '@nestjs/swagger';
 import { MeetingProcessingService } from './meeting-processing.service';
 import { WorkerResultBodyDto } from './dto/worker-result.dto';
+import { timingSafeSecretEqual } from '../common/utils/timing-safe-secret.util';
 
 const WORKER_SECRET_HEADER = 'x-worker-secret';
 
@@ -60,7 +61,7 @@ export class InternalMeetingController {
       '',
       'Send header **`x-worker-secret`** with the same value as Nest env **`WORKER_SECRET`**.',
       '',
-      '**Success body:** `status: "success"` with `transcript`, `new_tasks` (full payload), `transitioned_tasks` (reconciled status suggestions), `blockers`, and `summary`. Meeting becomes **`TASKS_EXTRACTED`**; developers with resolved assignee IDs get `task_assigned`; unassigned tasks notify owner + Scrum Masters (`tasks_pending_assignment`).',
+      '**Success body:** `status: "success"` with `transcript`, `new_tasks` (full payload), `transitioned_tasks` (reconciled status suggestions), `blockers`, `summary`, `insights`, and `suggested_actions`. Meeting becomes **`TASKS_EXTRACTED`**; developers with resolved assignee IDs get `task_assigned`; unassigned tasks notify owner + Scrum Masters (`tasks_pending_assignment`).',
       '',
       '**Failure body:** `status: "failed"` with `error` (string). Meeting becomes **`FAILED`**.',
       '',
@@ -89,11 +90,33 @@ export class InternalMeetingController {
       throw new UnauthorizedException('Worker callback not configured');
     }
 
-    if (!secret || secret !== expected) {
+    if (!timingSafeSecretEqual(secret, expected)) {
       throw new UnauthorizedException('Invalid worker secret');
     }
 
-    this.logger.log({ meetingId, payload }, 'Received worker callback payload');
+    this.logger.log(
+      {
+        meetingId,
+        status: payload.status,
+        transcriptLength: (payload.transcript || '').length,
+        tasksCount: payload.tasks?.length ?? 0,
+        newTasksCount: payload.new_tasks?.length ?? 0,
+        transitionedTasksCount: payload.transitioned_tasks?.length ?? 0,
+        blockersCount: payload.blockers?.length ?? 0,
+        hasSummary: Boolean(payload.summary),
+      },
+      'Received worker callback payload',
+    );
+
+    this.logger.log(
+      {
+        meetingId,
+        tasksPayload: JSON.stringify(payload.tasks ?? []),
+        newTasksPayload: JSON.stringify(payload.new_tasks ?? []),
+        transitionedTasksPayload: JSON.stringify(payload.transitioned_tasks ?? []),
+      },
+      'Worker callback task payloads (raw)'
+    );
 
     await this.meetingProcessingService.handleWorkerResult(meetingId, payload);
     const result = { message: 'Received' };

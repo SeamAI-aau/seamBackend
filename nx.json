@@ -59,5 +59,16 @@
       "dependsOn": ["^build"]
     }
   },
-  "analytics": false
+  
+  "analytics": false,
+  
+  "tasksRunnerOptions": {
+    "default": {
+      "options": {
+        "cacheableOperations": ["build", "test"]
+      }
+    }
+  }
+
+  
 }

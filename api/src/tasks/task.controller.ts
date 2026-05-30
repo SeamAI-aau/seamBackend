@@ -14,6 +14,7 @@ import {
   ApiNotFoundResponse,
   ApiBody,
   ApiParam,
+  ApiConflictResponse,
 } from '@nestjs/swagger';
 
 import { TaskService } from './task.service';
@@ -22,6 +23,7 @@ import { UpdateTaskOutcomeDto } from './dto/update-task-outcome.dto';
 import { ReassignTaskDto } from './dto/reassign-task.dto';
 import { TaskListQueryDto } from './dto/task-list-query.dto';
 import { JiraTransitionIssueDto } from '../integrations/jira/dto/jira-transition.dto';
+import { UpdateJiraIssueDto } from './dto/update-jira-issue.dto';
 
 @ApiTags('Tasks')
 @ApiBearerAuth('access-token')
@@ -32,9 +34,9 @@ export class TaskController {
 
   @Post()
   @ApiOperation({
-    summary: 'Create a task (testing only)',
+    summary: 'Create a task manually',
     description:
-      'Creates a task with a placeholder meeting and transcript. For Jira integration testing only; in production tasks are created from the meeting extractor. No role restriction: any authenticated user with project access can create. Not intended for production use.',
+      'Creates a task directly in the project (no meeting upload). Scrum Masters typically assign developers; unassigned tasks stay EXTRACTED. Tasks from meeting recordings are created by the AI extractor instead.',
   })
   @ApiCreatedResponse({
     description: 'Task created. Same shape as GET /tasks/:id.',
@@ -77,7 +79,7 @@ export class TaskController {
     },
   })
   create(@Body() body: CreateTaskDto, @CurrentUser() user: CurrentUserType) {
-    return this.taskService.createTask(user.userId, body);
+    return this.taskService.createTask(user, body);
   }
 
   @Get('grouped')
@@ -261,6 +263,24 @@ export class TaskController {
     return this.taskService.reassignTask(id, user, body.assigneeId ?? null);
   }
 
+  @Post(':id/jira/sync')
+  @ApiOperation({
+    summary: 'Retry Jira sync for an approved task',
+    description:
+      'Re-enqueues Jira sync when a task is APPROVED but not yet SYNCED. Intended for Scrum Master / project owner to manually retry after fixing Jira config or outages.',
+  })
+  @ApiParam({ name: 'id', description: 'Task UUID.' })
+  @ApiOkResponse({
+    schema: { example: { enqueued: true } },
+  })
+  @ApiBadRequestResponse({ description: 'Task is not eligible for Jira sync retry.' })
+  @ApiForbiddenResponse({ description: 'Only Scrum Master or project owner can retry Jira sync.' })
+  @ApiNotFoundResponse({ description: 'Task not found.' })
+  @ApiConflictResponse({ description: 'Task already synced to Jira.' })
+  retryJiraSync(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
+    return this.taskService.retryJiraSync(id, user);
+  }
+
   @Get(':id/jira/proposed-transitions')
   @ApiOperation({
     summary: 'List Jira transitions for an AI-proposed existing issue (before approve)',
@@ -297,6 +317,108 @@ export class TaskController {
   @ApiNotFoundResponse({ description: 'Task not found.' })
   getJiraTransitions(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
     return this.taskService.getJiraTransitionsForTask(id, user.userId);
+  }
+
+  @Get(':id/jira/issue')
+  @ApiOperation({
+    summary: 'Fetch linked Jira issue details for a task',
+    description:
+      'Loads live Jira fields (summary/status/assignee/priority/timestamps) for the linked issue. ' +
+      'Task must have jiraIssueKey.',
+  })
+  @ApiParam({ name: 'id', description: 'Task UUID.' })
+  @ApiOkResponse({
+    schema: {
+      example: {
+        issueKey: 'PAY-42',
+        summary: 'Fix audio upload',
+        status: 'In Progress',
+        priority: 'Medium',
+        assignee: 'Jane Doe',
+        createdAt: '2026-05-27T08:00:00.000Z',
+        updatedAt: '2026-05-27T09:00:00.000Z',
+      },
+    },
+  })
+  @ApiBadRequestResponse({ description: 'Task not synced to Jira.' })
+  @ApiForbiddenResponse({ description: 'No access to task.' })
+  @ApiNotFoundResponse({ description: 'Task not found.' })
+  getJiraIssue(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
+    return this.taskService.getJiraIssueDetailsForTask(id, user.userId);
+  }
+
+  @Get(':id/jira/overview')
+  @ApiOperation({
+    summary: 'Fetch Jira overview for a task (single call)',
+    description:
+      'Returns issue details + transitions + priorities + assignable users + browseUrl for the linked Jira issue. ' +
+      'Task must have jiraIssueKey.',
+  })
+  @ApiParam({ name: 'id', description: 'Task UUID.' })
+  @ApiOkResponse({
+    schema: {
+      example: {
+        issue: {
+          issueKey: 'PAY-42',
+          summary: 'Fix audio upload',
+          status: 'In Progress',
+          priority: 'Medium',
+          assignee: 'Jane Doe',
+          createdAt: '2026-05-27T08:00:00.000Z',
+          updatedAt: '2026-05-27T09:00:00.000Z',
+        },
+        transitions: [{ id: '21', name: 'In Progress', to: { name: 'In Progress' } }],
+        priorities: [{ id: '3', name: 'Medium' }],
+        assignableUsers: [{ accountId: '557058:abc123', displayName: 'Jane Doe' }],
+        browseUrl: 'https://your-tenant.atlassian.net/browse/PAY-42',
+      },
+    },
+  })
+  @ApiBadRequestResponse({ description: 'Task not synced to Jira.' })
+  @ApiForbiddenResponse({ description: 'No access to task.' })
+  @ApiNotFoundResponse({ description: 'Task not found.' })
+  getJiraOverview(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
+    return this.taskService.getJiraOverviewForTask(id, user.userId);
+  }
+
+  @Patch(':id/jira/issue')
+  @ApiOperation({
+    summary: 'Update linked Jira issue fields for a task',
+    description:
+      'Edits Jira issue fields (summary, priority, assignee) for the linked issue. Task must have jiraIssueKey.',
+  })
+  @ApiParam({ name: 'id', description: 'Task UUID.' })
+  @ApiOkResponse({ schema: { example: { issueKey: 'PAY-42', updated: true } } })
+  @ApiBadRequestResponse({ description: 'Task not synced to Jira.' })
+  @ApiForbiddenResponse({ description: 'No access to task.' })
+  @ApiNotFoundResponse({ description: 'Task not found.' })
+  updateJiraIssue(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserType,
+    @Body() body: UpdateJiraIssueDto,
+  ) {
+    return this.taskService.updateJiraIssueForTask(id, user.userId, {
+      summary: body.summary,
+      priorityName: body.priorityName,
+      assigneeAccountId: body.assigneeAccountId,
+    });
+  }
+
+  @Post('jira/import')
+  @ApiOperation({
+    summary: 'Import Jira issues into Seam tasks (SM only)',
+    description:
+      'Pulls the linked Jira project issues and upserts them into Seam Task rows (source=JIRA_IMPORT). ' +
+      'After import, GET /tasks will include Jira-native issues too.',
+  })
+  @ApiOkResponse({ schema: { example: { imported: 100, upserted: 100 } } })
+  @ApiBadRequestResponse({ description: 'Jira not configured for project.' })
+  @ApiForbiddenResponse({ description: 'Only Scrum Masters can import Jira tasks.' })
+  importJiraTasks(
+    @Query('projectId') projectId: string,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    return this.taskService.importJiraIssuesToTasks(projectId, user);
   }
 
   @Post(':id/jira/transitions')

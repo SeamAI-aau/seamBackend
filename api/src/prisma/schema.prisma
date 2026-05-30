@@ -33,6 +33,7 @@ model User {
   projectMembers      ProjectMember[]
   refreshTokens       RefreshToken[]
   tasks               Task[]              @relation("AssignedTasks")
+  tasksCreated        Task[]              @relation("TasksCreated")
 }
 
 enum AuthTokenType {
@@ -70,6 +71,7 @@ model Project {
   members             ProjectMember[]
   pullRequests        PullRequest[]
   transcriptBlockers  TranscriptBlocker[]
+  tasks               Task[]
 }
 
 model ProjectMember {
@@ -117,6 +119,9 @@ model Transcript {
   version     Int
   content     String
   diarization Json
+  summary     Json?
+  insights    Json?
+  suggestedActions Json?
   createdAt   DateTime @default(now())
   tasks       Task[]
   meeting     Meeting  @relation(fields: [meetingId], references: [id])
@@ -129,17 +134,26 @@ enum JiraProposalAction {
   TRANSITION
 }
 
+enum TaskSource {
+  MANUAL
+  MEETING_EXTRACTION
+  JIRA_IMPORT
+}
+
 model Task {
   id              String     @id @default(uuid())
   title           String
   description     String?
   status          TaskStatus @default(EXTRACTED)
+  source          TaskSource @default(MANUAL)
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
-  meetingId       String
+  projectId       String
+  createdById     String
+  meetingId       String?
   assigneeId      String?
   confidenceScore Float?
-  transcriptId    String
+  transcriptId    String?
   jiraIssueKey    String?
   /// AI / engine intent: create new Jira issue vs transition existing (applied only after dev approve).
   jiraProposalAction       JiraProposalAction?
@@ -149,8 +163,14 @@ model Task {
   /// Last Jira create failure message (cleared on successful SYNCED). Used for SM visibility while Bull retries.
   jiraSyncLastError String?
   assignee        User?      @relation("AssignedTasks", fields: [assigneeId], references: [id])
-  meeting         Meeting    @relation(fields: [meetingId], references: [id])
-  transcript      Transcript @relation(fields: [transcriptId], references: [id])
+  createdBy       User       @relation("TasksCreated", fields: [createdById], references: [id])
+  project         Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  meeting         Meeting?   @relation(fields: [meetingId], references: [id])
+  transcript      Transcript? @relation(fields: [transcriptId], references: [id])
+
+  @@index([projectId])
+  @@index([meetingId])
+  @@unique([projectId, jiraIssueKey])
 }
 
 model RefreshToken {
@@ -169,6 +189,8 @@ model JiraAccount {
   refreshToken String
   expiresAt    DateTime
   cloudId      String
+  /// Human Jira site base URL (e.g. https://your-tenant.atlassian.net) used for opening issues in browser.
+  siteUrl      String?
   /// Atlassian account id (from /rest/api/3/myself) for changelog author mapping.
   accountId    String?
   displayName  String?

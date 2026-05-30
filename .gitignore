@@ -8,7 +8,16 @@ out-tsc
 # dependencies
 node_modules
 
+.nx/
+dist/
+tmp/
+*.log
+
 .env
+.env.*
+!.env.render.example
+*(1).env
+seamBackend*.env
 # IDEs and editors
 /.idea
 .project

@@ -3,8 +3,8 @@ import { BullModule } from '@nestjs/bullmq';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
 /**
- * Registers shared BullMQ Redis connection for Nest-owned queues (e.g. Jira/GitHub sync).
- * Meeting transcription is handled by ai-engine-2 over HTTP, not Bull.
+ * Registers shared BullMQ Redis connection for Nest-owned queues (GitHub/Jira sync).
+ * Meeting transcription uses ai-engine-2 HTTP callbacks — not Bull (`DISABLE_QUEUES` does not affect meetings).
  */
 const disableQueues = process.env.DISABLE_QUEUES === 'true';
 
@@ -21,6 +21,9 @@ const disableQueues = process.env.DISABLE_QUEUES === 'true';
               port: config.get<number>('REDIS_PORT', 6379),
               ...(config.get<string>('REDIS_PASSWORD')
                 ? { password: config.get<string>('REDIS_PASSWORD') }
+                : {}),
+              ...(config.get<string>('REDIS_TLS') === 'true'
+                ? { tls: {} }
                 : {}),
             },
           }),

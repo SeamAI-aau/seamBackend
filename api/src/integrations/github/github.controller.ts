@@ -7,6 +7,8 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { CurrentUserType } from '../../auth/types/current-user.type';
 import { GithubService } from './github.service';
 import { GithubSyncService } from './github-sync.service';
+import { GithubWebhookService } from './github-webhook.service';
+import { GithubWebhookSetupDto } from './dto/github-webhook-setup.dto';
 import { LinkRepoDto } from './dto/link-repo.dto';
 import { GitHubAvailableReposQueryDto } from './dto/github-available-repos-query.dto';
 import { GitHubAvailableReposResponseDto } from './dto/github-available-repo-response.dto';
@@ -36,6 +38,7 @@ export class GithubController {
   constructor(
     private readonly githubService: GithubService,
     private readonly githubSyncService: GithubSyncService,
+    private readonly githubWebhookService: GithubWebhookService,
     private readonly config: ConfigService,
     @Inject(PROJECT_REPOSITORY)
     private readonly projectRepo: IProjectRepository,
@@ -109,6 +112,19 @@ export class GithubController {
   @UseGuards(JwtAuthGuard)
   async getStatus(@CurrentUser() user: CurrentUserType): Promise<{ connected: boolean }> {
     return this.githubService.getConnectionStatus(user.userId);
+  }
+
+  @Get('webhook-setup')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'GitHub repository webhook setup (dashboard)',
+    description:
+      'Returns the payload URL and event settings to configure in GitHub → Repository → Settings → Webhooks. ' +
+      'Does not return `GITHUB_WEBHOOK_SECRET`; that must match on both GitHub and the API host.',
+  })
+  @ApiOkResponse({ type: GithubWebhookSetupDto })
+  getWebhookSetup(): GithubWebhookSetupDto {
+    return this.githubWebhookService.getWebhookSetup();
   }
 
   @Get('available-repositories')
@@ -236,7 +252,7 @@ export class GithubController {
     @CurrentUser() user: CurrentUserType,
   ): Promise<{ synced: number }> {
     await this.ensureProjectAccess(projectId, user.userId, false);
-    return this.githubSyncService.syncPullRequests(projectId);
+    return this.githubSyncService.syncPullRequestsViaQueue(projectId);
   }
 
   @Get('prs/:projectId')

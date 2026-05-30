@@ -14,13 +14,19 @@ export class JiraSyncProcessor extends WorkerHost {
 
   async process(job: Job<JiraSyncJobData, void, string>): Promise<void> {
     const { taskId } = job.data;
-    this.logger.log(`Jira sync job started taskId=${taskId} jobId=${job.id}`);
+    const attempt = job.attemptsMade + 1;
+    const maxAttempts = job.opts.attempts ?? 1;
+    this.logger.log(
+      `[jira-sync] job started taskId=${taskId} jobId=${job.id} attempt=${attempt}/${maxAttempts}`,
+    );
     try {
       await this.jiraSyncService.syncTaskToJira(taskId);
-      this.logger.log(`Jira sync job finished taskId=${taskId}`);
+      this.logger.log(`[jira-sync] job finished taskId=${taskId} jobId=${job.id}`);
     } catch (err) {
       this.logger.warn(
-        `Jira sync job error taskId=${taskId}: ${err instanceof Error ? err.message : String(err)}`,
+        `[jira-sync] job error taskId=${taskId} jobId=${job.id} attempt=${attempt}/${maxAttempts}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
       );
       throw err;
     }

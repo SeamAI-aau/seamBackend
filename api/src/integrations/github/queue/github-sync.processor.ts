@@ -7,7 +7,11 @@ import {
   JOB_SYNC_ALL,
   JOB_SYNC_PROJECT,
 } from './github-sync.queue';
-import type { GithubSyncProjectJobData, GithubSyncAllJobData } from './github-sync-job.data';
+import type {
+  GithubSyncAllJobData,
+  GithubSyncProjectJobData,
+  GithubSyncProjectJobResult,
+} from './github-sync-job.data';
 import { GithubSyncService } from '../github-sync.service';
 import type { IProjectRepository } from '../../../project/types/project.repository';
 import { PROJECT_REPOSITORY } from '../../../project/types/project.tokens';
@@ -24,8 +28,8 @@ export class GithubSyncProcessor extends WorkerHost {
   }
 
   async process(
-    job: Job<GithubSyncProjectJobData | GithubSyncAllJobData, void, string>,
-  ): Promise<void> {
+    job: Job<GithubSyncProjectJobData | GithubSyncAllJobData, GithubSyncProjectJobResult, string>,
+  ): Promise<GithubSyncProjectJobResult | void> {
     if (job.name === JOB_SYNC_ALL) {
       const projectIds = await this.projectRepo.findProjectIdsWithGithubRepo();
       for (const projectId of projectIds) {
@@ -36,7 +40,7 @@ export class GithubSyncProcessor extends WorkerHost {
 
     if (job.name === JOB_SYNC_PROJECT) {
       const { projectId } = job.data as GithubSyncProjectJobData;
-      await this.githubSyncService.syncPullRequests(projectId);
+      return this.githubSyncService.syncPullRequests(projectId);
     }
   }
 }

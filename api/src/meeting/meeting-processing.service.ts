@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Logger } from 'nestjs-pino';
 import {
@@ -6,6 +6,7 @@ import {
   MeetingStatus,
   ProjectMemberStatus,
   Role,
+  TaskSource,
   TaskStatus,
   type Prisma,
 } from '@prisma/client';
@@ -14,12 +15,16 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 import { NotificationService } from '../notification/notification.service';
 import type {
   WorkerResultPayload,
+  WorkerSummaryPayload,
   WorkerTaskPayload,
   WorkerTransitionedTaskPayload,
 } from './dto/worker-result.dto';
 import { deriveJiraProposal } from './utils/derive-jira-proposal.util';
 import { WORKER_RESULT_STATUS_SUCCESS } from './constants/meeting.constants';
 import { NOTIFICATION_TYPES } from '../notification/constants/notification-types';
+import { PROJECT_REPOSITORY } from '../project/types/project.tokens';
+import type { IProjectRepository } from '../project/types/project.repository';
+
 
 /**
  * Persists callback results from ai-engine-2 (or bridge): transcript + extracted tasks,
@@ -37,6 +42,7 @@ export class MeetingProcessingService {
     private readonly cloudinaryService: CloudinaryService,
     private readonly activityLog: ActivityLogService,
     private readonly notification: NotificationService,
+    @Inject(PROJECT_REPOSITORY) private readonly projectRepo: IProjectRepository,
     private readonly logger: Logger,
   ) {}
 
@@ -60,28 +66,63 @@ export class MeetingProcessingService {
       (payload.error != null && payload.error !== '');
 
     if (isFailure) {
+      const failureReason =
+        typeof payload.error === 'string' && payload.error.trim()
+          ? payload.error.trim()
+          : 'AI engine reported failure';
       await this.prisma.meeting.update({
         where: { id: meetingId },
-        data: { status: MeetingStatus.FAILED },
+        data: {
+          status: MeetingStatus.FAILED,
+          lastProcessingError: failureReason.slice(0, 8000),
+        },
       });
       this.logger.warn(
-        { meetingId, error: payload.error },
+        { meetingId, error: failureReason },
         'Meeting processing failed; status set to FAILED',
       );
       return;
     }
 
     if (typeof payload.transcript !== 'string') {
+      const failureReason = 'Invalid worker payload: missing transcript string';
       await this.prisma.meeting.update({
         where: { id: meetingId },
-        data: { status: MeetingStatus.FAILED },
+        data: {
+          status: MeetingStatus.FAILED,
+          lastProcessingError: failureReason,
+        },
       });
-      this.logger.warn({ meetingId }, 'Invalid worker payload: missing transcript string');
+      this.logger.warn({ meetingId }, failureReason);
       return;
     }
 
     const incomingTasks = this.resolveIncomingTasks(payload);
-    const normalizedTasks = this.normalizeNewTasks(incomingTasks);
+    const normalizedPre = await this.normalizeNewTasks(incomingTasks, meeting.projectId);
+    const normalizedTasks = await this.filterAssignableTaskAssignees(
+      meeting.projectId,
+      normalizedPre,
+    );
+    this.logger.log(
+      {
+        meetingId,
+        incomingTasks: incomingTasks.length,
+        normalizedTasks: normalizedTasks.length,
+        assignedTasks: normalizedTasks.filter((t) => t.assigneeId).length,
+        unassignedTasks: normalizedTasks.filter((t) => !t.assigneeId).length,
+        hasSummary: Boolean(payload.summary),
+      },
+      'Worker payload normalized for persistence',
+    );
+
+    this.logger.log(
+      {
+        meetingId,
+        incomingTasksPayload: JSON.stringify(incomingTasks),
+        normalizedTasksPayload: JSON.stringify(normalizedTasks),
+      },
+      'Worker tasks payloads (normalized)'
+    );
     const projectId = await this.persistTranscriptAndTasks(meetingId, payload, normalizedTasks);
     this.logger.log({ meetingId }, 'Transcript and tasks saved');
 
@@ -235,7 +276,7 @@ export class MeetingProcessingService {
     await this.prisma.$transaction(async (tx) => {
       const meeting = await tx.meeting.findUnique({
         where: { id: meetingId },
-        select: { projectId: true },
+        select: { projectId: true, createdById: true },
       });
       if (!meeting) return;
       projectId = meeting.projectId;
@@ -252,18 +293,30 @@ export class MeetingProcessingService {
       const nextVersion = latest ? latest.version + 1 : 1;
 
       const transcriptContent = typeof payload.transcript === 'string' ? payload.transcript : '';
+      const insights = this.normalizeStringList(payload.insights);
+      const suggestedActions = this.normalizeStringList(payload.suggested_actions);
+      const summary = this.normalizeSummary(payload.summary);
       const transcript = await tx.transcript.create({
         data: {
           meetingId,
           version: nextVersion,
           content: transcriptContent,
           diarization: {} as Prisma.InputJsonValue,
+          summary: summary ? (summary as Prisma.InputJsonValue) : undefined,
+          insights: insights.length > 0 ? (insights as Prisma.InputJsonValue) : undefined,
+          suggestedActions:
+            suggestedActions.length > 0
+              ? (suggestedActions as Prisma.InputJsonValue)
+              : undefined,
         },
       });
 
       if (normalizedTasks.length > 0) {
         await tx.task.createMany({
           data: normalizedTasks.map((task) => ({
+            projectId: meeting.projectId,
+            createdById: meeting.createdById,
+            source: TaskSource.MEETING_EXTRACTION,
             meetingId,
             transcriptId: transcript.id,
             title: task.title,
@@ -281,9 +334,17 @@ export class MeetingProcessingService {
       }
 
       const blockers = Array.isArray(payload.blockers) ? payload.blockers : [];
-      if (blockers.length > 0) {
+      const blockerRows = blockers
+        .map((b) => {
+          const description = typeof b?.description === 'string' ? b.description.trim() : '';
+          if (!description) return null;
+          const severity = typeof b?.severity === 'string' ? b.severity.trim() : null;
+          return { description, severity };
+        })
+        .filter((b): b is { description: string; severity: string | null } => Boolean(b));
+      if (blockerRows.length > 0) {
         await tx.transcriptBlocker.createMany({
-          data: blockers.map((b) => ({
+          data: blockerRows.map((b) => ({
             meetingId,
             projectId: meeting.projectId,
             category: b.severity ?? null,
@@ -294,8 +355,10 @@ export class MeetingProcessingService {
 
       const meetingUpdate: {
         status: MeetingStatus;
+        lastProcessingError: string | null;
       } = {
         status: MeetingStatus.TASKS_EXTRACTED,
+        lastProcessingError: null,
       };
 
       await tx.meeting.update({
@@ -306,70 +369,108 @@ export class MeetingProcessingService {
     return projectId;
   }
 
-  private normalizeNewTasks(
+  private async filterAssignableTaskAssignees<T extends { assigneeId: string | null }>(
+    projectId: string,
+    tasks: T[],
+  ): Promise<T[]> {
+    const filtered: T[] = [];
+    for (const task of tasks) {
+      if (!task.assigneeId) {
+        filtered.push(task);
+        continue;
+      }
+      const allowed = await this.projectRepo.canAssignTasksToUser(projectId, task.assigneeId);
+      if (!allowed) {
+        this.logger.warn(
+          { projectId, assigneeId: task.assigneeId },
+          'Dropped NLP task assignee who is not an active project member',
+        );
+        filtered.push({ ...task, assigneeId: null });
+        continue;
+      }
+      filtered.push(task);
+    }
+    return filtered;
+  }
+
+  private async normalizeNewTasks(
     tasks: Array<WorkerTaskPayload | WorkerTransitionedTaskPayload>,
-  ): Array<{
-    title: string;
-    description: string | null;
-    assigneeId: string | null;
-    confidenceScore: number | null;
-    jiraIssueKey: string | null;
-    jiraProposalAction: JiraProposalAction | null;
-    jiraProposalIssueKey: string | null;
-    jiraProposalTransitionId: string | null;
-    jiraProposalTargetStatus: string | null;
-  }> {
+    projectId?: string,
+  ): Promise<
+    Array<{
+      title: string;
+      description: string | null;
+      assigneeId: string | null;
+      confidenceScore: number | null;
+      jiraIssueKey: string | null;
+      jiraProposalAction: JiraProposalAction | null;
+      jiraProposalIssueKey: string | null;
+      jiraProposalTransitionId: string | null;
+      jiraProposalTargetStatus: string | null;
+    }>
+  > {
     if (!Array.isArray(tasks)) {
       return [];
     }
 
-    return tasks
-      .map((task) => {
-        if (!task || typeof task !== 'object') {
-          return null;
-        }
+    const out: Array<{
+      title: string;
+      description: string | null;
+      assigneeId: string | null;
+      confidenceScore: number | null;
+      jiraIssueKey: string | null;
+      jiraProposalAction: JiraProposalAction | null;
+      jiraProposalIssueKey: string | null;
+      jiraProposalTransitionId: string | null;
+      jiraProposalTargetStatus: string | null;
+    }> = [];
+    const assigneeDirectory = projectId
+      ? await this.loadAssigneeDirectory(projectId)
+      : [];
 
-        const taskPayload = task as WorkerTaskPayload;
-        const title = (taskPayload.title ?? '').trim();
-        const description = (taskPayload.description ?? '').trim();
-        const assigneeId = this.resolveAssigneeId(taskPayload.assigneeId, taskPayload.assignee);
-        const confidenceScore = this.normalizeConfidence(taskPayload.confidence);
-        const jiraIssueKey = typeof taskPayload.jiraIssueKey === 'string' && taskPayload.jiraIssueKey.trim()
+    for (const task of tasks) {
+      if (!task || typeof task !== 'object') continue;
+
+      const taskPayload = task as WorkerTaskPayload;
+      const title = (taskPayload.title ?? '').trim();
+      const description = (taskPayload.description ?? '').trim();
+      const assigneeId = await this.resolveAssigneeId(
+        taskPayload.assigneeId,
+        taskPayload.assignee,
+        projectId,
+        assigneeDirectory,
+      );
+      const confidenceScore = this.normalizeConfidence(taskPayload.confidence);
+      const jiraIssueKey =
+        typeof taskPayload.jiraIssueKey === 'string' && taskPayload.jiraIssueKey.trim()
           ? taskPayload.jiraIssueKey.trim()
           : typeof taskPayload.task_id === 'string' && taskPayload.task_id.trim()
-            ? taskPayload.task_id.trim()
-            : null;
-        const jiraProposal = deriveJiraProposal(taskPayload);
+          ? taskPayload.task_id.trim()
+          : null;
+      const jiraProposal = deriveJiraProposal(taskPayload);
 
-        return {
-          title: title || description || 'Extracted task',
-          description: description || null,
-          assigneeId,
-          confidenceScore,
-          jiraIssueKey,
-          jiraProposalAction: jiraProposal.jiraProposalAction,
-          jiraProposalIssueKey: jiraProposal.jiraProposalIssueKey,
-          jiraProposalTransitionId: jiraProposal.jiraProposalTransitionId,
-          jiraProposalTargetStatus: jiraProposal.jiraProposalTargetStatus,
-        };
-      })
-      .filter((task): task is {
-        title: string;
-        description: string | null;
-        assigneeId: string | null;
-        confidenceScore: number | null;
-        jiraIssueKey: string | null;
-        jiraProposalAction: JiraProposalAction | null;
-        jiraProposalIssueKey: string | null;
-        jiraProposalTransitionId: string | null;
-        jiraProposalTargetStatus: string | null;
-      } => Boolean(task && task.title.trim().length > 0));
+      const item = {
+        title: title || description || 'Extracted task',
+        description: description || null,
+        assigneeId,
+        confidenceScore,
+        jiraIssueKey,
+        jiraProposalAction: jiraProposal.jiraProposalAction,
+        jiraProposalIssueKey: jiraProposal.jiraProposalIssueKey,
+        jiraProposalTransitionId: jiraProposal.jiraProposalTransitionId,
+        jiraProposalTargetStatus: jiraProposal.jiraProposalTargetStatus,
+      };
+
+      if (item.title && item.title.trim().length > 0) out.push(item);
+    }
+
+    return out;
   }
 
   private resolveIncomingTasks(
     payload: WorkerResultPayload,
   ): Array<WorkerTaskPayload | WorkerTransitionedTaskPayload> {
-    if (Array.isArray(payload.tasks)) {
+    if (Array.isArray(payload.tasks) && payload.tasks.length > 0) {
       return payload.tasks;
     }
     const merged: Array<WorkerTaskPayload | WorkerTransitionedTaskPayload> = [];
@@ -382,16 +483,35 @@ export class MeetingProcessingService {
     return merged;
   }
 
-  private resolveAssigneeId(
+  private async resolveAssigneeId(
     assigneeId?: string,
     assignee?: string,
-  ): string | null {
+    projectId?: string,
+    assigneeDirectory?: AssigneeDirectoryEntry[],
+  ): Promise<string | null> {
     if (this.isUuid(assigneeId)) {
       return assigneeId!.trim();
     }
     if (this.isUuid(assignee)) {
       return assignee!.trim();
     }
+
+    if (!projectId || !assignee || typeof assignee !== 'string') return null;
+
+    const target = assignee.trim().toLowerCase();
+    if (!target) return null;
+
+    try {
+      const members = assigneeDirectory ?? (await this.loadAssigneeDirectory(projectId));
+      const exact = this.matchAssigneeByExactToken(target, members);
+      if (exact) return exact;
+      const fuzzy = this.matchAssigneeByUniqueContains(target, members);
+      if (fuzzy) return fuzzy;
+    } catch (err) {
+      this.logger.warn({ projectId, assignee, err }, 'Failed to resolve assignee name to project member');
+      return null;
+    }
+
     return null;
   }
 
@@ -403,10 +523,123 @@ export class MeetingProcessingService {
     return Number.isFinite(parsed) ? parsed : null;
   }
 
+  private normalizeSummary(summary?: WorkerSummaryPayload | null): {
+    summary: string;
+    key_decisions?: string[];
+    meeting_sentiment?: string;
+    main_topic?: string;
+  } | null {
+    if (!summary || typeof summary !== 'object') {
+      return null;
+    }
+
+    const summaryText = typeof summary.summary === 'string' ? summary.summary.trim() : '';
+    const keyDecisions = this.normalizeStringList(summary.key_decisions);
+    const meetingSentiment =
+      typeof summary.meeting_sentiment === 'string' ? summary.meeting_sentiment.trim() : '';
+    const mainTopic = typeof summary.main_topic === 'string' ? summary.main_topic.trim() : '';
+
+    if (!summaryText && keyDecisions.length === 0 && !meetingSentiment && !mainTopic) {
+      return null;
+    }
+
+    const normalized: {
+      summary: string;
+      key_decisions?: string[];
+      meeting_sentiment?: string;
+      main_topic?: string;
+    } = {
+      summary: summaryText,
+    };
+
+    if (keyDecisions.length > 0) {
+      normalized.key_decisions = keyDecisions;
+    }
+    if (meetingSentiment) {
+      normalized.meeting_sentiment = meetingSentiment;
+    }
+    if (mainTopic) {
+      normalized.main_topic = mainTopic;
+    }
+
+    return normalized;
+  }
+
+  private normalizeStringList(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value
+      .map((item) => (item == null ? '' : String(item)).trim())
+      .filter((item) => item.length > 0);
+  }
+
   private isUuid(value?: string): boolean {
     if (!value) return false;
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
       value.trim(),
     );
   }
+
+  private async loadAssigneeDirectory(projectId: string): Promise<AssigneeDirectoryEntry[]> {
+    const members = await this.projectRepo.findMembersByProject(projectId);
+    const directory: AssigneeDirectoryEntry[] = [];
+    for (const member of members) {
+      const user = member.user;
+      if (!member.userId || !user) continue;
+      directory.push({
+        id: user.id,
+        name: (user.name ?? '').trim().toLowerCase(),
+        email: (user.email ?? '').trim().toLowerCase(),
+        emailLocalPart: (user.email ?? '').split('@')[0]?.trim().toLowerCase() ?? '',
+      });
+    }
+    return directory;
+  }
+
+  private matchAssigneeByExactToken(
+    target: string,
+    directory: AssigneeDirectoryEntry[],
+  ): string | null {
+    for (const entry of directory) {
+      if (entry.name && entry.name === target) return entry.id;
+      if (entry.email && entry.email === target) return entry.id;
+      if (entry.emailLocalPart && entry.emailLocalPart === target) return entry.id;
+    }
+    return null;
+  }
+
+  private matchAssigneeByUniqueContains(
+    target: string,
+    directory: AssigneeDirectoryEntry[],
+  ): string | null {
+    const matches = directory.filter((entry) => {
+      if (entry.name && entry.name.includes(target)) return true;
+      if (entry.email && entry.email.includes(target)) return true;
+      return false;
+    });
+
+    if (matches.length === 1) {
+      return matches[0].id;
+    }
+
+    if (matches.length > 1) {
+      this.logger.warn(
+        {
+          assignee: target,
+          candidateUserIds: matches.map((m) => m.id),
+        },
+        'Assignee resolution ambiguous; leaving task unassigned',
+      );
+    }
+
+    return null;
+  }
 }
+
+type AssigneeDirectoryEntry = {
+  id: string;
+  name: string;
+  email: string;
+  emailLocalPart: string;
+};

@@ -31,6 +31,12 @@ export class BlockerDetectionService {
     const prs = await this.githubRepo.findPullRequestsByProjectId(projectId);
 
     for (const pr of prs) {
+      const existingBlockers = await this.prisma.blocker.findMany({
+        where: { pullRequestId: pr.id },
+        select: { type: true },
+      });
+      const existingTypes = new Set(existingBlockers.map((b) => b.type));
+
       const blockers = this.evaluateBlockers(pr, Date.now());
       await this.githubRepo.replaceBlockersForPullRequest(
         pr.id,
@@ -38,13 +44,14 @@ export class BlockerDetectionService {
         blockers.map(({ type, message }) => ({ pullRequestId: pr.id, type, message })),
       );
 
-      if (blockers.length > 0 && project?.ownerId) {
-        const summary = blockers.map((b) => `- ${b.message}`).join('\n');
+      const newlyDetected = blockers.filter((b) => !existingTypes.has(b.type));
+      if (newlyDetected.length > 0 && project?.ownerId) {
+        const summary = newlyDetected.map((b) => `- ${b.message}`).join('\n');
         this.notification
           .notify({
             userId: project.ownerId,
             type: 'blocker_detected',
-            title: `Blockers detected on PR: ${pr.title}`,
+            title: `New blockers on PR: ${pr.title}`,
             body: summary,
             metadata: { projectId, pullRequestId: pr.id, githubId: pr.githubId },
           })

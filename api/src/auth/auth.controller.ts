@@ -11,7 +11,6 @@ import {
 } from '@nestjs/common';
 import type { Response, Request } from 'express';
 import { AuthService } from './auth.service';
-import { AuthMailService } from './auth-mail.service';
 import { GoogleAuthService } from './google-auth.service';
 import type { GoogleOAuthIntent } from './types/google-oauth.types';
 import { Role } from '@prisma/client';
@@ -38,18 +37,14 @@ import {
   ApiCookieAuth,
   ApiBody,
 } from '@nestjs/swagger';
-import {
-  authTokensBody,
-  clearAuthCookies,
-  setAuthCookies,
-} from '../common/config/auth-cookie.config';
+import { clearAuthCookies, setAuthCookies } from '../common/config/auth-cookie.config';
+import { SkipEmailVerification } from '../common/decorators/skip-email-verification.decorator';
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
-    private readonly authMail: AuthMailService,
     private readonly googleAuthService: GoogleAuthService,
     private readonly config: ConfigService,
   ) {}
@@ -96,15 +91,26 @@ export class AuthController {
       return;
     }
 
-    const tokens = await this.googleAuthService.authenticateCallback(code ?? '', state ?? '');
+    const { accessToken, refreshToken, accessExpiresMs, refreshExpiresMs, isNewUser } =
+      await this.googleAuthService.authenticateCallback(code ?? '', state ?? '');
 
-    setAuthCookies(res, tokens);
+    setAuthCookies(res, {
+      accessToken,
+      refreshToken,
+      accessExpiresMs,
+      refreshExpiresMs,
+    });
 
     const redirectUrl =
       this.config.get<string>('GOOGLE_OAUTH_SUCCESS_REDIRECT_URL') ??
       'http://localhost:8080/auth/google/success';
 
-    res.redirect(redirectUrl);
+    const url = new URL(redirectUrl);
+    if (isNewUser) {
+      url.searchParams.set('new', '1');
+    }
+
+    res.redirect(url.toString());
   }
 
   private buildGoogleErrorRedirect(error: string): string {
@@ -121,12 +127,24 @@ export class AuthController {
   @Post('register')
   @ApiOperation({ summary: 'Register a new user' })
   @ApiCreatedResponse({
-    description: 'User registered successfully.',
+    description:
+      'User registered successfully. Access and refresh tokens are set as HTTP-only cookies.',
     schema: {
       example: {
         message: 'User registered successfully',
-        accessToken: '…',
-        refreshToken: '…',
+        user: {
+          id: '…',
+          email: 'scrum.master@example.com',
+          name: 'Jane Doe',
+          role: 'SCRUM_MASTER',
+          emailVerified: false,
+        },
+      },
+    },
+    headers: {
+      'set-cookie': {
+        description: 'HTTP-only cookies for `accessToken` and `refreshToken`.',
+        schema: { type: 'string' },
       },
     },
   })
@@ -165,11 +183,11 @@ export class AuthController {
           email: 'scrum.master@example.com',
           name: 'Jane Doe',
           password: 'StrongP@ssw0rd',
-          role: 'SCRUM_MASTER',
+          registrationIntent: 'scrum_master',
         },
       },
       developer: {
-        summary: 'Developer registration (role defaults to DEVELOPER)',
+        summary: 'Developer registration (default role)',
         value: {
           email: 'dev@example.com',
           name: 'John Dev',
@@ -180,23 +198,19 @@ export class AuthController {
   })
   @UseGuards(new AuthThrottleGuard(8, 60_000))
   async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
-    const result = await this.authService.register(dto);
-    const { accessToken, refreshToken, accessExpiresMs, refreshExpiresMs, user, message } = result;
+    const { accessToken, refreshToken, accessExpiresMs, refreshExpiresMs, user, message } =
+      await this.authService.register(dto);
     setAuthCookies(res, { accessToken, refreshToken, accessExpiresMs, refreshExpiresMs });
-    return {
-      message,
-      user,
-      ...authTokensBody({ accessToken, refreshToken, accessExpiresMs, refreshExpiresMs }),
-    };
+    return { message, user };
   }
 
   @Post('login')
   @ApiOperation({ summary: 'Log in and receive JWT + cookies' })
   @ApiOkResponse({
     description:
-      'Login succeeded. Access and refresh tokens are set as HTTP-only cookies; response body also includes tokens for cross-origin Bearer use.',
+      'Login succeeded. Access and refresh tokens are set as HTTP-only cookies.',
     schema: {
-      example: { message: 'Logged in successfully', accessToken: '…', refreshToken: '…' },
+      example: { message: 'Logged in successfully' },
     },
     headers: {
       'set-cookie': {
@@ -244,10 +258,7 @@ export class AuthController {
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const tokens = await this.authService.login(dto);
     setAuthCookies(res, tokens);
-    return {
-      message: 'Logged in successfully',
-      ...authTokensBody(tokens),
-    };
+    return { message: 'Logged in successfully' };
   }
 
   @Post('refresh')
@@ -255,9 +266,9 @@ export class AuthController {
   @ApiCookieAuth('access-cookie')
   @ApiOkResponse({
     description:
-      'Tokens refreshed. New access and refresh tokens are set as HTTP-only cookies; body includes tokens for cross-origin Bearer use.',
+      'Tokens refreshed. New access and refresh tokens are set as HTTP-only cookies.',
     schema: {
-      example: { message: 'Tokens refreshed', accessToken: '…', refreshToken: '…' },
+      example: { message: 'Tokens refreshed' },
     },
     headers: {
       'set-cookie': {
@@ -293,6 +304,7 @@ export class AuthController {
       },
     },
   })
+  @UseGuards(new AuthThrottleGuard(20, 60_000))
   async refresh(
     @Body('refreshToken') oldToken: string,
     @Req() req: Request,
@@ -312,63 +324,7 @@ export class AuthController {
 
     const tokens = await this.authService.refreshToken(token);
     setAuthCookies(res, tokens);
-    return {
-      message: 'Tokens refreshed',
-      ...authTokensBody(tokens),
-    };
-  }
-
-  @Get('verify-email')
-  @ApiOperation({
-    summary: 'Verify email from link (redirects to dashboard)',
-    description:
-      'Validates the token from the verification email and redirects to the frontend dashboard.',
-  })
-  async verifyEmail(@Query('token') token: string | undefined, @Res() res: Response) {
-    const { redirectPath } = await this.authService.verifyEmail(token ?? '');
-    const base = this.authMail.getFrontendBaseUrl();
-    const url = new URL(`${base}${redirectPath}`);
-    url.searchParams.set('emailVerified', '1');
-    res.redirect(url.toString());
-  }
-
-  @Post('resend-verification')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Resend email verification link' })
-  async resendVerification(@CurrentUser() user: CurrentUserType) {
-    return this.authService.resendVerificationEmail(user.userId);
-  }
-
-  @Post('forgot-password')
-  @UseGuards(new AuthThrottleGuard(5, 60_000))
-  @ApiOperation({ summary: 'Request a password reset email' })
-  @ApiBody({ type: ForgotPasswordDto })
-  forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.authService.forgotPassword(dto);
-  }
-
-  @Post('reset-password')
-  @UseGuards(new AuthThrottleGuard(8, 60_000))
-  @ApiOperation({ summary: 'Reset password using token from email' })
-  @ApiBody({ type: ResetPasswordDto })
-  resetPassword(@Body() dto: ResetPasswordDto) {
-    return this.authService.resetPassword(dto);
-  }
-
-  @Post('change-password')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Change password for the current user' })
-  @ApiBody({ type: ChangePasswordDto })
-  async changePassword(
-    @CurrentUser() user: CurrentUserType,
-    @Body() dto: ChangePasswordDto,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const result = await this.authService.changePassword(user.userId, dto);
-    clearAuthCookies(res);
-    return result;
+    return { message: 'Tokens refreshed' };
   }
 
   @Post('logout')
@@ -390,9 +346,70 @@ export class AuthController {
     },
   })
   @UseGuards(JwtAuthGuard)
+  @SkipEmailVerification()
   async logout(@CurrentUser() user: CurrentUserType, @Res({ passthrough: true }) res: Response) {
     await this.authService.logout(user.userId);
     clearAuthCookies(res);
     return { message: 'Logged out successfully' };
+  }
+
+  @Post('clear-session')
+  @ApiOperation({ summary: 'Clear auth cookies without requiring a valid access token' })
+  @ApiOkResponse({
+    description: 'Auth cookies cleared (used before sign-in to drop stale sessions).',
+    schema: { example: { message: 'Session cleared' } },
+  })
+  clearSession(@Res({ passthrough: true }) res: Response) {
+    clearAuthCookies(res);
+    return { message: 'Session cleared' };
+  }
+
+  @Post('verify-email')
+  @ApiOperation({ summary: 'Verify email with a 6-digit code' })
+  @UseGuards(new AuthThrottleGuard(10, 60_000))
+  verifyEmail(@Body() body: { email: string; code: string }) {
+    if (!body.email?.trim() || !body.code?.trim()) {
+      throw new BadRequestException({
+        code: ErrorCode.VALIDATION_ERROR,
+        message: 'Email and verification code are required',
+      });
+    }
+    return this.authService.verifyEmailWithCode(body.email, body.code);
+  }
+
+  @Post('resend-verification')
+  @ApiOperation({ summary: 'Resend verification code to the given email' })
+  @UseGuards(new AuthThrottleGuard(3, 60_000))
+  resendVerification(@Body() body: { email: string }) {
+    if (!body.email?.trim()) {
+      throw new BadRequestException({
+        code: ErrorCode.VALIDATION_ERROR,
+        message: 'Email is required',
+      });
+    }
+    return this.authService.resendVerificationCode(body.email);
+  }
+
+  @Post('forgot-password')
+  @ApiOperation({ summary: 'Request a password reset email' })
+  @UseGuards(new AuthThrottleGuard(5, 60_000))
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Post('reset-password')
+  @ApiOperation({ summary: 'Reset password using token from email' })
+  @UseGuards(new AuthThrottleGuard(8, 60_000))
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
+  }
+
+  @Post('change-password')
+  @ApiOperation({ summary: 'Change password while authenticated' })
+  @ApiBearerAuth('access-token')
+  @ApiCookieAuth('access-cookie')
+  @UseGuards(JwtAuthGuard, new AuthThrottleGuard(8, 60_000))
+  changePassword(@CurrentUser() user: CurrentUserType, @Body() dto: ChangePasswordDto) {
+    return this.authService.changePassword(user.userId, dto);
   }
 }

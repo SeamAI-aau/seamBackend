@@ -1,5 +1,4 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { Role } from '@prisma/client';
 import type {
   IActivityLogRepository,
   CreateActivityLogInput,
@@ -10,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AppException } from '../common/errors/app.exception';
 import { ErrorCode } from '../common/errors/error-codes';
 import type { CurrentUserType } from '../auth/types/current-user.type';
+import { resolvePerformanceActivityUserId } from '../common/utils/activity-access.util';
 
 export type ActivityLogListQuery = {
   projectId?: string;
@@ -42,12 +42,7 @@ export class ActivityLogService {
   ) {
     const access = await this.assertProjectActivityAccess(projectId, user.userId);
 
-    const filterUserId = await this.resolveProjectActivityUserIdFilter(
-      projectId,
-      access,
-      user,
-      filters.userId,
-    );
+    const filterUserId = resolvePerformanceActivityUserId(user, access, filters.userId);
 
     return this.listActivity({
       projectId,
@@ -136,46 +131,4 @@ export class ActivityLogService {
     return { ownerId: project.ownerId, isOwner, isMember };
   }
 
-  private async resolveProjectActivityUserIdFilter(
-    projectId: string,
-    access: { ownerId: string; isOwner: boolean; isMember: boolean },
-    user: CurrentUserType,
-    requestedUserId?: string,
-  ): Promise<string | undefined> {
-    if (!requestedUserId) return undefined;
-
-    const canFilterOthers =
-      access.isOwner ||
-      (user.role === Role.SCRUM_MASTER && (access.isOwner || access.isMember));
-
-    if (!canFilterOthers && requestedUserId !== user.userId) {
-      throw new AppException(
-        ErrorCode.FORBIDDEN,
-        'Developers may only filter activity by their own user id',
-        403,
-      );
-    }
-
-    if (requestedUserId === access.ownerId) {
-      return requestedUserId;
-    }
-
-    const member = await this.prisma.projectMember.findFirst({
-      where: {
-        projectId,
-        userId: requestedUserId,
-        status: 'ACTIVE',
-      },
-      select: { userId: true },
-    });
-    if (!member) {
-      throw new AppException(
-        ErrorCode.VALIDATION_ERROR,
-        'userId must be the project owner or an active member',
-        400,
-      );
-    }
-
-    return requestedUserId;
-  }
 }
